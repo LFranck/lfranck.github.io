@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<!--
+  Panic App — Prototype web du flux V1 (démo navigateur)
+  Rejoue le principe d'utilisation du document de conception : bouton PANIC,
+  session vocale (Text-to-Speech + SpeechRecognition du navigateur), moteur de
+  questions adaptatif, machine à états. L'application finale sera native Android
+  (Kotlin) ; ceci n'est qu'un prototype pour valider l'expérience avant de coder l'app.
+
+  Auteur : Franck Legrand <franck.legrand@gmail.com>
+  Statut : Prototype — nécessite Chrome ou Edge (reconnaissance vocale).
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panic App — Prototype V1</title>
+<style>
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+    background:#111; color:#fff; display:flex; flex-direction:column;
+  }
+  header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 24px; background:#181818; border-bottom:1px solid #333;
+  }
+  h1 { margin:0; font-size:19px; font-weight:650; }
+  #banner {
+    background:#3a2a12; color:#ffcf8a; font-size:13px; padding:8px 24px;
+    border-bottom:1px solid #4a3418;
+  }
+  main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+
+  .panel {
+    width:min(460px,94vw); display:flex; flex-direction:column; align-items:center;
+    gap:22px; background:#161616; border:1px solid #262626; border-radius:22px;
+    padding:clamp(24px,5vh,40px) clamp(20px,4vw,32px); box-shadow:0 20px 60px rgba(0,0,0,.45);
+  }
+  .screen { width:100%; display:flex; flex-direction:column; align-items:center; gap:22px; }
+
+  /* --- Accueil --- */
+  .panic-btn {
+    width:min(190px,55vw); aspect-ratio:1; border-radius:50%; border:0; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%,#ff6b5a,#c62f22);
+    color:#fff; font-size:22px; font-weight:800; letter-spacing:.04em;
+    box-shadow:0 0 0 8px rgba(198,47,34,.15), 0 18px 40px rgba(198,47,34,.35);
+  }
+  .panic-btn:active { transform:scale(.97); }
+  .hint { color:#999; font-size:13px; text-align:center; }
+  .home-footer { width:100%; display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .ble-status { color:#888; font-size:12.5px; text-align:center; }
+
+  .ghost-btn {
+    background:none; border:1px solid #333; color:#ddd; border-radius:10px;
+    padding:9px 16px; font-size:13.5px; cursor:pointer;
+  }
+  .ghost-btn:hover { border-color:#555; }
+
+  /* --- Session --- */
+  .state-row { display:flex; align-items:center; gap:8px; }
+  .state-dot { width:11px; height:11px; border-radius:50%; background:#555; transition:background .2s; }
+  .state-dot.starting, .state-dot.speaking { background:#3b82f6; }
+  .state-dot.listening { background:#22c55e; box-shadow:0 0 14px rgba(34,197,94,.6); }
+  .state-dot.evaluating, .state-dot.next_question { background:#f59e0b; }
+  .state-dot.stopped { background:#ef4444; }
+  #stateLabel { font-size:13px; color:#aaa; }
+  #levelBadge { font-size:11px; color:#888; border:1px solid #333; border-radius:99px; padding:2px 10px; }
+
+  .question {
+    font-size:clamp(19px,4.4vw,26px); font-weight:650; text-align:center; min-height:2.6em;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .transcript { color:#8fb; font-size:14.5px; text-align:center; min-height:1.4em; }
+
+  .stop-btn {
+    border:0; border-radius:12px; padding:14px 30px; cursor:pointer;
+    background:#fff; color:#111; font-weight:800; font-size:16px; letter-spacing:.03em;
+  }
+
+  /* --- Réglages --- */
+  .settings-form { width:100%; display:flex; flex-direction:column; gap:16px; }
+  label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:14px; }
+  select, input[type=range] { width:100%; }
+  select {
+    background:#1b1b1b; color:#fff; border:1px solid #333; border-radius:8px; padding:9px 10px;
+  }
+  .row { flex-direction:row; align-items:center; gap:8px; }
+  .value { font-weight:700; color:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🆘 Panic App — prototype V1</h1>
+  <div id="statusHeader" style="font-size:12.5px;color:#888;"></div>
+</header>
+<div id="banner" hidden></div>
+
+<main>
+  <div class="panel">
+
+    <div id="screen-home" class="screen">
+      <button id="panicBtn" class="panic-btn">PANIC</button>
+      <p class="hint">Appuie, puis laisse-toi guider par la voix.<br>Tu peux fermer les yeux.</p>
+      <div class="home-footer">
+        <button id="openSettings" class="ghost-btn">⚙️ Réglages</button>
+        <div class="ble-status">🔌 Bouton porte-clés BLE : non disponible dans le navigateur (prévu V2, app Android)</div>
+      </div>
+    </div>
+
+    <div id="screen-session" class="screen" hidden>
+      <div class="state-row">
+        <div class="state-dot" id="stateDot"></div>
+        <div id="stateLabel">—</div>
+        <div id="levelBadge">niveau 1</div>
+      </div>
+      <div class="question" id="questionText">…</div>
+      <div class="transcript" id="transcriptText"></div>
+      <button id="stopBtn" class="stop-btn">■ STOP</button>
+    </div>
+
+    <div id="screen-settings" class="screen" hidden>
+      <div class="settings-form">
+        <label>Voix
+          <select id="voiceSelect"></select>
+        </label>
+        <label>Débit de la voix : <span class="value" id="rateValue">1.0</span>
+          <input id="rateInput" type="range" min="0.6" max="1.4" step="0.1" value="1">
+        </label>
+        <label>Niveau initial
+          <select id="levelSelect">
+            <option value="1">Facile</option>
+            <option value="2">Moyen</option>
+            <option value="3">Difficile</option>
+          </select>
+        </label>
+        <label class="row">
+          <input type="checkbox" disabled>
+          Bouton BLE (non disponible dans le navigateur)
+        </label>
+        <button id="backHome" class="ghost-btn">← Retour</button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ---------- Support navigateur ----------
+const synth = window.speechSynthesis;
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+const sttSupported = !!SpeechRecognitionCtor;
+let recognizer = null;
+if (sttSupported) {
+  recognizer = new SpeechRecognitionCtor();
+  recognizer.lang = "fr-FR";
+  recognizer.continuous = false;
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
+}
+const banner = document.getElementById("banner");
+if (!sttSupported) {
+  banner.hidden = false;
+  banner.textContent = "⚠️ Reconnaissance vocale non disponible sur ce navigateur (essaie Chrome ou Edge). La session se déroulera en lecture seule, sans écoute des réponses.";
+}
+document.getElementById("statusHeader").textContent = sttSupported ? "🎙️ Micro disponible" : "🎙️ Micro indisponible";
+
+// ---------- Banque de questions locale ----------
+// Chaque question : catégorie, niveau (1-3), texte, et un mode d'évaluation.
+const QUESTION_BANK = {
+  calcul: [
+    { level:1, text:"Combien font trois plus quatre ?", type:"number", answer:7 },
+    { level:1, text:"Combien font cinq plus deux ?", type:"number", answer:7 },
+    { level:1, text:"Combien font huit moins trois ?", type:"number", answer:5 },
+    { level:2, text:"Combien font douze moins cinq ?", type:"number", answer:7 },
+    { level:2, text:"Combien font six fois trois ?", type:"number", answer:18 },
+    { level:2, text:"Combien font neuf plus huit ?", type:"number", answer:17 },
+    { level:3, text:"Combien font quatorze plus dix-sept ?", type:"number", answer:31 },
+    { level:3, text:"Combien font quatre-vingts moins trente-trois ?", type:"number", answer:47 },
+  ],
+  memoire: [
+    { level:1, text:"Quelle est la couleur du ciel par une journée claire ?", type:"keyword", keywords:["bleu"] },
+    { level:1, text:"Quel est le prénom de ta mère ?", type:"free" },
+    { level:2, text:"Cite trois prénoms qui commencent par la lettre A.", type:"free" },
+    { level:3, text:"Récite les jours de la semaine dans l'ordre, en commençant par lundi.", type:"free" },
+  ],
+  observation: [
+    { level:1, text:"Cite un animal qui vit dans l'eau.", type:"free" },
+    { level:1, text:"Cite un pays d'Europe.", type:"free" },
+    { level:2, text:"Cite trois objets que l'on trouve dans une cuisine.", type:"free" },
+    { level:3, text:"Cite une ville de France qui commence par la lettre M.", type:"keyword_or_free", keywords:["marseille","metz","montpellier","mulhouse","le mans","montreuil"] },
+  ],
+  logique: [
+    { level:1, text:"Quel nombre vient après sept ?", type:"number", answer:8 },
+    { level:2, text:"Dans la suite deux, quatre, six, huit, quel est le nombre suivant ?", type:"number", answer:10 },
+    { level:3, text:"Dans la suite un, un, deux, trois, cinq, quel est le nombre suivant ?", type:"number", answer:8 },
+  ],
+  conversation: [
+    { level:1, text:"Décris en une phrase l'endroit où tu te trouves.", type:"free" },
+    { level:1, text:"Quel jour sommes-nous aujourd'hui ?", type:"free" },
+    { level:2, text:"Quelle est ta saison préférée, et pourquoi ?", type:"free" },
+  ],
+};
+
+// ---------- État de session (cf. machine à états du document de conception) ----------
+const STATE_LABELS = {
+  STARTING:"Démarrage…", SPEAKING:"🗣️ Question en cours", LISTENING:"🎙️ Écoute…",
+  EVALUATING:"Analyse…", NEXT_QUESTION:"Question suivante", STOPPED:"Session terminée",
+};
+let running = false;
+let level = 1;
+let correctStreak = 0, wrongStreak = 0;
+let recentQuestions = [];
+let selectedVoice = null;
+let rate = 1.0;
+
+const screenHome = document.getElementById("screen-home");
+const screenSession = document.getElementById("screen-session");
+const screenSettings = document.getElementById("screen-settings");
+const stateDot = document.getElementById("stateDot");
+const stateLabel = document.getElementById("stateLabel");
+const levelBadge = document.getElementById("levelBadge");
+const questionText = document.getElementById("questionText");
+const transcriptText = document.getElementById("transcriptText");
+
+function showScreen(name) {
+  screenHome.hidden = name !== "home";
+  screenSession.hidden = name !== "session";
+  screenSettings.hidden = name !== "settings";
+}
+
+function setState(s) {
+  stateLabel.textContent = STATE_LABELS[s] || s;
+  stateDot.className = "state-dot " + s.toLowerCase();
+  levelBadge.textContent = "niveau " + level;
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ---------- Voix (Text-to-Speech) ----------
+function speak(text) {
+  return new Promise(resolve => {
+    if (!running) { resolve(); return; }
+    synth.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "fr-FR";
+    utter.rate = rate;
+    if (selectedVoice) utter.voice = selectedVoice;
+    utter.onend = resolve;
+    utter.onerror = resolve;
+    synth.speak(utter);
+  });
+}
+
+// ---------- Écoute (Speech-to-Text) ----------
+function listen() {
+  return new Promise(resolve => {
+    if (!sttSupported || !running) { resolve(null); return; }
+    let done = false;
+    recognizer.onresult = e => { done = true; resolve(e.results[0][0].transcript); };
+    recognizer.onerror = () => { if (!done) { done = true; resolve(null); } };
+    recognizer.onend = () => { if (!done) { done = true; resolve(null); } };
+    try { recognizer.start(); } catch (e) { resolve(null); }
+  });
+}
+
+// ---------- Évaluation grossière de la réponse ----------
+function normalize(s) {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+const NUMBER_WORDS = {
+  zero:0, un:1, une:1, deux:2, trois:3, quatre:4, cinq:5, six:6, sept:7, huit:8, neuf:9, dix:10,
+  onze:11, douze:12, treize:13, quatorze:14, quinze:15, seize:16,
+  "dix-sept":17, "dix-huit":18, "dix-neuf":19, vingt:20, trente:30, quarante:40,
+  cinquante:50, soixante:60, "quatre-vingt":80, "quatre-vingts":80, "quatre-vingt-dix":90,
+};
+function extractNumber(transcript) {
+  const digitMatch = transcript.match(/-?\d+/);
+  if (digitMatch) return parseInt(digitMatch[0], 10);
+  const norm = normalize(transcript);
+  for (const word in NUMBER_WORDS) {
+    if (norm.includes(word)) return NUMBER_WORDS[word];
+  }
+  return null;
+}
+function evaluateAnswer(question, transcript) {
+  if (!transcript) return false;
+  const norm = normalize(transcript);
+  switch (question.type) {
+    case "number":
+      return extractNumber(transcript) === question.answer;
+    case "keyword":
+      return question.keywords.some(k => norm.includes(normalize(k)));
+    case "keyword_or_free":
+      return question.keywords.some(k => norm.includes(normalize(k))) || norm.length > 2;
+    case "free":
+    default:
+      return norm.length > 1;
+  }
+}
+
+// ---------- Sélection adaptative de la question suivante ----------
+function pickQuestion(lvl) {
+  let pool = [];
+  for (const cat in QUESTION_BANK) {
+    QUESTION_BANK[cat].forEach(q => { if (q.level === lvl) pool.push(q); });
+  }
+  if (pool.length === 0) {
+    for (const cat in QUESTION_BANK) pool.push(...QUESTION_BANK[cat]);
+  }
+  let candidates = pool.filter(q => !recentQuestions.includes(q.text));
+  if (candidates.length === 0) candidates = pool;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+function adjustLevel() {
+  if (correctStreak >= 2) { level = Math.min(3, level + 1); correctStreak = 0; }
+  if (wrongStreak >= 2) { level = Math.max(1, level - 1); wrongStreak = 0; }
+}
+
+// ---------- Boucle de session ----------
+async function runSession() {
+  running = true;
+  level = Number(document.getElementById("levelSelect").value) || 1;
+  correctStreak = 0; wrongStreak = 0; recentQuestions = [];
+
+  showScreen("session");
+  setState("STARTING");
+  questionText.textContent = "Préparation…";
+  transcriptText.textContent = "";
+  await speak("On va faire quelques exercices simples. Respire, et écoute la première question.");
+
+  while (running) {
+    const question = pickQuestion(level);
+    recentQuestions.push(question.text);
+    if (recentQuestions.length > 5) recentQuestions.shift();
+
+    if (!running) return;
+    questionText.textContent = question.text;
+    transcriptText.textContent = "";
+    setState("SPEAKING");
+    await speak(question.text);
+    if (!running) return;
+
+    if (!sttSupported) {
+      setState("NEXT_QUESTION");
+      await wait(2200);
+      continue;
+    }
+
+    setState("LISTENING");
+    const transcript = await listen();
+    if (!running) return;
+    transcriptText.textContent = transcript ? "« " + transcript + " »" : "(pas de réponse détectée)";
+
+    setState("EVALUATING");
+    await wait(250);
+    const correct = evaluateAnswer(question, transcript);
+    if (correct) { correctStreak++; wrongStreak = 0; }
+    else { wrongStreak++; correctStreak = 0; }
+    adjustLevel();
+
+    setState("NEXT_QUESTION");
+    await wait(400);
+  }
+}
+
+function stopSession() {
+  running = false;
+  synth.cancel();
+  if (sttSupported) { try { recognizer.abort(); } catch (e) {} }
+  setState("STOPPED");
+  questionText.textContent = "Session arrêtée.";
+  transcriptText.textContent = "";
+  setTimeout(() => showScreen("home"), 1100);
+}
+
+document.getElementById("panicBtn").addEventListener("click", runSession);
+document.getElementById("stopBtn").addEventListener("click", stopSession);
+document.getElementById("openSettings").addEventListener("click", () => showScreen("settings"));
+document.getElementById("backHome").addEventListener("click", () => showScreen("home"));
+
+// ---------- Réglages voix ----------
+const voiceSelect = document.getElementById("voiceSelect");
+const rateInput = document.getElementById("rateInput");
+const rateValue = document.getElementById("rateValue");
+
+function loadVoices() {
+  const all = synth.getVoices();
+  const fr = all.filter(v => v.lang && v.lang.toLowerCase().startsWith("fr"));
+  const list = fr.length ? fr : all;
+  voiceSelect.innerHTML = "";
+  list.forEach((v, i) => {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = v.name + " (" + v.lang + ")";
+    voiceSelect.appendChild(opt);
+  });
+  voiceSelect._voices = list;
+  if (list.length) selectedVoice = list[0];
+}
+synth.onvoiceschanged = loadVoices;
+loadVoices();
+
+voiceSelect.addEventListener("change", e => {
+  selectedVoice = voiceSelect._voices[Number(e.target.value)];
+});
+rateInput.addEventListener("input", e => {
+  rate = Number(e.target.value);
+  rateValue.textContent = rate.toFixed(1);
+});
+</script>
+</body>
+</html>
