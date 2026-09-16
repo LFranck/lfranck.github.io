@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<!--
+  Calmomètre — Indicateur sonore
+  Ces informations (version, auteur, date, licence) sont la source unique :
+  elles sont reprises dans les constantes APP_* du script et affichées dans
+  la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
+
+  Version : 1.0.6
+  Auteur  : Franck Legrand <franck.legrand@gmail.com>
+  Date    : 2026-09-07
+  Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
+  © 2026 Franck Legrand. Tous droits réservés.
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calmometre — Indicateur sonore</title>
+<style>
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+    background:#111; color:#fff; display:flex; flex-direction:column;
+  }
+  header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 24px; background:#181818; border-bottom:1px solid #333;
+  }
+  h1 { margin:0; font-size:20px; font-weight:650; }
+  #status { font-size:14px; color:#aaa; }
+  main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+
+  /* Rectangle vertical qui regroupe voyant + contrôles, et s'adapte à la taille de l'écran. */
+  .panel {
+    width:min(440px,94vw); max-height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;
+    background:#161616; border:1px solid #262626; border-radius:22px;
+    padding:clamp(18px,4vh,34px) clamp(18px,4vw,28px);
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+  }
+
+  /* Voyant principal : la classe (green/orange/red) est posée par le JS selon l'état courant */
+  #light {
+    width:min(220px,48vh,50%); aspect-ratio:1;
+    border-radius:50%; background:#333; box-shadow:0 0 35px rgba(255,255,255,.08);
+    border:10px solid #222; transition:background .15s, box-shadow .15s, transform .15s;
+  }
+  #light.green { background:#22c55e; box-shadow:0 0 70px rgba(34,197,94,.55); }
+  #light.orange { background:#f59e0b  ; box-shadow:0 0 70px rgba(245,158,11,.55); transform:scale(1.02); }
+  #light.red { background:#ef4444; box-shadow:0 0 90px rgba(239,68,68,.65); transform:scale(1.04); }
+  #message { font-size:clamp(20px,5vw,32px); font-weight:750; text-align:center; }
+  #db { font-size:16px; color:#bbb; text-align:center; }
+  /* Barre de niveau : largeur = niveau sonore courant, sur une échelle 0-100% */
+  .bar { width:100%; height:18px; background:#292929; border-radius:99px; overflow:hidden; }
+  #level { height:100%; width:0%; background:#777; transition:width .08s, background .15s; }
+  .controls {
+    width:100%; background:#1b1b1b; border:1px solid #333; border-radius:14px;
+    padding:18px; display:grid; grid-template-columns:1fr 1fr; gap:16px;
+  }
+  label { display:flex; flex-direction:column; gap:7px; color:#ccc; font-size:14px; }
+  input[type=range] { width:100%; }
+  .value { font-weight:700; color:#fff; }
+  button {
+    grid-column:1/-1; border:0; border-radius:10px; padding:13px 18px; cursor:pointer;
+    background:#fff; color:#111; font-weight:700; font-size:16px;
+  }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .hint { color:#888; font-size:12px; text-align:center; }
+  @media(max-width:420px){ .controls{grid-template-columns:1fr;} }
+
+  /* Lien "Informations" (en-tête) et sa pop-up (version, auteur, date, licence) */
+  #infoLink {
+    background:none; border:0; color:#aaa; font-size:13px; text-decoration:underline;
+    cursor:pointer; padding:4px;
+  }
+  #infoLink:hover { color:#fff; }
+  #infoDialog {
+    background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
+    padding:22px 26px; max-width:min(420px,90vw);
+  }
+  #infoDialog::backdrop { background:rgba(0,0,0,.6); }
+  #infoDialog h2 { margin:0 0 12px; font-size:18px; }
+  #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
+  #infoDialog dt { color:#999; }
+  #infoDialog dd { margin:0; }
+  #infoDialog button { grid-column:auto; padding:8px 16px; font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔊 Calmomètre</h1>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <div id="status">Microphone non démarré</div>
+    <button id="infoLink" type="button">ℹ️ Informations</button>
+  </div>
+</header>
+
+<dialog id="infoDialog">
+  <h2>À propos du Calmomètre</h2>
+  <dl>
+    <dt>Version</dt><dd id="infoVersion"></dd>
+    <dt>Auteur</dt><dd id="infoAuthor"></dd>
+    <dt>Date</dt><dd id="infoDate"></dd>
+    <dt>Licence</dt><dd id="infoLicense"></dd>
+  </dl>
+  <button id="infoClose" type="button">Fermer</button>
+</dialog>
+
+<main>
+  <div class="panel">
+    <div id="light"></div>
+    <div id="message">Prêt</div>
+    <div id="db">— dB relatif</div>
+    <div class="bar"><div id="level"></div></div>
+
+    <div class="controls">
+      <label>
+        Seuil orange : <span class="value" id="orangeValue">-18</span> dB
+        <input id="orange" type="range" min="-45" max="-5" value="-18">
+      </label>
+      <label>
+        Seuil rouge : <span class="value" id="redValue">-10</span> dB
+        <input id="red" type="range" min="-30" max="-2" value="-10">
+      </label>
+      <label>
+        Lissage (moyenne) : <span class="value" id="avgValue">3.0</span> s
+        <input id="avg" type="range" min="0" max="10000" step="100" value="3000">
+      </label>
+      <button id="start">🎙️ Activer le microphone</button>
+    </div>
+
+    <div class="hint">
+      L'analyse reste dans le navigateur : aucune conversation n'est enregistrée.
+      Les valeurs affichées sont des dB relatifs, pas des mesures acoustiques certifiées.
+    </div>
+  </div>
+</main>
+
+<script>
+// Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
+// et dans le commentaire d'en-tête du fichier (à garder synchronisés).
+const APP_VERSION = "1.0.6";
+const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
+const APP_DATE = "2026-09-07";
+const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
+
+let audioContext, analyser, data, source, running = false;
+let state = null; // pas d'état tant que le micro n'a pas démarré (le voyant reste gris) ; setState("green") l'applique au démarrage
+let redSince = 0;    // timestamp du début du dépassement du seuil rouge (0 = pas de dépassement en cours)
+let orangeSince = 0; // idem pour le seuil orange
+let avgDb = null;    // moyenne mobile du niveau (dB), null tant qu'aucune mesure n'a été prise
+let lastFrameTime = 0;
+
+const light = document.getElementById("light");
+const message = document.getElementById("message");
+const dbEl = document.getElementById("db");
+const levelEl = document.getElementById("level");
+const statusEl = document.getElementById("status");
+const startBtn = document.getElementById("start");
+const orangeInput = document.getElementById("orange");
+const redInput = document.getElementById("red");
+const avgInput = document.getElementById("avg");
+const orangeValueEl = document.getElementById("orangeValue");
+const redValueEl = document.getElementById("redValue");
+const avgValueEl = document.getElementById("avgValue");
+
+// Seuils et fenêtre de lissage initialisés depuis la valeur réelle des curseurs (et non une constante
+// figée) : certains navigateurs restaurent la position d'un curseur au rechargement de la page,
+// ce qui pouvait désynchroniser le texte affiché (ex: "-18 dB") de la position visuelle du curseur.
+let orangeThreshold = Number(orangeInput.value); // dB relatif à partir duquel on passe à l'orange
+let redThreshold = Number(redInput.value);       // dB relatif à partir duquel on passe au rouge
+let AVG_WINDOW_MS = Number(avgInput.value);      // fenêtre de lissage (ms), réglable via le curseur #avg
+orangeValueEl.textContent = orangeThreshold;
+redValueEl.textContent = redThreshold;
+avgValueEl.textContent = (AVG_WINDOW_MS / 1000).toFixed(1);
+
+// Change l'état affiché (voyant + message) et déclenche le bip en cas de passage au rouge.
+function setState(newState) {
+  if (state === newState) return;
+  const oldState = state;
+  state = newState;
+  light.className = newState;
+  if (newState === "green") message.textContent = "Discussion normale";
+  if (newState === "orange") {
+    message.textContent = oldState === "red" ? "Ça redescend…" : "Le ton monte…";
+  }
+  if (newState === "red") {
+    message.textContent = "PAUSE — VOIX TROP FORTE";
+    beep();
+  }
+}
+
+// Bip court (880 Hz, ~200 ms) joué à l'entrée en état rouge.
+function beep() {
+  if (!audioContext) return;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.frequency.value = 880;
+  gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.18, audioContext.currentTime + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.20);
+  osc.connect(gain).connect(audioContext.destination);
+  osc.start();
+  osc.stop(audioContext.currentTime + 0.21);
+}
+
+// Boucle d'analyse (une frame = un appel), relancée via requestAnimationFrame tant que running est vrai.
+function analyse() {
+  if (!running) return;
+
+  // Calcul du niveau RMS (racine de la moyenne des carrés) sur l'échantillon temporel courant.
+  analyser.getFloatTimeDomainData(data);
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+  const rms = Math.sqrt(sum / data.length);
+
+  // dB relatif : 0 dB = niveau numérique maximal.
+  let db = 20 * Math.log10(Math.max(rms, 0.00001));
+  db = Math.max(-60, Math.min(0, db));
+
+  const now = performance.now();
+  const dt = lastFrameTime ? now - lastFrameTime : 0;
+  lastFrameTime = now;
+
+  // Moyenne mobile (lissage exponentiel, fenêtre ~AVG_WINDOW_MS) : le voyant et les seuils
+  // réagissent au niveau sonore moyen sur quelques secondes plutôt qu'à chaque pic instantané.
+  if (avgDb === null) {
+    avgDb = db;
+  } else if (dt > 0) {
+    avgDb += (db - avgDb) * (1 - Math.exp(-dt / AVG_WINDOW_MS));
+  }
+
+  // Affichage visuel amplifié pour faciliter la lecture.
+  const pct = Math.max(0, Math.min(100, (avgDb + 60) / 60 * 100));
+  levelEl.style.width = pct + "%";
+  dbEl.textContent = avgDb.toFixed(1) + " dB relatif (moyenne 3 s)";
+
+  // Hystérésis temporelle : il faut rester au-dessus d'un seuil pendant une durée minimale
+  // avant de changer d'état, pour éviter que des pics ponctuels déclenchent une fausse alerte.
+  if (avgDb >= redThreshold) {
+    if (!redSince) redSince = now;
+    if (now - redSince >= 1200) setState("red");
+  } else {
+    redSince = 0;
+    if (avgDb >= orangeThreshold) {
+      if (!orangeSince) orangeSince = now;
+      if (now - orangeSince >= 700) setState("orange");
+    } else {
+      orangeSince = 0;
+      if (state !== "green" && avgDb < orangeThreshold - 3) setState("green");
+    }
+  }
+
+  requestAnimationFrame(analyse);
+}
+
+startBtn.addEventListener("click", async () => {
+  try {
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    // Traitements audio du navigateur désactivés pour obtenir un niveau brut, non lissé/compensé.
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    });
+
+    source = audioContext.createMediaStreamSource(stream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    data = new Float32Array(analyser.fftSize);
+    source.connect(analyser);
+
+    running = true;
+    startBtn.disabled = true;
+    startBtn.textContent = "Microphone actif";
+    statusEl.textContent = "Microphone actif";
+    setState("green");
+    analyse();
+  } catch (e) {
+    statusEl.textContent = "Accès au microphone refusé";
+    alert("Impossible d'accéder au microphone. Autorise le micro dans ton navigateur puis recharge la page.");
+  }
+});
+
+// Les deux curseurs se contraignent mutuellement pour garantir orange < rouge en permanence.
+orangeInput.addEventListener("input", e => {
+  orangeThreshold = Number(e.target.value);
+  orangeValueEl.textContent = orangeThreshold;
+  if (orangeThreshold >= redThreshold) {
+    redThreshold = orangeThreshold + 1;
+    redInput.value = redThreshold;
+    redValueEl.textContent = redThreshold;
+  }
+});
+
+redInput.addEventListener("input", e => {
+  redThreshold = Number(e.target.value);
+  redValueEl.textContent = redThreshold;
+  if (redThreshold <= orangeThreshold) {
+    orangeThreshold = redThreshold - 1;
+    orangeInput.value = orangeThreshold;
+    orangeValueEl.textContent = orangeThreshold;
+  }
+});
+
+// Fenêtre de lissage réglable de 0 (aucun lissage, mesure instantanée) à 10 s.
+avgInput.addEventListener("input", e => {
+  AVG_WINDOW_MS = Number(e.target.value);
+  avgValueEl.textContent = (AVG_WINDOW_MS / 1000).toFixed(1);
+});
+
+// Pop-up "Informations" : version, auteur, date, licence (valeurs issues des constantes APP_*).
+const infoDialog = document.getElementById("infoDialog");
+document.getElementById("infoVersion").textContent = APP_VERSION;
+document.getElementById("infoAuthor").textContent = APP_AUTHOR;
+document.getElementById("infoDate").textContent = APP_DATE;
+document.getElementById("infoLicense").textContent = APP_LICENSE;
+document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
+document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+</script>
+</body>
+</html>
