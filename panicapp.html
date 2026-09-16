@@ -6,8 +6,16 @@
   questions adaptatif, machine à états. L'application finale sera native Android
   (Kotlin) ; ceci n'est qu'un prototype pour valider l'expérience avant de coder l'app.
 
-  Auteur : Franck Legrand <franck.legrand@gmail.com>
-  Statut : Prototype — nécessite Chrome ou Edge (reconnaissance vocale).
+  Ces informations (version, auteur, date, licence) sont la source unique :
+  elles sont reprises dans les constantes APP_* du script et affichées dans
+  la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
+
+  Version : 0.2.0
+  Auteur  : Franck Legrand <franck.legrand@gmail.com>
+  Date    : 2026-09-16
+  Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
+  Statut  : En développement (V0) — fonctions de base en place, débogage en cours.
+  © 2026 Franck Legrand. Tous droits réservés.
 -->
 <html lang="fr">
 <head>
@@ -31,12 +39,30 @@
   }
   main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
 
+  /* Lien "Informations" (en-tête) et sa pop-up (version, auteur, date, licence) */
+  #infoLink {
+    background:none; border:0; color:#aaa; font-size:13px; text-decoration:underline;
+    cursor:pointer; padding:4px;
+  }
+  #infoLink:hover { color:#fff; }
+  #infoDialog {
+    background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
+    padding:22px 26px; max-width:min(420px,90vw);
+  }
+  #infoDialog::backdrop { background:rgba(0,0,0,.6); }
+  #infoDialog h2 { margin:0 0 12px; font-size:18px; }
+  #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
+  #infoDialog dt { color:#999; }
+  #infoDialog dd { margin:0; }
+  #infoDialog button { padding:8px 16px; font-size:14px; border:0; border-radius:10px; cursor:pointer; background:#fff; color:#111; font-weight:700; }
+
   .panel {
     width:min(460px,94vw); display:flex; flex-direction:column; align-items:center;
     gap:22px; background:#161616; border:1px solid #262626; border-radius:22px;
     padding:clamp(24px,5vh,40px) clamp(20px,4vw,32px); box-shadow:0 20px 60px rgba(0,0,0,.45);
   }
   .screen { width:100%; display:flex; flex-direction:column; align-items:center; gap:22px; }
+  .screen[hidden] { display:none; }
 
   /* --- Accueil --- */
   .panic-btn {
@@ -48,7 +74,6 @@
   .panic-btn:active { transform:scale(.97); }
   .hint { color:#999; font-size:13px; text-align:center; }
   .home-footer { width:100%; display:flex; flex-direction:column; align-items:center; gap:10px; }
-  .ble-status { color:#888; font-size:12.5px; text-align:center; }
 
   .ghost-btn {
     background:none; border:1px solid #333; color:#ddd; border-radius:10px;
@@ -91,9 +116,23 @@
 <body>
 <header>
   <h1>🆘 Panic App — prototype V1</h1>
-  <div id="statusHeader" style="font-size:12.5px;color:#888;"></div>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <div id="statusHeader" style="font-size:12.5px;color:#888;"></div>
+    <button id="infoLink" type="button">ℹ️ Informations</button>
+  </div>
 </header>
 <div id="banner" hidden></div>
+
+<dialog id="infoDialog">
+  <h2>À propos du prototype</h2>
+  <dl>
+    <dt>Version</dt><dd id="infoVersion"></dd>
+    <dt>Auteur</dt><dd id="infoAuthor"></dd>
+    <dt>Date</dt><dd id="infoDate"></dd>
+    <dt>Licence</dt><dd id="infoLicense"></dd>
+  </dl>
+  <button id="infoClose" type="button">Fermer</button>
+</dialog>
 
 <main>
   <div class="panel">
@@ -103,7 +142,6 @@
       <p class="hint">Appuie, puis laisse-toi guider par la voix.<br>Tu peux fermer les yeux.</p>
       <div class="home-footer">
         <button id="openSettings" class="ghost-btn">⚙️ Réglages</button>
-        <div class="ble-status">🔌 Bouton porte-clés BLE : non disponible dans le navigateur (prévu V2, app Android)</div>
       </div>
     </div>
 
@@ -133,10 +171,6 @@
             <option value="3">Difficile</option>
           </select>
         </label>
-        <label class="row">
-          <input type="checkbox" disabled>
-          Bouton BLE (non disponible dans le navigateur)
-        </label>
         <button id="backHome" class="ghost-btn">← Retour</button>
       </div>
     </div>
@@ -164,6 +198,22 @@ if (!sttSupported) {
 }
 document.getElementById("statusHeader").textContent = sttSupported ? "🎙️ Micro disponible" : "🎙️ Micro indisponible";
 
+// Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
+// et dans le commentaire d'en-tête du fichier (à garder synchronisés).
+const APP_VERSION = "0.2.0";
+const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
+const APP_DATE = "2026-09-16";
+const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
+
+// Pop-up "Informations" : version, auteur, date, licence (valeurs issues des constantes APP_*).
+const infoDialog = document.getElementById("infoDialog");
+document.getElementById("infoVersion").textContent = APP_VERSION;
+document.getElementById("infoAuthor").textContent = APP_AUTHOR;
+document.getElementById("infoDate").textContent = APP_DATE;
+document.getElementById("infoLicense").textContent = APP_LICENSE;
+document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
+document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+
 // ---------- Banque de questions locale ----------
 // Chaque question : catégorie, niveau (1-3), texte, et un mode d'évaluation.
 const QUESTION_BANK = {
@@ -171,33 +221,74 @@ const QUESTION_BANK = {
     { level:1, text:"Combien font trois plus quatre ?", type:"number", answer:7 },
     { level:1, text:"Combien font cinq plus deux ?", type:"number", answer:7 },
     { level:1, text:"Combien font huit moins trois ?", type:"number", answer:5 },
+    { level:1, text:"Combien font deux plus deux ?", type:"number", answer:4 },
+    { level:1, text:"Combien font six plus un ?", type:"number", answer:7 },
+    { level:1, text:"Combien font neuf moins quatre ?", type:"number", answer:5 },
+    { level:1, text:"Combien font quatre plus quatre ?", type:"number", answer:8 },
+    { level:1, text:"Combien font sept moins deux ?", type:"number", answer:5 },
     { level:2, text:"Combien font douze moins cinq ?", type:"number", answer:7 },
     { level:2, text:"Combien font six fois trois ?", type:"number", answer:18 },
     { level:2, text:"Combien font neuf plus huit ?", type:"number", answer:17 },
+    { level:2, text:"Combien font quinze moins six ?", type:"number", answer:9 },
+    { level:2, text:"Combien font quatre fois quatre ?", type:"number", answer:16 },
+    { level:2, text:"Combien font treize plus six ?", type:"number", answer:19 },
+    { level:2, text:"Combien font vingt moins huit ?", type:"number", answer:12 },
+    { level:2, text:"Combien font sept fois deux ?", type:"number", answer:14 },
     { level:3, text:"Combien font quatorze plus dix-sept ?", type:"number", answer:31 },
     { level:3, text:"Combien font quatre-vingts moins trente-trois ?", type:"number", answer:47 },
+    { level:3, text:"Combien font huit fois sept ?", type:"number", answer:56 },
+    { level:3, text:"Combien font cinquante-cinq plus vingt-neuf ?", type:"number", answer:84 },
+    { level:3, text:"Combien font cent moins quarante-quatre ?", type:"number", answer:56 },
+    { level:3, text:"Combien font neuf fois six ?", type:"number", answer:54 },
+    { level:3, text:"Combien font soixante-treize moins dix-huit ?", type:"number", answer:55 },
   ],
   memoire: [
     { level:1, text:"Quelle est la couleur du ciel par une journée claire ?", type:"keyword", keywords:["bleu"] },
+    { level:1, text:"Quelle est la couleur de l'herbe ?", type:"keyword", keywords:["vert"] },
     { level:1, text:"Quel est le prénom de ta mère ?", type:"free" },
+    { level:1, text:"Combien de doigts as-tu sur une main ?", type:"number", answer:5 },
     { level:2, text:"Cite trois prénoms qui commencent par la lettre A.", type:"free" },
+    { level:2, text:"Cite trois prénoms qui commencent par la lettre M.", type:"free" },
+    { level:2, text:"Quel est le prénom de ton père ?", type:"free" },
+    { level:2, text:"Épelle ton prénom, lettre par lettre.", type:"free" },
     { level:3, text:"Récite les jours de la semaine dans l'ordre, en commençant par lundi.", type:"free" },
+    { level:3, text:"Récite les mois de l'année dans l'ordre, en commençant par janvier.", type:"free" },
+    { level:3, text:"Répète dans l'ordre : pomme, table, fenêtre.", type:"free" },
   ],
   observation: [
     { level:1, text:"Cite un animal qui vit dans l'eau.", type:"free" },
     { level:1, text:"Cite un pays d'Europe.", type:"free" },
+    { level:1, text:"Cite la couleur des vêtements que tu portes.", type:"free" },
+    { level:1, text:"Cite un fruit.", type:"free" },
     { level:2, text:"Cite trois objets que l'on trouve dans une cuisine.", type:"free" },
+    { level:2, text:"Cite trois objets que l'on trouve dans un salon.", type:"free" },
+    { level:2, text:"Cite deux moyens de transport.", type:"free" },
+    { level:2, text:"Cite un instrument de musique.", type:"free" },
     { level:3, text:"Cite une ville de France qui commence par la lettre M.", type:"keyword_or_free", keywords:["marseille","metz","montpellier","mulhouse","le mans","montreuil"] },
+    { level:3, text:"Cite la capitale d'un pays d'Europe.", type:"free" },
+    { level:3, text:"Cite un animal qui commence par la lettre L.", type:"keyword_or_free", keywords:["lion","loup","lapin","lynx","lama"] },
+    { level:3, text:"Cite un pays d'Amérique du Sud.", type:"free" },
   ],
   logique: [
     { level:1, text:"Quel nombre vient après sept ?", type:"number", answer:8 },
+    { level:1, text:"Quel nombre vient avant dix ?", type:"number", answer:9 },
+    { level:1, text:"Quel nombre vient après trois ?", type:"number", answer:4 },
     { level:2, text:"Dans la suite deux, quatre, six, huit, quel est le nombre suivant ?", type:"number", answer:10 },
+    { level:2, text:"Dans la suite cinq, dix, quinze, vingt, quel est le nombre suivant ?", type:"number", answer:25 },
+    { level:2, text:"Dans la suite un, trois, cinq, sept, quel est le nombre suivant ?", type:"number", answer:9 },
     { level:3, text:"Dans la suite un, un, deux, trois, cinq, quel est le nombre suivant ?", type:"number", answer:8 },
+    { level:3, text:"Dans la suite trois, six, douze, vingt-quatre, quel est le nombre suivant ?", type:"number", answer:48 },
+    { level:3, text:"Dans la suite cent, quatre-vingt-dix, quatre-vingts, soixante-dix, quel est le nombre suivant ?", type:"number", answer:60 },
   ],
   conversation: [
     { level:1, text:"Décris en une phrase l'endroit où tu te trouves.", type:"free" },
     { level:1, text:"Quel jour sommes-nous aujourd'hui ?", type:"free" },
+    { level:1, text:"En un mot, comment te sens-tu en ce moment ?", type:"free" },
     { level:2, text:"Quelle est ta saison préférée, et pourquoi ?", type:"free" },
+    { level:2, text:"Quel est ton plat préféré ?", type:"free" },
+    { level:2, text:"Raconte un souvenir agréable récent.", type:"free" },
+    { level:3, text:"Décris ta journée idéale en quelques mots.", type:"free" },
+    { level:3, text:"Qu'est-ce qui te fait sourire en général ?", type:"free" },
   ],
 };
 
