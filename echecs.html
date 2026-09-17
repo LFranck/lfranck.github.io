@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<!--
+  Échecs — Piloté au doigt et à la voix (prototype)
+  Ces informations (version, auteur, date, licence) sont la source unique :
+  elles sont reprises dans les constantes APP_* du script et affichées dans
+  la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
+
+  Version : 0.7.1
+  Auteur  : Franck Legrand <franck.legrand@gmail.com>
+  Date    : 2026-09-17
+  Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
+  Statut  : En développement — Étape 2 (déplacement tactile/souris, règles complètes : prise en passant,
+            roque, promotion, échec/échec et mat/pat, annulation de coup).
+  © 2026 Franck Legrand. Tous droits réservés.
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Échecs — Piloté au doigt et à la voix</title>
+<style>
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+    background:#111; color:#fff; display:flex; flex-direction:column;
+  }
+  header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 24px; background:#181818; border-bottom:1px solid #333;
+  }
+  h1 { margin:0; font-size:20px; font-weight:650; }
+  #status { font-size:14px; color:#aaa; }
+  main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+
+  /* Lien "Informations" / "Réglages" / "Annuler" (en-tête) et leurs pop-up */
+  #infoLink, #settingsLink, #undoBtn {
+    background:none; border:0; color:#aaa; font-size:13px; text-decoration:underline;
+    cursor:pointer; padding:4px;
+  }
+  #infoLink:hover, #settingsLink:hover, #undoBtn:hover:not(:disabled) { color:#fff; }
+  #undoBtn:disabled { color:#555; text-decoration:none; cursor:not-allowed; }
+  #infoDialog, #settingsDialog, #promotionDialog {
+    background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
+    padding:22px 26px; max-width:min(420px,90vw);
+  }
+  #infoDialog::backdrop, #settingsDialog::backdrop, #promotionDialog::backdrop { background:rgba(0,0,0,.6); }
+  #infoDialog h2, #settingsDialog h2, #promotionDialog h2 { margin:0 0 12px; font-size:18px; }
+  #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
+  #infoDialog dt { color:#999; }
+  #infoDialog dd { margin:0; }
+  #infoDialog button, #settingsDialog button, #promotionDialog button {
+    border:0; border-radius:10px; padding:8px 16px; cursor:pointer;
+    background:#fff; color:#111; font-weight:700; font-size:14px;
+  }
+  #settingsDialog .settings-form { display:flex; flex-direction:column; gap:16px; margin-bottom:16px; }
+  #settingsDialog label { display:flex; flex-direction:column; gap:7px; color:#ccc; font-size:14px; }
+  #settingsDialog select {
+    background:#111; color:#fff; border:1px solid #333; border-radius:8px; padding:9px 10px;
+  }
+  #settingsDialog .hint { color:#888; font-size:12px; }
+  #promotionDialog .promotion-choices { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:4px; }
+  #promotionDialog .promoBtn { font-size:17px; padding:14px 10px; }
+
+  .panel {
+    width:min(560px,94vw); max-height:100%;
+    display:flex; flex-direction:column; align-items:center; gap:18px;
+    background:#161616; border:1px solid #262626; border-radius:22px;
+    padding:clamp(18px,4vh,34px) clamp(18px,4vw,28px);
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+  }
+
+  /* Plateau : grille de coordonnées (labels) + grille 8x8 de cases */
+  .board-wrap {
+    display:grid; grid-template-columns:22px minmax(0,1fr); grid-template-rows:minmax(0,1fr) 22px;
+    width:min(480px,88vw); aspect-ratio:1;
+  }
+  .ranks {
+    grid-column:1; grid-row:1;
+    display:grid; grid-template-rows:repeat(8,minmax(0,1fr));
+  }
+  .ranks span { display:flex; align-items:center; justify-content:center; font-size:12px; color:#888; }
+  .files {
+    grid-column:2; grid-row:2;
+    display:grid; grid-template-columns:repeat(8,minmax(0,1fr));
+  }
+  .files span { display:flex; align-items:center; justify-content:center; font-size:12px; color:#888; }
+  #board {
+    grid-column:2; grid-row:1;
+    display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); grid-template-rows:repeat(8,minmax(0,1fr));
+    border:2px solid #333; border-radius:4px; overflow:hidden;
+    touch-action:none; /* le plateau gère lui-même le glisser tactile, la page ne doit pas scroller pendant un drag */
+  }
+  /* min-width/height:0 : sans ça, une case avec une grosse pièce (contenu intrinsèque plus grand)
+     peut forcer sa ligne/colonne de grille à s'agrandir au détriment des cases vides voisines. */
+  .square { position:relative; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; font-size:clamp(30px,7.5vw,52px); user-select:none; }
+  .square.light { background:#ebd6b0; }
+  .square.dark { background:#7c5738; }
+  .square.selected { outline:3px solid #4f9dff; outline-offset:-3px; z-index:2; }
+  .square.legal-target::after {
+    content:""; position:absolute; width:24%; height:24%; border-radius:50%; background:rgba(20,20,20,.35);
+  }
+  .square.legal-capture::after {
+    content:""; position:absolute; inset:6%; border-radius:50%; border:4px solid rgba(20,20,20,.4); background:none;
+  }
+  .square.king-in-check { box-shadow:inset 0 0 0 4px #ef4444; }
+  .piece.white { color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6); }
+  .piece.black { color:#111; }
+  .piece.own-turn { cursor:grab; }
+
+  .hint { color:#888; font-size:12px; text-align:center; }
+  footer { text-align:center; font-size:11px; color:#666; padding:10px 0 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>♟️ Échecs</h1>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <div id="status">Blancs à jouer</div>
+    <button id="undoBtn" type="button" disabled>↩️ Annuler</button>
+    <button id="settingsLink" type="button">⚙️ Réglages</button>
+    <button id="infoLink" type="button">ℹ️ Informations</button>
+  </div>
+</header>
+
+<dialog id="infoDialog">
+  <h2>À propos du prototype</h2>
+  <dl>
+    <dt>Version</dt><dd id="infoVersion"></dd>
+    <dt>Auteur</dt><dd id="infoAuthor"></dd>
+    <dt>Date</dt><dd id="infoDate"></dd>
+    <dt>Licence</dt><dd id="infoLicense"></dd>
+  </dl>
+  <button id="infoClose" type="button">Fermer</button>
+</dialog>
+
+<dialog id="settingsDialog">
+  <h2>Réglages</h2>
+  <div class="settings-form">
+    <label>Orientation du plateau
+      <select id="orientationSelect">
+        <option value="white">Blancs en bas</option>
+        <option value="black">Noirs en bas</option>
+      </select>
+    </label>
+    <div class="hint">Le pilotage vocal arrivera dans une prochaine étape.</div>
+  </div>
+  <button id="settingsClose" type="button">Fermer</button>
+</dialog>
+
+<dialog id="promotionDialog">
+  <h2>Promotion du pion</h2>
+  <div class="promotion-choices">
+    <button type="button" class="promoBtn" data-piece="Q" data-label="Dame"></button>
+    <button type="button" class="promoBtn" data-piece="R" data-label="Tour"></button>
+    <button type="button" class="promoBtn" data-piece="B" data-label="Fou"></button>
+    <button type="button" class="promoBtn" data-piece="N" data-label="Cavalier"></button>
+  </div>
+</dialog>
+
+<main>
+  <div class="panel">
+    <div class="board-wrap">
+      <div class="ranks" id="ranks"></div>
+      <div id="board"></div>
+      <div class="files" id="files"></div>
+    </div>
+    <div class="hint">
+      Étape 2 : déplacement des pièces au doigt (glisser, ou taper la pièce puis la case) ou à la souris,
+      avec les règles complètes de déplacement : prise en passant, roque, promotion, et détection de
+      l'échec, de l'échec et mat et du pat. Le pilotage vocal arrivera dans une prochaine étape.
+    </div>
+  </div>
+</main>
+
+<footer>© 2026 Franck Legrand — Utilisation libre (usage personnel/éducatif), sans garantie.</footer>
+
+<script>
+// Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
+// et dans le commentaire d'en-tête du fichier (à garder synchronisés).
+const APP_VERSION = "0.7.1";
+const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
+const APP_DATE = "2026-09-17";
+const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
+
+// Position de départ (une lettre par case) : majuscule = pièce blanche, minuscule = pièce noire,
+// chaîne vide = case libre. boardState[0] = 8e rangée (haut, côté Noirs), boardState[7] = 1re rangée
+// (bas, côté Blancs) — indépendant de l'orientation d'affichage, qui n'affecte que le rendu.
+let boardState = [
+  ["r","n","b","q","k","b","n","r"],
+  ["p","p","p","p","p","p","p","p"],
+  ["","","","","","","",""],
+  ["","","","","","","",""],
+  ["","","","","","","",""],
+  ["","","","","","","",""],
+  ["P","P","P","P","P","P","P","P"],
+  ["R","N","B","Q","K","B","N","R"],
+];
+const PIECE_GLYPHS = {
+  K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘", P:"♙",
+  k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟",
+};
+const FILES = ["a","b","c","d","e","f","g","h"];
+
+const boardEl = document.getElementById("board");
+const ranksEl = document.getElementById("ranks");
+const filesEl = document.getElementById("files");
+const statusEl = document.getElementById("status");
+const undoBtn = document.getElementById("undoBtn");
+let flipped = false;      // false = Blancs en bas, true = Noirs en bas
+let turn = "white";       // couleur qui doit jouer
+let selected = null;      // {row,col} de la pièce sélectionnée, ou null
+let legalTargets = [];    // cases atteignables depuis "selected"
+let history = [];         // pile des positions précédentes, pour l'annulation de coup
+let enPassantTarget = null; // {row,col} : case vide qu'un pion peut capturer "en passant" juste après un double pas, sinon null
+let castlingRights = { wK: true, wQ: true, bK: true, bQ: true }; // roque encore possible : (w/b)=couleur, (K/Q)=petit/grand roque
+let pendingPromotion = null; // {row,col,color} : pion arrivé sur la dernière rangée, en attente du choix de promotion
+let gameOver = false;      // vrai après un échec et mat ou un pat : le plateau ne réagit plus aux coups
+
+function pieceColor(p) { return p ? (p === p.toUpperCase() ? "white" : "black") : null; }
+function inBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+function squareName(row, col) { return FILES[col] + (8 - row); }
+function rowColFromSquare(name) {
+  return { row: 8 - Number(name.slice(1)), col: FILES.indexOf(name[0]) };
+}
+function isLegalTarget(row, col) { return legalTargets.some(t => t.row === row && t.col === col); }
+
+// Coups légaux pour la pièce en (row,col) : candidats pseudo-légaux (blocages, captures, roque, prise
+// en passant) desquels on retire ceux qui laisseraient son propre roi en échec.
+function computeLegalMoves(row, col) {
+  const piece = boardState[row][col];
+  if (!piece) return [];
+  const color = pieceColor(piece);
+  return computeMoveCandidates(row, col).filter(move => !wouldLeaveKingInCheck(row, col, move, color));
+}
+
+// Déplacements possibles pour la pièce en (row,col), en tenant compte des blocages et des captures,
+// mais SANS vérifier si le coup laisse son propre roi en échec (filtré ensuite par computeLegalMoves).
+function computeMoveCandidates(row, col) {
+  const piece = boardState[row][col];
+  if (!piece) return [];
+  const color = pieceColor(piece);
+  const type = piece.toUpperCase();
+  const moves = [];
+
+  function slide(directions) {
+    directions.forEach(([dr, dc]) => {
+      let r = row + dr, c = col + dc;
+      while (inBounds(r, c)) {
+        const target = boardState[r][c];
+        if (!target) {
+          moves.push({ row: r, col: c });
+        } else {
+          if (pieceColor(target) !== color) moves.push({ row: r, col: c });
+          break;
+        }
+        r += dr; c += dc;
+      }
+    });
+  }
+  function step(deltas) {
+    deltas.forEach(([dr, dc]) => {
+      const r = row + dr, c = col + dc;
+      if (inBounds(r, c)) {
+        const target = boardState[r][c];
+        if (!target || pieceColor(target) !== color) moves.push({ row: r, col: c });
+      }
+    });
+  }
+
+  switch (type) {
+    case "P": {
+      const dir = color === "white" ? -1 : 1;
+      const startRow = color === "white" ? 6 : 1;
+      if (inBounds(row + dir, col) && !boardState[row + dir][col]) {
+        moves.push({ row: row + dir, col });
+        if (row === startRow && !boardState[row + 2 * dir][col]) moves.push({ row: row + 2 * dir, col });
+      }
+      [[dir, -1], [dir, 1]].forEach(([dr, dc]) => {
+        const r = row + dr, c = col + dc;
+        if (!inBounds(r, c)) return;
+        if (boardState[r][c] && pieceColor(boardState[r][c]) !== color) {
+          moves.push({ row: r, col: c });
+        } else if (!boardState[r][c] && enPassantTarget && enPassantTarget.row === r && enPassantTarget.col === c) {
+          moves.push({ row: r, col: c, enPassant: true });
+        }
+      });
+      break;
+    }
+    case "N": step([[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]]); break;
+    case "B": slide([[-1, -1], [-1, 1], [1, -1], [1, 1]]); break;
+    case "R": slide([[-1, 0], [1, 0], [0, -1], [0, 1]]); break;
+    case "Q": slide([[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]]); break;
+    case "K":
+      step([[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]);
+      addCastlingMoves(row, col, color, moves);
+      break;
+  }
+  return moves;
+}
+
+// Ajoute les coups de roque disponibles pour le roi en (row,col) : il ne doit pas avoir bougé, la tour
+// concernée doit être toujours en place, les cases entre les deux doivent être libres, et le roi ne
+// doit être ni actuellement en échec, ni passer par, ni arriver sur, une case attaquée.
+function addCastlingMoves(row, col, color, moves) {
+  const homeRow = color === "white" ? 7 : 0;
+  if (row !== homeRow || col !== 4) return;
+  const rook = color === "white" ? "R" : "r";
+  const opponent = color === "white" ? "black" : "white";
+  if (isSquareAttacked(boardState, homeRow, 4, opponent)) return;
+
+  const kingsideRight = color === "white" ? castlingRights.wK : castlingRights.bK;
+  const queensideRight = color === "white" ? castlingRights.wQ : castlingRights.bQ;
+  if (
+    kingsideRight && !boardState[homeRow][5] && !boardState[homeRow][6] && boardState[homeRow][7] === rook &&
+    !isSquareAttacked(boardState, homeRow, 5, opponent) && !isSquareAttacked(boardState, homeRow, 6, opponent)
+  ) {
+    moves.push({ row: homeRow, col: 6, castle: "king" });
+  }
+  if (
+    queensideRight && !boardState[homeRow][1] && !boardState[homeRow][2] && !boardState[homeRow][3] && boardState[homeRow][0] === rook &&
+    !isSquareAttacked(boardState, homeRow, 3, opponent) && !isSquareAttacked(boardState, homeRow, 2, opponent)
+  ) {
+    moves.push({ row: homeRow, col: 2, castle: "queen" });
+  }
+}
+
+// Cases attaquées par la pièce en (row,col) sur "board" : comme les déplacements, mais un pion
+// attaque en diagonale même case vide, et une case occupée arrête une pièce glissante (elle est
+// attaquée, mais pas les cases au-delà) — sans tenir compte de la couleur de ce qui l'occupe.
+function computeAttackSquares(board, row, col) {
+  const piece = board[row][col];
+  if (!piece) return [];
+  const color = pieceColor(piece);
+  const type = piece.toUpperCase();
+  const squares = [];
+
+  function slideAttack(directions) {
+    directions.forEach(([dr, dc]) => {
+      let r = row + dr, c = col + dc;
+      while (inBounds(r, c)) {
+        squares.push({ row: r, col: c });
+        if (board[r][c]) break;
+        r += dr; c += dc;
+      }
+    });
+  }
+  function stepAttack(deltas) {
+    deltas.forEach(([dr, dc]) => {
+      const r = row + dr, c = col + dc;
+      if (inBounds(r, c)) squares.push({ row: r, col: c });
+    });
+  }
+
+  switch (type) {
+    case "P": {
+      const dir = color === "white" ? -1 : 1;
+      [[dir, -1], [dir, 1]].forEach(([dr, dc]) => {
+        const r = row + dr, c = col + dc;
+        if (inBounds(r, c)) squares.push({ row: r, col: c });
+      });
+      break;
+    }
+    case "N": stepAttack([[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]]); break;
+    case "B": slideAttack([[-1, -1], [-1, 1], [1, -1], [1, 1]]); break;
+    case "R": slideAttack([[-1, 0], [1, 0], [0, -1], [0, 1]]); break;
+    case "Q": slideAttack([[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]]); break;
+    case "K": stepAttack([[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]); break;
+  }
+  return squares;
+}
+
+function isSquareAttacked(board, row, col, byColor) {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (piece && pieceColor(piece) === byColor && computeAttackSquares(board, r, c).some(s => s.row === row && s.col === col)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function findKing(board, color) {
+  const king = color === "white" ? "K" : "k";
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (board[r][c] === king) return { row: r, col: c };
+    }
+  }
+  return null;
+}
+
+function isInCheck(board, color) {
+  const kingPos = findKing(board, color);
+  return !!kingPos && isSquareAttacked(board, kingPos.row, kingPos.col, color === "white" ? "black" : "white");
+}
+
+// Simule le coup (from -> move) sur une copie du plateau et indique si le roi de "color" y est en échec.
+function wouldLeaveKingInCheck(fromRow, fromCol, move, color) {
+  const sim = boardState.map(r => r.slice());
+  const movingPiece = sim[fromRow][fromCol];
+  if (move.enPassant) sim[fromRow][move.col] = "";
+  sim[move.row][move.col] = movingPiece;
+  sim[fromRow][fromCol] = "";
+  if (move.castle) {
+    if (move.castle === "king") { sim[fromRow][5] = sim[fromRow][7]; sim[fromRow][7] = ""; }
+    else { sim[fromRow][3] = sim[fromRow][0]; sim[fromRow][0] = ""; }
+  }
+  return isInCheck(sim, color);
+}
+
+// Vrai si "color" dispose d'au moins un coup légal (toutes pièces confondues) — sert à détecter
+// l'échec et mat (aucun coup + roi en échec) et le pat (aucun coup + roi pas en échec).
+function hasAnyLegalMove(color) {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = boardState[r][c];
+      if (piece && pieceColor(piece) === color && computeLegalMoves(r, c).length > 0) return true;
+    }
+  }
+  return false;
+}
+
+// Met à jour les droits au roque : le roi ou une tour qui quitte sa case de départ, ou une tour
+// capturée sur sa case de départ, retire définitivement le droit correspondant.
+function updateCastlingRights(from, to, movingPiece) {
+  if (movingPiece === "K") { castlingRights.wK = false; castlingRights.wQ = false; }
+  if (movingPiece === "k") { castlingRights.bK = false; castlingRights.bQ = false; }
+  if (movingPiece === "R" && from.row === 7 && from.col === 0) castlingRights.wQ = false;
+  if (movingPiece === "R" && from.row === 7 && from.col === 7) castlingRights.wK = false;
+  if (movingPiece === "r" && from.row === 0 && from.col === 0) castlingRights.bQ = false;
+  if (movingPiece === "r" && from.row === 0 && from.col === 7) castlingRights.bK = false;
+  if (to.row === 7 && to.col === 0) castlingRights.wQ = false;
+  if (to.row === 7 && to.col === 7) castlingRights.wK = false;
+  if (to.row === 0 && to.col === 0) castlingRights.bQ = false;
+  if (to.row === 0 && to.col === 7) castlingRights.bK = false;
+}
+
+function updateStatus() {
+  const inCheck = isInCheck(boardState, turn);
+  statusEl.textContent = (turn === "white" ? "Blancs" : "Noirs") + " à jouer" + (inCheck ? " — échec !" : "");
+}
+
+// À appeler après un changement de trait : si le camp qui doit jouer n'a plus aucun coup légal,
+// c'est l'échec et mat (s'il est en échec) ou le pat (sinon), et le plateau se bloque.
+function checkGameEnd() {
+  if (hasAnyLegalMove(turn)) { gameOver = false; return; }
+  gameOver = true;
+  if (isInCheck(boardState, turn)) {
+    statusEl.textContent = "Échec et mat — les " + (turn === "white" ? "Noirs" : "Blancs") + " gagnent.";
+  } else {
+    statusEl.textContent = "Pat — partie nulle.";
+  }
+}
+
+function movePiece(from, to) {
+  history.push({
+    board: boardState.map(r => r.slice()), turn, enPassantTarget,
+    castlingRights: { ...castlingRights },
+  });
+  undoBtn.disabled = false;
+
+  const movingPiece = boardState[from.row][from.col];
+  updateCastlingRights(from, to, movingPiece);
+
+  if (to.enPassant) boardState[from.row][to.col] = ""; // retire le pion capturé "en passant" (pas sur la case d'arrivée)
+  boardState[to.row][to.col] = movingPiece;
+  boardState[from.row][from.col] = "";
+
+  if (to.castle) {
+    // La tour concernée rejoint la case juste à côté du roi (f/d pour le petit/grand roque).
+    const homeRow = from.row;
+    if (to.castle === "king") {
+      boardState[homeRow][5] = boardState[homeRow][7];
+      boardState[homeRow][7] = "";
+    } else {
+      boardState[homeRow][3] = boardState[homeRow][0];
+      boardState[homeRow][0] = "";
+    }
+  }
+
+  // Un double pas de pion ouvre la prise en passant sur la case franchie, pour le coup suivant seulement.
+  enPassantTarget = (movingPiece.toUpperCase() === "P" && Math.abs(to.row - from.row) === 2)
+    ? { row: (from.row + to.row) / 2, col: from.col }
+    : null;
+
+  selected = null;
+  legalTargets = [];
+
+  // Un pion arrivé sur la dernière rangée doit être promu avant que le trait ne change de camp :
+  // on affiche le choix et on suspend la fin du coup jusqu'à la réponse (resolvePromotion).
+  if (movingPiece.toUpperCase() === "P" && (to.row === 0 || to.row === 7)) {
+    pendingPromotion = { row: to.row, col: to.col, color: pieceColor(movingPiece) };
+    renderBoard();
+    openPromotionDialog();
+    return;
+  }
+
+  turn = turn === "white" ? "black" : "white";
+  updateStatus();
+  checkGameEnd();
+  renderBoard();
+}
+
+// Remplace le pion en attente par la pièce choisie (Dame/Tour/Fou/Cavalier), puis termine le coup.
+function resolvePromotion(letter) {
+  if (!pendingPromotion) return;
+  const { row, col, color } = pendingPromotion;
+  boardState[row][col] = color === "white" ? letter : letter.toLowerCase();
+  pendingPromotion = null;
+  promotionDialog.close();
+  turn = turn === "white" ? "black" : "white";
+  updateStatus();
+  checkGameEnd();
+  renderBoard();
+}
+
+function openPromotionDialog() {
+  const color = pendingPromotion.color;
+  promotionDialog.querySelectorAll(".promoBtn").forEach(btn => {
+    const letter = btn.dataset.piece;
+    const glyph = PIECE_GLYPHS[color === "white" ? letter : letter.toLowerCase()];
+    btn.textContent = glyph + " " + btn.dataset.label;
+  });
+  promotionDialog.showModal();
+}
+
+function undoMove() {
+  const prev = history.pop();
+  if (!prev) return;
+  boardState = prev.board;
+  turn = prev.turn;
+  enPassantTarget = prev.enPassantTarget;
+  castlingRights = prev.castlingRights;
+  pendingPromotion = null;
+  gameOver = false;
+  selected = null;
+  legalTargets = [];
+  undoBtn.disabled = history.length === 0;
+  updateStatus();
+  renderBoard();
+}
+
+// Construit le plateau (cases + pièces + coordonnées + surlignages) selon l'orientation et la sélection courantes.
+function renderBoard() {
+  boardEl.innerHTML = "";
+  ranksEl.innerHTML = "";
+  filesEl.innerHTML = "";
+
+  for (let row = 0; row < 8; row++) {
+    const rankLabel = document.createElement("span");
+    rankLabel.textContent = flipped ? row + 1 : 8 - row;
+    ranksEl.appendChild(rankLabel);
+
+    for (let col = 0; col < 8; col++) {
+      const boardRow = flipped ? 7 - row : row;
+      const boardCol = flipped ? 7 - col : col;
+      const square = document.createElement("div");
+      const isLight = (boardRow + boardCol) % 2 === 0;
+      square.className = "square " + (isLight ? "light" : "dark");
+      square.dataset.square = squareName(boardRow, boardCol);
+
+      if (selected && selected.row === boardRow && selected.col === boardCol) {
+        square.classList.add("selected");
+      } else if (isLegalTarget(boardRow, boardCol)) {
+        const target = legalTargets.find(t => t.row === boardRow && t.col === boardCol);
+        const isCapture = !!boardState[boardRow][boardCol] || (target && target.enPassant);
+        square.classList.add(isCapture ? "legal-capture" : "legal-target");
+      }
+
+      const piece = boardState[boardRow][boardCol];
+      if (piece) {
+        const pieceEl = document.createElement("span");
+        const color = pieceColor(piece);
+        pieceEl.className = "piece " + color + (color === turn ? " own-turn" : "");
+        pieceEl.textContent = PIECE_GLYPHS[piece];
+        square.appendChild(pieceEl);
+        if (piece.toUpperCase() === "K" && isInCheck(boardState, color)) square.classList.add("king-in-check");
+      }
+      boardEl.appendChild(square);
+    }
+  }
+
+  for (let col = 0; col < 8; col++) {
+    const fileLabel = document.createElement("span");
+    fileLabel.textContent = flipped ? FILES[7 - col] : FILES[col];
+    filesEl.appendChild(fileLabel);
+  }
+}
+renderBoard();
+updateStatus();
+
+// ---------- Déplacement au doigt / à la souris ----------
+// Un pointeur unifie souris et tactile. Un simple tap/clic (peu de mouvement) sélectionne une pièce
+// puis, au tap/clic suivant sur une case atteignable, y déplace la pièce. Un vrai glisser fait suivre
+// la pièce au pointeur et la dépose sur la case survolée au relâchement.
+let drag = null; // { row, col, pieceEl, startX, startY, moved }
+
+boardEl.addEventListener("pointerdown", e => {
+  if (gameOver) return;
+  const squareEl = e.target.closest(".square");
+  if (!squareEl) return;
+  const { row, col } = rowColFromSquare(squareEl.dataset.square);
+
+  if (selected && isLegalTarget(row, col)) {
+    movePiece(selected, legalTargets.find(t => t.row === row && t.col === col));
+    return;
+  }
+
+  if (selected && selected.row === row && selected.col === col) {
+    selected = null; legalTargets = []; renderBoard();
+    return;
+  }
+
+  const piece = boardState[row][col];
+  if (piece && pieceColor(piece) === turn) {
+    selected = { row, col };
+    legalTargets = computeLegalMoves(row, col);
+    renderBoard();
+    const freshSquare = boardEl.querySelector(`[data-square="${squareName(row, col)}"]`);
+    const pieceEl = freshSquare && freshSquare.querySelector(".piece");
+    if (pieceEl) {
+      drag = { row, col, pieceEl, startX: e.clientX, startY: e.clientY, moved: false };
+    }
+    return;
+  }
+
+  selected = null; legalTargets = []; renderBoard();
+});
+
+document.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+  if (!drag.moved && Math.hypot(dx, dy) > 4) drag.moved = true;
+  if (drag.moved) {
+    drag.pieceEl.style.position = "fixed";
+    drag.pieceEl.style.left = e.clientX + "px";
+    drag.pieceEl.style.top = e.clientY + "px";
+    drag.pieceEl.style.transform = "translate(-50%,-50%)";
+    drag.pieceEl.style.pointerEvents = "none";
+    drag.pieceEl.style.zIndex = "1000";
+  }
+});
+
+function endDrag(e) {
+  if (!drag) return;
+  const wasDrag = drag.moved;
+  const from = { row: drag.row, col: drag.col };
+  drag = null;
+  if (!wasDrag) return; // simple tap/clic déjà géré (sélection posée) au pointerdown
+
+  const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+  const squareEl = targetEl && targetEl.closest(".square");
+  if (squareEl) {
+    const { row, col } = rowColFromSquare(squareEl.dataset.square);
+    if (isLegalTarget(row, col)) { movePiece(from, legalTargets.find(t => t.row === row && t.col === col)); return; }
+  }
+  renderBoard(); // dépôt invalide : on redessine pour remettre la pièce visuellement à sa place
+}
+document.addEventListener("pointerup", endDrag);
+document.addEventListener("pointercancel", endDrag);
+
+// Pop-up "Informations" : version, auteur, date, licence (valeurs issues des constantes APP_*).
+const infoDialog = document.getElementById("infoDialog");
+document.getElementById("infoVersion").textContent = APP_VERSION;
+document.getElementById("infoAuthor").textContent = APP_AUTHOR;
+document.getElementById("infoDate").textContent = APP_DATE;
+document.getElementById("infoLicense").textContent = APP_LICENSE;
+document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
+document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+
+// Pop-up "Réglages" : pour l'instant, seule l'orientation du plateau est réglable.
+const settingsDialog = document.getElementById("settingsDialog");
+document.getElementById("settingsLink").addEventListener("click", () => settingsDialog.showModal());
+document.getElementById("settingsClose").addEventListener("click", () => settingsDialog.close());
+document.getElementById("orientationSelect").addEventListener("change", e => {
+  flipped = e.target.value === "black";
+  renderBoard();
+});
+
+undoBtn.addEventListener("click", undoMove);
+
+// Pop-up "Promotion" : choix de la pièce quand un pion atteint la dernière rangée.
+const promotionDialog = document.getElementById("promotionDialog");
+promotionDialog.querySelectorAll(".promoBtn").forEach(btn => {
+  btn.addEventListener("click", () => resolvePromotion(btn.dataset.piece));
+});
+</script>
+</body>
+</html>
