@@ -5,12 +5,13 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.7.1
+  Version : 0.9.4
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-17
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
-  Statut  : En développement — Étape 2 (déplacement tactile/souris, règles complètes : prise en passant,
-            roque, promotion, échec/échec et mat/pat, annulation de coup).
+  Statut  : En développement — Étape 3 (pilotage vocal en plus du tactile/souris), règles complètes :
+            prise en passant, roque, promotion, échec/échec et mat/pat, nulle par répétition/50 coups,
+            notation des coups, pièces capturées affichées, nouvelle partie, annulation de coup.
   © 2026 Franck Legrand. Tous droits réservés.
 -->
 <html lang="fr">
@@ -29,16 +30,23 @@
     padding:14px 24px; background:#181818; border-bottom:1px solid #333;
   }
   h1 { margin:0; font-size:20px; font-weight:650; }
-  #status { font-size:14px; color:#aaa; }
+  #voiceBanner { background:#3a2a12; color:#ffcf8a; font-size:13px; padding:8px 24px; border-bottom:1px solid #4a3418; }
   main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+  /* Statut de la partie (trait, échec, mat, pat, nulle) : mis en évidence en tête du cartouche des coups. */
+  #status {
+    width:100%; box-sizing:border-box; text-align:center; font-size:16px; font-weight:800;
+    color:#fff; background:#2a2a2a; border:1px solid #444; border-radius:8px; padding:9px 12px; margin-bottom:10px;
+  }
 
-  /* Lien "Informations" / "Réglages" / "Annuler" (en-tête) et leurs pop-up */
-  #infoLink, #settingsLink, #undoBtn {
+  /* Lien "Informations" / "Réglages" / "Annuler" / "Voix" (en-tête) et leurs pop-up */
+  #infoLink, #settingsLink, #undoBtn, #voiceBtn {
     background:none; border:0; color:#aaa; font-size:13px; text-decoration:underline;
     cursor:pointer; padding:4px;
   }
-  #infoLink:hover, #settingsLink:hover, #undoBtn:hover:not(:disabled) { color:#fff; }
-  #undoBtn:disabled { color:#555; text-decoration:none; cursor:not-allowed; }
+  #infoLink:hover, #settingsLink:hover, #undoBtn:hover:not(:disabled), #voiceBtn:hover:not(:disabled) { color:#fff; }
+  #undoBtn:disabled, #voiceBtn:disabled { color:#555; text-decoration:none; cursor:not-allowed; }
+  #voiceBtn.listening { color:#ef4444; text-decoration:none; font-weight:700; }
+  #voiceFeedback { font-size:12px; color:#999; min-height:14px; margin-bottom:8px; }
   #infoDialog, #settingsDialog, #promotionDialog {
     background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
     padding:22px 26px; max-width:min(420px,90vw);
@@ -109,18 +117,31 @@
 
   .hint { color:#888; font-size:12px; text-align:center; }
   footer { text-align:center; font-size:11px; color:#666; padding:10px 0 18px; }
+
+  /* Pièces capturées : glyphes en teinte claire pour rester visibles sur le fond sombre du panneau,
+     que la pièce d'origine soit blanche (glyphe "creux") ou noire (glyphe "plein"). */
+  .captured-panel { width:100%; display:flex; flex-direction:column; gap:4px; }
+  .captured-row { font-size:13px; color:#ccc; }
+  .captured-label { color:#888; margin-right:6px; }
+  .captured-pieces { font-size:19px; color:#e5e5e5; letter-spacing:2px; }
+
+  /* Notation des coups joués jusqu'ici, sous forme de liste numérotée défilante. */
+  .moves-panel { width:100%; background:#1b1b1b; border:1px solid #333; border-radius:10px; padding:10px 14px; }
+  .moves-panel-title { font-size:11px; color:#888; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+  #moveList { max-height:90px; overflow-y:auto; font-size:13px; color:#ddd; line-height:1.5; }
 </style>
 </head>
 <body>
 <header>
   <h1>♟️ Échecs</h1>
   <div style="display:flex; align-items:center; gap:14px;">
-    <div id="status">Blancs à jouer</div>
+    <button id="voiceBtn" type="button" disabled>🎙️ Voix</button>
     <button id="undoBtn" type="button" disabled>↩️ Annuler</button>
     <button id="settingsLink" type="button">⚙️ Réglages</button>
     <button id="infoLink" type="button">ℹ️ Informations</button>
   </div>
 </header>
+<div id="voiceBanner" hidden></div>
 
 <dialog id="infoDialog">
   <h2>À propos du prototype</h2>
@@ -142,7 +163,11 @@
         <option value="black">Noirs en bas</option>
       </select>
     </label>
-    <div class="hint">Le pilotage vocal arrivera dans une prochaine étape.</div>
+    <button id="newGameBtn" type="button">🔄 Nouvelle partie</button>
+    <div class="hint">
+      Dites « e2 e4 », « cavalier f3 », « petit roque », « grand roque », « annule » ou
+      « nouvelle partie » pour piloter la partie à la voix.
+    </div>
   </div>
   <button id="settingsClose" type="button">Fermer</button>
 </dialog>
@@ -159,15 +184,25 @@
 
 <main>
   <div class="panel">
+    <div class="captured-panel">
+      <div class="captured-row"><span class="captured-label">Prises par les Blancs :</span><span class="captured-pieces" id="capturedByWhite"></span></div>
+      <div class="captured-row"><span class="captured-label">Prises par les Noirs :</span><span class="captured-pieces" id="capturedByBlack"></span></div>
+    </div>
     <div class="board-wrap">
       <div class="ranks" id="ranks"></div>
       <div id="board"></div>
       <div class="files" id="files"></div>
     </div>
+    <div class="moves-panel">
+      <div id="status">Blancs à jouer</div>
+      <div id="voiceFeedback"></div>
+      <div class="moves-panel-title">Coups joués</div>
+      <div id="moveList"></div>
+    </div>
     <div class="hint">
-      Étape 2 : déplacement des pièces au doigt (glisser, ou taper la pièce puis la case) ou à la souris,
-      avec les règles complètes de déplacement : prise en passant, roque, promotion, et détection de
-      l'échec, de l'échec et mat et du pat. Le pilotage vocal arrivera dans une prochaine étape.
+      Déplacement au doigt (glisser, ou taper la pièce puis la case), à la souris, ou à la voix
+      (bouton 🎙️ Voix — voir les commandes dans les Réglages), avec les règles complètes : prise en
+      passant, roque, promotion, échec/échec et mat, pat et nulles (répétition, 50 coups).
     </div>
   </div>
 </main>
@@ -177,7 +212,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.7.1";
+const APP_VERSION = "0.9.4";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-17";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -185,7 +220,7 @@ const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garanti
 // Position de départ (une lettre par case) : majuscule = pièce blanche, minuscule = pièce noire,
 // chaîne vide = case libre. boardState[0] = 8e rangée (haut, côté Noirs), boardState[7] = 1re rangée
 // (bas, côté Blancs) — indépendant de l'orientation d'affichage, qui n'affecte que le rendu.
-let boardState = [
+const INITIAL_POSITION = [
   ["r","n","b","q","k","b","n","r"],
   ["p","p","p","p","p","p","p","p"],
   ["","","","","","","",""],
@@ -195,6 +230,7 @@ let boardState = [
   ["P","P","P","P","P","P","P","P"],
   ["R","N","B","Q","K","B","N","R"],
 ];
+let boardState = INITIAL_POSITION.map(r => r.slice());
 const PIECE_GLYPHS = {
   K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘", P:"♙",
   k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟",
@@ -206,6 +242,13 @@ const ranksEl = document.getElementById("ranks");
 const filesEl = document.getElementById("files");
 const statusEl = document.getElementById("status");
 const undoBtn = document.getElementById("undoBtn");
+const moveListEl = document.getElementById("moveList");
+const capturedByWhiteEl = document.getElementById("capturedByWhite"); // pièces noires prises par les Blancs
+const capturedByBlackEl = document.getElementById("capturedByBlack"); // pièces blanches prises par les Noirs
+const voiceBtn = document.getElementById("voiceBtn");
+const voiceBanner = document.getElementById("voiceBanner");
+const voiceFeedbackEl = document.getElementById("voiceFeedback");
+const newGameBtn = document.getElementById("newGameBtn");
 let flipped = false;      // false = Blancs en bas, true = Noirs en bas
 let turn = "white";       // couleur qui doit jouer
 let selected = null;      // {row,col} de la pièce sélectionnée, ou null
@@ -214,7 +257,11 @@ let history = [];         // pile des positions précédentes, pour l'annulation
 let enPassantTarget = null; // {row,col} : case vide qu'un pion peut capturer "en passant" juste après un double pas, sinon null
 let castlingRights = { wK: true, wQ: true, bK: true, bQ: true }; // roque encore possible : (w/b)=couleur, (K/Q)=petit/grand roque
 let pendingPromotion = null; // {row,col,color} : pion arrivé sur la dernière rangée, en attente du choix de promotion
-let gameOver = false;      // vrai après un échec et mat ou un pat : le plateau ne réagit plus aux coups
+let gameOver = false;      // vrai après un échec et mat, un pat ou une nulle : le plateau ne réagit plus aux coups
+let moveHistory = [];      // [{san, color}, ...] notation des coups joués, dans l'ordre
+let capturedPieces = { white: [], black: [] }; // pièces capturées par couleur d'origine (white = pièces blanches prises)
+let halfMoveClock = 0;     // demi-coups sans capture ni coup de pion, pour la règle des 50 coups (nulle à 100)
+let positionCounts = new Map(); // occurrences de chaque position (plateau+trait+roque+en passant), pour la nulle par répétition
 
 function pieceColor(p) { return p ? (p === p.toUpperCase() ? "white" : "black") : null; }
 function inBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
@@ -454,14 +501,113 @@ function checkGameEnd() {
   }
 }
 
+// Notation algébrique (SAN) du coup from -> to, calculée AVANT toute mutation du plateau (la
+// désambiguïsation compare aux coups légaux des autres pièces dans la position actuelle). Le
+// suffixe +/#, et le "=Q" d'une promotion, sont ajoutés séparément une fois le coup terminé.
+function buildMoveSAN(from, to, movingPiece, isCapture) {
+  if (to.castle) return to.castle === "king" ? "O-O" : "O-O-O";
+  const type = movingPiece.toUpperCase();
+  const destination = squareName(to.row, to.col);
+  if (type === "P") return (isCapture ? FILES[from.col] + "x" : "") + destination;
+  return type + disambiguation(from.row, from.col, to, type, pieceColor(movingPiece)) + (isCapture ? "x" : "") + destination;
+}
+
+// Précise la case de départ (colonne, rangée, ou les deux) uniquement si une autre pièce du même
+// type et de la même couleur pourrait légalement rejoindre la même case d'arrivée.
+function disambiguation(row, col, to, type, color) {
+  const others = [];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (r === row && c === col) continue;
+      const p = boardState[r][c];
+      if (p && p.toUpperCase() === type && pieceColor(p) === color &&
+          computeLegalMoves(r, c).some(m => m.row === to.row && m.col === to.col)) {
+        others.push({ row: r, col: c });
+      }
+    }
+  }
+  if (others.length === 0) return "";
+  if (!others.some(o => o.col === col)) return FILES[col];
+  if (!others.some(o => o.row === row)) return String(8 - row);
+  return FILES[col] + (8 - row);
+}
+
+// Encode la position (plateau, trait, droits au roque, cible en passant) pour la nulle par répétition.
+function positionKey() {
+  const board = boardState.map(r => r.map(c => c || ".").join("")).join("/");
+  const castling = (castlingRights.wK ? "K" : "") + (castlingRights.wQ ? "Q" : "") + (castlingRights.bK ? "k" : "") + (castlingRights.bQ ? "q" : "");
+  const ep = enPassantTarget ? squareName(enPassantTarget.row, enPassantTarget.col) : "-";
+  return board + "|" + turn + "|" + castling + "|" + ep;
+}
+
+// Nulle si la même position se répète 3 fois, ou si 50 coups (100 demi-coups) passent sans
+// capture ni coup de pion. Ne s'applique que si la partie n'est pas déjà finie par mat/pat.
+function checkDrawConditions() {
+  if (gameOver) return;
+  const repeatCount = (positionCounts.get(positionKey()) || 0) + 1;
+  positionCounts.set(positionKey(), repeatCount);
+  if (repeatCount >= 3) {
+    gameOver = true;
+    statusEl.textContent = "Nulle par répétition (même position trois fois).";
+    return;
+  }
+  if (halfMoveClock >= 100) {
+    gameOver = true;
+    statusEl.textContent = "Nulle — règle des 50 coups sans capture ni coup de pion.";
+  }
+}
+
+// Termine un coup une fois le plateau mis à jour et le trait changé de camp : compteurs de nulle,
+// détection de fin de partie, notation, pièces capturées, puis rafraîchissement de l'affichage.
+function finalizeMove(color, sanBase, isCapture, isPawnMove, capturedPieceLetter) {
+  if (capturedPieceLetter) capturedPieces[pieceColor(capturedPieceLetter)].push(capturedPieceLetter);
+  halfMoveClock = (isCapture || isPawnMove) ? 0 : halfMoveClock + 1;
+
+  updateStatus();
+  checkGameEnd();
+  checkDrawConditions();
+
+  const suffix = isInCheck(boardState, turn) ? (gameOver ? "#" : "+") : "";
+  moveHistory.push({ san: sanBase + suffix, color });
+
+  renderMoveList();
+  renderCapturedPieces();
+  renderBoard();
+}
+
+function renderMoveList() {
+  const pairs = [];
+  for (let i = 0; i < moveHistory.length; i += 2) {
+    const num = i / 2 + 1;
+    pairs.push(num + ". " + moveHistory[i].san + (moveHistory[i + 1] ? " " + moveHistory[i + 1].san : ""));
+  }
+  moveListEl.textContent = pairs.join("  ");
+  moveListEl.scrollTop = moveListEl.scrollHeight;
+}
+
+function renderCapturedPieces() {
+  capturedByWhiteEl.textContent = capturedPieces.black.map(p => PIECE_GLYPHS[p]).join(" ");
+  capturedByBlackEl.textContent = capturedPieces.white.map(p => PIECE_GLYPHS[p]).join(" ");
+}
+
 function movePiece(from, to) {
+  const movingPiece = boardState[from.row][from.col];
+  const color = pieceColor(movingPiece);
+  const type = movingPiece.toUpperCase();
+  const targetPiece = boardState[to.row][to.col];
+  const isCapture = !!targetPiece || !!to.enPassant;
+  const capturedPieceLetter = to.enPassant ? boardState[from.row][to.col] : (targetPiece || null);
+  const sanBase = buildMoveSAN(from, to, movingPiece, isCapture); // avant mutation : la désambiguïsation lit la position actuelle
+
   history.push({
     board: boardState.map(r => r.slice()), turn, enPassantTarget,
-    castlingRights: { ...castlingRights },
+    castlingRights: { ...castlingRights }, halfMoveClock,
+    positionCounts: new Map(positionCounts),
+    moveHistory: moveHistory.slice(),
+    capturedPieces: { white: capturedPieces.white.slice(), black: capturedPieces.black.slice() },
   });
   undoBtn.disabled = false;
 
-  const movingPiece = boardState[from.row][from.col];
   updateCastlingRights(from, to, movingPiece);
 
   if (to.enPassant) boardState[from.row][to.col] = ""; // retire le pion capturé "en passant" (pas sur la case d'arrivée)
@@ -481,7 +627,7 @@ function movePiece(from, to) {
   }
 
   // Un double pas de pion ouvre la prise en passant sur la case franchie, pour le coup suivant seulement.
-  enPassantTarget = (movingPiece.toUpperCase() === "P" && Math.abs(to.row - from.row) === 2)
+  enPassantTarget = (type === "P" && Math.abs(to.row - from.row) === 2)
     ? { row: (from.row + to.row) / 2, col: from.col }
     : null;
 
@@ -490,30 +636,26 @@ function movePiece(from, to) {
 
   // Un pion arrivé sur la dernière rangée doit être promu avant que le trait ne change de camp :
   // on affiche le choix et on suspend la fin du coup jusqu'à la réponse (resolvePromotion).
-  if (movingPiece.toUpperCase() === "P" && (to.row === 0 || to.row === 7)) {
-    pendingPromotion = { row: to.row, col: to.col, color: pieceColor(movingPiece) };
+  if (type === "P" && (to.row === 0 || to.row === 7)) {
+    pendingPromotion = { row: to.row, col: to.col, color, sanBase, isCapture, capturedPieceLetter };
     renderBoard();
     openPromotionDialog();
     return;
   }
 
   turn = turn === "white" ? "black" : "white";
-  updateStatus();
-  checkGameEnd();
-  renderBoard();
+  finalizeMove(color, sanBase, isCapture, type === "P", capturedPieceLetter);
 }
 
 // Remplace le pion en attente par la pièce choisie (Dame/Tour/Fou/Cavalier), puis termine le coup.
 function resolvePromotion(letter) {
   if (!pendingPromotion) return;
-  const { row, col, color } = pendingPromotion;
+  const { row, col, color, sanBase, isCapture, capturedPieceLetter } = pendingPromotion;
   boardState[row][col] = color === "white" ? letter : letter.toLowerCase();
   pendingPromotion = null;
   promotionDialog.close();
   turn = turn === "white" ? "black" : "white";
-  updateStatus();
-  checkGameEnd();
-  renderBoard();
+  finalizeMove(color, sanBase + "=" + letter, isCapture, true, capturedPieceLetter);
 }
 
 function openPromotionDialog() {
@@ -533,12 +675,41 @@ function undoMove() {
   turn = prev.turn;
   enPassantTarget = prev.enPassantTarget;
   castlingRights = prev.castlingRights;
+  halfMoveClock = prev.halfMoveClock;
+  positionCounts = prev.positionCounts;
+  moveHistory = prev.moveHistory;
+  capturedPieces = prev.capturedPieces;
   pendingPromotion = null;
   gameOver = false;
   selected = null;
   legalTargets = [];
   undoBtn.disabled = history.length === 0;
   updateStatus();
+  renderMoveList();
+  renderCapturedPieces();
+  renderBoard();
+}
+
+// Remet la partie à zéro : position de départ, trait aux Blancs, historiques et compteurs vidés.
+function resetGame() {
+  boardState = INITIAL_POSITION.map(r => r.slice());
+  turn = "white";
+  selected = null;
+  legalTargets = [];
+  history = [];
+  enPassantTarget = null;
+  castlingRights = { wK: true, wQ: true, bK: true, bQ: true };
+  pendingPromotion = null;
+  gameOver = false;
+  moveHistory = [];
+  capturedPieces = { white: [], black: [] };
+  halfMoveClock = 0;
+  positionCounts = new Map();
+  positionCounts.set(positionKey(), 1);
+  undoBtn.disabled = true;
+  updateStatus();
+  renderMoveList();
+  renderCapturedPieces();
   renderBoard();
 }
 
@@ -588,8 +759,11 @@ function renderBoard() {
     filesEl.appendChild(fileLabel);
   }
 }
+positionCounts.set(positionKey(), 1); // la position de départ compte comme une occurrence, pour la répétition
 renderBoard();
 updateStatus();
+renderMoveList();
+renderCapturedPieces();
 
 // ---------- Déplacement au doigt / à la souris ----------
 // Un pointeur unifie souris et tactile. Un simple tap/clic (peu de mouvement) sélectionne une pièce
@@ -661,6 +835,187 @@ function endDrag(e) {
 document.addEventListener("pointerup", endDrag);
 document.addEventListener("pointercancel", endDrag);
 
+// ---------- Pilotage vocal ----------
+// Reconnaissance vocale (écoute des commandes) et synthèse (confirmation orale courte), toutes deux
+// en français, via les API du navigateur — rien n'est envoyé à un serveur.
+const synth = window.speechSynthesis;
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+const sttSupported = !!SpeechRecognitionCtor;
+let listening = false;
+let recognizer = null;
+
+if (sttSupported) {
+  recognizer = new SpeechRecognitionCtor();
+  recognizer.lang = "fr-FR";
+  recognizer.continuous = true;
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
+  recognizer.onresult = e => handleVoiceCommand(e.results[e.results.length - 1][0].transcript);
+  recognizer.onerror = e => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      listening = false;
+      voiceBtn.textContent = "🎙️ Voix";
+      voiceBtn.classList.remove("listening");
+      alert("Accès au micro refusé. Autorise le micro dans ton navigateur puis réessaie.");
+    }
+    // les autres erreurs (silence, coupure...) sont silencieuses : onend relance l'écoute si toujours active
+  };
+  recognizer.onend = () => { if (listening) { try { recognizer.start(); } catch (e) {} } };
+  voiceBtn.disabled = false;
+} else {
+  voiceBanner.hidden = false;
+  voiceBanner.textContent = "⚠️ Reconnaissance vocale non disponible sur ce navigateur (essaie Chrome ou Edge). Le pilotage au doigt et à la souris reste utilisable.";
+}
+
+function speak(text) {
+  if (!synth) return;
+  synth.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = "fr-FR";
+  synth.speak(utter);
+}
+
+function showVoiceFeedback(heard, result) {
+  voiceFeedbackEl.textContent = "🎙️ « " + heard + " »" + (result ? " → " + result : "");
+}
+
+const PIECE_NAMES_FR = { "pion": "P", "cavalier": "N", "fou": "B", "tour": "R", "dame": "Q", "roi": "K" };
+const VOICE_SQUARE_RE = /\b([a-h])\s*([1-8])\b/gi;
+
+function normalizeSpeech(s) {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Interprète une phrase reconnue et déclenche l'action correspondante (coup, roque, annulation,
+// nouvelle partie, ou choix de promotion si un pion est en attente).
+function handleVoiceCommand(rawTranscript) {
+  const text = normalizeSpeech(rawTranscript);
+
+  if (/nouvelle partie|recommence/.test(text)) {
+    resetGame();
+    speak("Nouvelle partie. Les Blancs commencent.");
+    showVoiceFeedback(rawTranscript, "nouvelle partie");
+    return;
+  }
+
+  if (pendingPromotion) {
+    const wanted = Object.keys(PIECE_NAMES_FR).find(name => (name === "dame" || name === "tour" || name === "fou" || name === "cavalier") && text.includes(name));
+    if (wanted) {
+      resolvePromotion(PIECE_NAMES_FR[wanted]);
+      speak("Promotion en " + wanted + ".");
+      showVoiceFeedback(rawTranscript, "promotion en " + wanted);
+    } else {
+      speak("Dites dame, tour, fou ou cavalier pour la promotion.");
+      showVoiceFeedback(rawTranscript, "promotion non comprise");
+    }
+    return;
+  }
+
+  if (gameOver) {
+    speak("La partie est terminée. Dites nouvelle partie pour recommencer.");
+    showVoiceFeedback(rawTranscript, "partie terminée");
+    return;
+  }
+
+  if (/annule|annuler/.test(text)) {
+    if (!undoBtn.disabled) { undoMove(); speak("Coup annulé."); showVoiceFeedback(rawTranscript, "coup annulé"); }
+    else { speak("Rien à annuler."); showVoiceFeedback(rawTranscript, "rien à annuler"); }
+    return;
+  }
+
+  if (/grand roque/.test(text)) { voiceCastle(rawTranscript, "queen"); return; }
+  if (/petit roque|\broque\b/.test(text)) { voiceCastle(rawTranscript, "king"); return; }
+
+  const squares = [...text.matchAll(VOICE_SQUARE_RE)].map(m => ({ col: FILES.indexOf(m[1]), row: 8 - Number(m[2]) }));
+
+  if (squares.length >= 2) { voiceMove(rawTranscript, squares[0], squares[squares.length - 1]); return; }
+
+  if (squares.length === 1) {
+    const pieceWord = Object.keys(PIECE_NAMES_FR).find(name => text.includes(name));
+    if (pieceWord) { voiceMoveByPiece(rawTranscript, PIECE_NAMES_FR[pieceWord], squares[0]); return; }
+  }
+
+  speak("Commande non comprise.");
+  showVoiceFeedback(rawTranscript, "non comprise");
+}
+
+// Commande "case départ, case arrivée" (ex. "e2 e4") : la pièce doit appartenir au camp au trait
+// et le coup doit figurer parmi ses coups légaux.
+function voiceMove(rawTranscript, from, to) {
+  const piece = boardState[from.row] && boardState[from.row][from.col];
+  if (!piece || pieceColor(piece) !== turn) {
+    speak("Pas de pièce à jouer sur cette case.");
+    showVoiceFeedback(rawTranscript, "coup impossible");
+    return;
+  }
+  const move = computeLegalMoves(from.row, from.col).find(m => m.row === to.row && m.col === to.col);
+  if (!move) {
+    speak("Coup illégal.");
+    showVoiceFeedback(rawTranscript, "coup illégal");
+    return;
+  }
+  movePiece(from, move);
+  speak(squareName(to.row, to.col));
+  showVoiceFeedback(rawTranscript, squareName(from.row, from.col) + squareName(to.row, to.col));
+}
+
+// Commande "pièce, case d'arrivée" (ex. "cavalier f3") : ne joue que si une seule pièce de ce type,
+// pour le camp au trait, peut légalement rejoindre cette case (sinon, demande de préciser).
+function voiceMoveByPiece(rawTranscript, type, to) {
+  const candidates = [];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = boardState[r][c];
+      if (p && p.toUpperCase() === type && pieceColor(p) === turn) {
+        const move = computeLegalMoves(r, c).find(m => m.row === to.row && m.col === to.col);
+        if (move) candidates.push({ from: { row: r, col: c }, move });
+      }
+    }
+  }
+  if (candidates.length === 1) {
+    movePiece(candidates[0].from, candidates[0].move);
+    speak(squareName(to.row, to.col));
+    showVoiceFeedback(rawTranscript, squareName(to.row, to.col));
+  } else if (candidates.length === 0) {
+    speak("Coup illégal.");
+    showVoiceFeedback(rawTranscript, "coup illégal");
+  } else {
+    speak("Plusieurs pièces peuvent jouer ce coup, précisez la case de départ.");
+    showVoiceFeedback(rawTranscript, "coup ambigu");
+  }
+}
+
+function voiceCastle(rawTranscript, side) {
+  const homeRow = turn === "white" ? 7 : 0;
+  const move = computeLegalMoves(homeRow, 4).find(m => m.castle === side);
+  if (move) {
+    movePiece({ row: homeRow, col: 4 }, move);
+    speak("Roque.");
+    showVoiceFeedback(rawTranscript, "roque");
+  } else {
+    speak("Roque impossible.");
+    showVoiceFeedback(rawTranscript, "roque impossible");
+  }
+}
+
+voiceBtn.addEventListener("click", () => {
+  if (!sttSupported) return;
+  listening = !listening;
+  if (listening) {
+    voiceBtn.textContent = "🎙️ Écoute…";
+    voiceBtn.classList.add("listening");
+    try { recognizer.start(); } catch (e) {}
+  } else {
+    voiceBtn.textContent = "🎙️ Voix";
+    voiceBtn.classList.remove("listening");
+    try { recognizer.stop(); } catch (e) {}
+  }
+});
+
+newGameBtn.addEventListener("click", () => {
+  if (confirm("Recommencer une nouvelle partie ? Le coup actuel sera perdu.")) resetGame();
+});
+
 // Pop-up "Informations" : version, auteur, date, licence (valeurs issues des constantes APP_*).
 const infoDialog = document.getElementById("infoDialog");
 document.getElementById("infoVersion").textContent = APP_VERSION;
@@ -670,7 +1025,7 @@ document.getElementById("infoLicense").textContent = APP_LICENSE;
 document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
 document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
 
-// Pop-up "Réglages" : pour l'instant, seule l'orientation du plateau est réglable.
+// Pop-up "Réglages" : orientation du plateau, aide-mémoire des commandes vocales, et nouvelle partie.
 const settingsDialog = document.getElementById("settingsDialog");
 document.getElementById("settingsLink").addEventListener("click", () => settingsDialog.showModal());
 document.getElementById("settingsClose").addEventListener("click", () => settingsDialog.close());
