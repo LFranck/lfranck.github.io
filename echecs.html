@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.9.4
+  Version : 0.9.5
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-17
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -212,7 +212,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.9.4";
+const APP_VERSION = "0.9.5";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-17";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -886,10 +886,29 @@ function normalizeSpeech(s) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
+// La reconnaissance vocale transcrit souvent le nom d'une lettre isolée comme un mot qui sonne
+// pareil plutôt que comme la lettre elle-même (ex. "d5" entendu "dés 5" ou "de 5", "c4" entendu
+// "ce 4"). On ne corrige que juste avant un chiffre de 1 à 8, pour ne pas toucher au reste de la phrase.
+const LETTER_PHONETICS = [
+  ["b|be|bes|bee", "b"],
+  ["c|ce|ces|sait|sais|ceux", "c"],
+  ["d|de|des|dai|day", "d"],
+  ["e|es|eux", "e"],
+  ["f|ef|effe", "f"],
+  ["g|ge|ges|je|jai", "g"],
+  ["h|hache|ache|aches", "h"],
+];
+function fixLetterPhonetics(text) {
+  return LETTER_PHONETICS.reduce(
+    (acc, [pattern, letter]) => acc.replace(new RegExp("\\b(?:" + pattern + ")\\s+(?=[1-8]\\b)", "g"), letter),
+    text
+  );
+}
+
 // Interprète une phrase reconnue et déclenche l'action correspondante (coup, roque, annulation,
 // nouvelle partie, ou choix de promotion si un pion est en attente).
 function handleVoiceCommand(rawTranscript) {
-  const text = normalizeSpeech(rawTranscript);
+  const text = fixLetterPhonetics(normalizeSpeech(rawTranscript));
 
   if (/nouvelle partie|recommence/.test(text)) {
     resetGame();
