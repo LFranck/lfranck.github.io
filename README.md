@@ -17,6 +17,6 @@ Ceci un espace pour partager mes projets.
 
 ## [Échecs](echecs.html)
 
-*Version 0.10.5*
+*Version 0.11.7*
 
-**Échecs** (prototype en cours de développement) est un jeu d'échecs jouable au doigt, à la souris ou à la voix, directement dans le navigateur. Il implémente les règles complètes de déplacement — prise en passant, roque, promotion, détection de l'échec, de l'échec et mat, du pat et des nulles (répétition, 50 coups) — la notation des coups joués, les pièces capturées affichées, une nouvelle partie et l'annulation de coup. Le pilotage vocal (commandes comme « e2 e4 », « cavalier f3 », « petit roque », « annule », « nouvelle partie ») repose sur la reconnaissance et la synthèse vocales du navigateur. Un clic sur le statut (« … à jouer ») fait défiler la méthode d'entraînement "échecs / prises / menaces", en surlignant sur le plateau les coups de la catégorie active.
+**Échecs** (prototype en cours de développement) est un jeu d'échecs jouable au doigt, à la souris ou à la voix, directement dans le navigateur. Il implémente les règles complètes de déplacement — prise en passant, roque, promotion, détection de l'échec, de l'échec et mat, du pat et des nulles (répétition, 50 coups) — la notation des coups joués, les pièces capturées affichées, une nouvelle partie et l'annulation de coup. Le pilotage vocal (commandes comme « e2 e4 », « cavalier f3 », « petit roque », « annule », « nouvelle partie ») repose sur la reconnaissance et la synthèse vocales du navigateur. Un clic sur le statut (« … à jouer ») fait défiler la méthode d'entraînement "échecs / prises / menaces / pièces en prise", en surlignant sur le plateau les coups (ou pièces en danger) de la catégorie active.
