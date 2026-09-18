@@ -5,9 +5,9 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.11.7
+  Version : 0.12.12
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
-  Date    : 2026-09-17
+  Date    : 2026-09-18
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
   Statut  : En développement — Étape 3 (pilotage vocal en plus du tactile/souris), règles complètes :
             prise en passant, roque, promotion, échec/échec et mat/pat, nulle par répétition/50 coups,
@@ -58,6 +58,7 @@
   }
   #infoDialog::backdrop, #settingsDialog::backdrop, #promotionDialog::backdrop { background:rgba(0,0,0,.6); }
   #infoDialog h2, #settingsDialog h2, #promotionDialog h2 { margin:0 0 12px; font-size:18px; }
+  #infoDialog dl[hidden] { display:none; }
   #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
   #infoDialog dt { color:#999; }
   #infoDialog dd { margin:0; }
@@ -65,6 +66,14 @@
     border:0; border-radius:10px; padding:8px 16px; cursor:pointer;
     background:#fff; color:#111; font-weight:700; font-size:14px;
   }
+  #infoDialog .info-help { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+  #infoDialog .info-help-buttons { display:flex; flex-wrap:wrap; gap:8px; }
+  #infoDialog .helpBtn {
+    background:#2a2a2a; color:#eee; border:1px solid #444; font-weight:400; font-size:13px; padding:7px 12px;
+  }
+  #infoDialog .helpBtn:hover { background:#333; }
+  #infoDialog .helpBtn.active { background:#4f9dff; color:#111; border-color:#4f9dff; }
+  #infoDialog .help-text { color:#ccc; font-size:13px; line-height:1.5; }
   #settingsDialog .settings-form { display:flex; flex-direction:column; gap:16px; margin-bottom:16px; }
   #settingsDialog label { display:flex; flex-direction:column; gap:7px; color:#ccc; font-size:14px; }
   #settingsDialog select {
@@ -161,13 +170,22 @@
 <div id="voiceBanner" hidden></div>
 
 <dialog id="infoDialog">
-  <h2>À propos du prototype</h2>
-  <dl>
-    <dt>Version</dt><dd id="infoVersion"></dd>
-    <dt>Auteur</dt><dd id="infoAuthor"></dd>
-    <dt>Date</dt><dd id="infoDate"></dd>
-    <dt>Licence</dt><dd id="infoLicense"></dd>
-  </dl>
+  <h2>Informations</h2>
+  <div class="info-help">
+    <div class="info-help-buttons">
+      <button id="aboutBtn" type="button" class="helpBtn">ℹ️ À propos</button>
+      <button id="helpMouseBtn" type="button" class="helpBtn">🖱️ Déplacement à la souris</button>
+      <button id="helpVoiceBtn" type="button" class="helpBtn">🎙️ Déplacement à la voix</button>
+      <button id="helpGameBtn" type="button" class="helpBtn">🎯 Aide de jeu</button>
+    </div>
+    <dl id="aboutPanel" hidden>
+      <dt>Version</dt><dd id="infoVersion"></dd>
+      <dt>Auteur</dt><dd id="infoAuthor"></dd>
+      <dt>Date</dt><dd id="infoDate"></dd>
+      <dt>Licence</dt><dd id="infoLicense"></dd>
+    </dl>
+    <div id="helpText" class="help-text" hidden></div>
+  </div>
   <button id="infoClose" type="button">Fermer</button>
 </dialog>
 
@@ -231,9 +249,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.11.7";
+const APP_VERSION = "0.12.12";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-17";
+const APP_DATE = "2026-09-18";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 // Position de départ (une lettre par case) : majuscule = pièce blanche, minuscule = pièce noire,
@@ -1077,7 +1095,8 @@ function handleVoiceCommand(rawTranscript) {
 
   if (squares.length === 1) {
     const pieceWord = Object.keys(PIECE_NAMES_FR).find(name => text.includes(name));
-    if (pieceWord) { voiceMoveByPiece(rawTranscript, PIECE_NAMES_FR[pieceWord], squares[0]); return; }
+    voiceMoveByPiece(rawTranscript, pieceWord ? PIECE_NAMES_FR[pieceWord] : null, squares[0]);
+    return;
   }
 
   speak("Commande non comprise.");
@@ -1106,12 +1125,14 @@ function voiceMove(rawTranscript, from, to) {
 
 // Commande "pièce, case d'arrivée" (ex. "cavalier f3") : ne joue que si une seule pièce de ce type,
 // pour le camp au trait, peut légalement rejoindre cette case (sinon, demande de préciser).
+// Sans nom de pièce (ex. "e4" seul, type=null), cherche parmi toutes les pièces du camp au trait :
+// un seul coup possible → il est joué ; plusieurs → on demande de préciser la pièce.
 function voiceMoveByPiece(rawTranscript, type, to) {
   const candidates = [];
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const p = boardState[r][c];
-      if (p && p.toUpperCase() === type && pieceColor(p) === turn) {
+      if (p && (!type || p.toUpperCase() === type) && pieceColor(p) === turn) {
         const move = computeLegalMoves(r, c).find(m => m.row === to.row && m.col === to.col);
         if (move) candidates.push({ from: { row: r, col: c }, move });
       }
@@ -1124,8 +1145,11 @@ function voiceMoveByPiece(rawTranscript, type, to) {
   } else if (candidates.length === 0) {
     speak("Coup illégal.");
     showVoiceFeedback(rawTranscript, "coup illégal");
-  } else {
+  } else if (type) {
     speak("Plusieurs pièces peuvent jouer ce coup, précisez la case de départ.");
+    showVoiceFeedback(rawTranscript, "coup ambigu");
+  } else {
+    speak("Plusieurs pièces peuvent jouer cette case, précisez la pièce.");
     showVoiceFeedback(rawTranscript, "coup ambigu");
   }
 }
@@ -1169,6 +1193,41 @@ document.getElementById("infoDate").textContent = APP_DATE;
 document.getElementById("infoLicense").textContent = APP_LICENSE;
 document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
 document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+
+// Boutons d'aide de la pop-up "Informations" ("À propos" + 3 aides) : chacun affiche/masque son
+// panneau (un seul ouvert à la fois), réinitialisés à chaque ouverture de la pop-up.
+const HELP_TEXTS = {
+  helpMouseBtn: "Clique sur une pièce pour afficher ses coups légaux (cases marquées), puis clique " +
+    "sur la case d'arrivée. Tu peux aussi glisser-déposer la pièce directement sur sa case d'arrivée.",
+  helpVoiceBtn: "Active le micro (bouton 🎙️ Voix) puis dis par exemple « e2 e4 », « cavalier f3 », " +
+    "« e4 » (case seule : le coup est joué s'il n'y en a qu'un possible, sinon on te demande de préciser " +
+    "la pièce), « petit roque », « grand roque », « annule » ou « nouvelle partie ».",
+  helpGameBtn: "Clique sur le statut (« … à jouer », au-dessus du plateau) pour repérer, tour à tour, " +
+    "les échecs, les prises, les menaces, puis tes propres pièces en prise.",
+};
+const aboutPanel = document.getElementById("aboutPanel");
+const helpTextEl = document.getElementById("helpText");
+function closeInfoHelpPanels() {
+  document.querySelectorAll("#infoDialog .helpBtn").forEach(b => b.classList.remove("active"));
+  aboutPanel.hidden = true;
+  helpTextEl.hidden = true;
+}
+["aboutBtn", ...Object.keys(HELP_TEXTS)].forEach(id => {
+  document.getElementById(id).addEventListener("click", () => {
+    const btn = document.getElementById(id);
+    const wasActive = btn.classList.contains("active");
+    closeInfoHelpPanels();
+    if (wasActive) return;
+    btn.classList.add("active");
+    if (id === "aboutBtn") {
+      aboutPanel.hidden = false;
+    } else {
+      helpTextEl.textContent = HELP_TEXTS[id];
+      helpTextEl.hidden = false;
+    }
+  });
+});
+document.getElementById("infoLink").addEventListener("click", closeInfoHelpPanels);
 
 // Pop-up "Réglages" : orientation du plateau, aide-mémoire des commandes vocales, et nouvelle partie.
 const settingsDialog = document.getElementById("settingsDialog");
