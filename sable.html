@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<!--
+  Sable Dynamique — Simulation de paysage de sable coloré dans l'eau
+  Ces informations (version, auteur, date, licence) sont la source unique :
+  elles sont reprises dans les constantes APP_* du script et affichées dans
+  la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
+
+  Version : 0.3.2
+  Auteur  : Franck Legrand <franck.legrand@gmail.com>
+  Date    : 2026-09-21
+  Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
+  Statut  : En développement (V0) — simulation physique expérimentale, réglages à ajuster.
+  © 2026 Franck Legrand. Tous droits réservés.
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sable Dynamique — Paysages de sable coloré</title>
+<style>
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+    background:#111; color:#fff; display:flex; flex-direction:column;
+  }
+  header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 24px; background:#181818; border-bottom:1px solid #333;
+  }
+  h1 { margin:0; font-size:19px; font-weight:650; }
+  main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+
+  /* Lien "Informations" (en-tête) et sa pop-up (version, auteur, date, licence) */
+  #infoLink {
+    background:none; border:0; color:#aaa; font-size:13px; text-decoration:underline;
+    cursor:pointer; padding:4px;
+  }
+  #infoLink:hover { color:#fff; }
+  #infoDialog {
+    background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
+    padding:22px 26px; max-width:min(420px,90vw);
+  }
+  #infoDialog::backdrop { background:rgba(0,0,0,.6); }
+  #infoDialog h2 { margin:0 0 12px; font-size:18px; }
+  #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
+  #infoDialog dt { color:#999; }
+  #infoDialog dd { margin:0; }
+  #infoDialog button { padding:8px 16px; font-size:14px; border:0; border-radius:10px; cursor:pointer; background:#fff; color:#111; font-weight:700; }
+
+  .panel {
+    width:min(760px,94vw); max-height:100%;
+    display:flex; flex-direction:column; align-items:center; gap:22px;
+    background:#161616; border:1px solid #262626; border-radius:22px;
+    padding:clamp(20px,4vh,32px) clamp(18px,4vw,28px);
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+    overflow:auto;
+  }
+  .stage { display:flex; flex-direction:column; align-items:center; gap:18px; flex:none; }
+  .sidebar { width:100%; display:flex; flex-direction:column; gap:16px; }
+
+  /* À partir de cette largeur, les cartouches de réglages passent sur le côté du bocal. */
+  @media (min-width:700px) {
+    .panel { flex-direction:row; align-items:flex-start; }
+    .sidebar { flex:1; min-width:0; }
+  }
+
+  /* Cadre "verre" contenant le sable — c'est cet élément qui pivote de 180° au clic sur "Retourner" */
+  .jarWrap {
+    position:relative; width:min(300px,74vw); aspect-ratio:110/160;
+    border-radius:18px; overflow:hidden; background:#0a1620;
+    box-shadow:0 18px 45px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.08);
+    transition:transform 1.1s cubic-bezier(.65,.05,.36,1);
+    transform:rotate(0deg);
+  }
+  .jarWrap.flipped { transform:rotate(180deg); }
+  .jarWrap canvas { width:100%; height:100%; display:block; }
+  /* Reflet de verre, purement décoratif */
+  .jarWrap::before {
+    content:""; position:absolute; inset:0; pointer-events:none; border-radius:18px;
+    background:linear-gradient(115deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 20%, rgba(255,255,255,0) 80%, rgba(255,255,255,.08) 100%);
+  }
+
+  .hint { color:#999; font-size:12.5px; text-align:center; max-width:320px; }
+
+  .actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .btn {
+    background:#fff; color:#111; border:0; border-radius:12px; padding:11px 18px;
+    font-size:14px; font-weight:700; cursor:pointer;
+  }
+  .btn:active { transform:scale(.97); }
+  .btn.ghost { background:none; border:1px solid #333; color:#ddd; font-weight:600; }
+
+  .controls {
+    width:100%; background:#1b1b1b; border:1px solid #333; border-radius:14px;
+    padding:16px 18px; display:flex; flex-direction:column; gap:16px;
+  }
+  label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:13.5px; }
+  .row { flex-direction:row; align-items:center; gap:8px; }
+  .value { font-weight:700; color:#fff; }
+  input[type=range] { width:100%; }
+  .sub { color:#888; font-size:11.5px; }
+
+  #densityPanel { cursor:default; }
+  #densityPanel summary { cursor:pointer; color:#ccc; font-size:13.5px; font-weight:600; list-style:none; }
+  #densityPanel summary::-webkit-details-marker { display:none; }
+  #densityPanel summary::before { content:"▸ "; }
+  #densityPanel[open] summary::before { content:"▾ "; }
+  .densityRows { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
+  .swatch { width:12px; height:12px; border-radius:50%; display:inline-block; flex:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏜️ Sable Dynamique</h1>
+  <button id="infoLink" type="button">ℹ️ Informations</button>
+</header>
+
+<dialog id="infoDialog">
+  <h2>À propos du prototype</h2>
+  <dl>
+    <dt>Version</dt><dd id="infoVersion"></dd>
+    <dt>Auteur</dt><dd id="infoAuthor"></dd>
+    <dt>Date</dt><dd id="infoDate"></dd>
+    <dt>Licence</dt><dd id="infoLicense"></dd>
+  </dl>
+  <button id="infoClose" type="button">Fermer</button>
+</dialog>
+
+<main>
+  <div class="panel">
+    <div class="stage">
+      <div class="jarWrap" id="jarWrap">
+        <canvas id="sandCanvas" width="330" height="480"></canvas>
+      </div>
+      <p class="hint">Le sable coloré tombe dans l'eau et se fraie lentement un passage à travers les bulles d'air, formant des dunes. Retournez le cadre pour tout faire recommencer de l'autre côté.</p>
+      <div class="actions">
+        <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
+        <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="controls">
+        <label>
+          <div class="row"><span>Résolution du tableau</span><span class="value" id="resolutionVal">110 × 160</span></div>
+          <input type="range" id="resolutionSlider" min="50" max="160" value="110" step="5">
+          <span class="sub">Nombre de grains simulés en largeur. Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
+        </label>
+        <label>
+          <div class="row"><span>Bulles d'air</span><span class="value" id="bubbleVal">30%</span></div>
+          <input type="range" id="bubbleSlider" min="0" max="100" value="30" step="1">
+          <span class="sub">Plus de bulles = le sable trouve moins de passages et s'écoule plus lentement.</span>
+        </label>
+        <label>
+          <div class="row"><span>Vitesse d'écoulement</span><span class="value" id="viscosityVal">5</span></div>
+          <input type="range" id="viscositySlider" min="1" max="10" value="5" step="1">
+          <span class="sub">Viscosité du liquide : bas = fluide et rapide, haut = épais et lent.</span>
+        </label>
+        <label>
+          <div class="row"><span>Gravité</span><span class="value" id="gravityVal">x1.1</span></div>
+          <input type="range" id="gravitySlider" min="1" max="20" value="10" step="1">
+          <span class="sub">Force qui entraîne le sable et les bulles vers le bas (ou le haut, une fois retourné).</span>
+        </label>
+      </div>
+
+      <details class="controls" id="densityPanel">
+        <summary>Densités des sables (réglage fin)</summary>
+        <div class="densityRows">
+          <label>
+            <div class="row"><span class="swatch" style="background:#2a2624"></span><span>Noir</span><span class="value" id="densBLACKVal">1.15</span></div>
+            <input type="range" id="densBLACK" min="0.3" max="1.8" step="0.05" value="1.15">
+          </label>
+          <label>
+            <div class="row"><span class="swatch" style="background:#3a6ea5"></span><span>Bleu</span><span class="value" id="densBLUEVal">1.00</span></div>
+            <input type="range" id="densBLUE" min="0.3" max="1.8" step="0.05" value="1.0">
+          </label>
+          <label>
+            <div class="row"><span class="swatch" style="background:#d4af37"></span><span>Or</span><span class="value" id="densGOLDVal">0.85</span></div>
+            <input type="range" id="densGOLD" min="0.3" max="1.8" step="0.05" value="0.85">
+          </label>
+          <label>
+            <div class="row"><span class="swatch" style="background:#ece5d2"></span><span>Blanc</span><span class="value" id="densWHITEVal">0.70</span></div>
+            <input type="range" id="densWHITE" min="0.3" max="1.8" step="0.05" value="0.7">
+          </label>
+          <span class="sub">Plus la valeur est haute, plus ce sable coule vite et s'enfonce sous les autres.</span>
+        </div>
+      </details>
+    </div>
+  </div>
+</main>
+
+<script>
+// Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
+// et dans le commentaire d'en-tête du fichier (à garder synchronisés).
+const APP_VERSION = "0.3.2";
+const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
+const APP_DATE = "2026-09-21";
+const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
+
+const infoDialog = document.getElementById("infoDialog");
+document.getElementById("infoVersion").textContent = APP_VERSION;
+document.getElementById("infoAuthor").textContent = APP_AUTHOR;
+document.getElementById("infoDate").textContent = APP_DATE;
+document.getElementById("infoLicense").textContent = APP_LICENSE;
+document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
+document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+
+/* ==========================================================================
+   TODO — pistes de réalisme discutées, à reprendre en session future.
+   Pour chaque point : la demande, puis la piste de résolution envisagée.
+   ==========================================================================
+
+   1. Flottabilité des particules légères
+      Demande : le fluide devrait pouvoir faire remonter les grains les plus
+      légers (blanc) au lieu de les laisser seulement tomber ou rester bloqués.
+      Résolution envisagée : dans tryMoveSand(), en dessous d'un seuil de
+      densité, donner au grain une petite probabilité de se déplacer À
+      L'ENCONTRE de la gravité quand il est bloqué (même mécanisme que
+      tryMoveBubble mais avec une probabilité bien plus faible), pour simuler
+      une mise en suspension par le courant.
+
+   2. Taille des grains proportionnelle au poids
+      Demande : les grains plus lourds devraient aussi être visuellement plus
+      gros (comme dans la réalité, où taille et poids sont liés).
+      Résolution envisagée : faire occuper aux sables les plus denses un bloc
+      de plusieurs cellules (ex. 2×2) au lieu d'une seule, plutôt qu'un simple
+      agrandissement au rendu — impacte donc la grille de simulation elle-même,
+      pas juste l'affichage. Complexifie le tassement fin, à tester.
+
+   3. Interaction par poids lors d'une collision entre deux grains
+      Demande : un grain lourd posé sur un grain léger devrait pouvoir couler
+      à travers lui avec le temps (tri par densité après le dépôt).
+      Résolution envisagée : dans tryMoveSand(), quand la cellule cible n'est
+      pas vide mais contient un sable de densité strictement inférieure,
+      ajouter une probabilité d'échanger les deux positions (swap) plutôt que
+      de uniquement chercher une diagonale vide.
+
+   4. Épaisseur du tableau (profondeur avant/arrière)
+      Demande : les vrais cadres ont une épaisseur (deux plaques de verre avec
+      du sable entre les deux), alors que la simulation actuelle est purement
+      2D (une seule grille plate).
+      Résolution envisagée : plutôt qu'une vraie grille 3D (coût cubique,
+      probablement trop lourd), faire tourner 2-3 grilles 2D indépendantes
+      (couches avant/arrière, chacune avec sa propre simulation) et les
+      superposer au rendu avec un léger décalage de position, du flou/une
+      opacité réduite pour les couches arrière, et éventuellement une
+      parallaxe au mouvement de la souris.
+   ========================================================================== */
+
+// ---------- Automate de sable (grille de cellules) ----------
+// Chaque cellule : 0 = liquide (vide), 1-4 = sable coloré, 5 = bulle d'air.
+const EMPTY = 0, BLACK = 1, BLUE = 2, GOLD = 3, WHITE = 4, BUBBLE = 5;
+const SAND_MIN = 1, SAND_MAX = 4;
+
+const GRID_ASPECT = 160 / 110; // hauteur/largeur, conservé quelle que soit la résolution choisie
+let GRID_W = 110, GRID_H = 160;
+let CELL_COUNT = GRID_W * GRID_H;
+
+// Densité relative de chaque sable : le noir coule plus vite que l'or (le plus léger).
+const DENSITY = { [BLACK]: 1.15, [BLUE]: 1.0, [GOLD]: 0.85, [WHITE]: 0.7 };
+const COLOR_RGB = {
+  [BLACK]: [42, 38, 36],
+  [BLUE]:  [58, 110, 165],
+  [GOLD]:  [212, 175, 55],
+  [WHITE]: [236, 229, 210],
+};
+const BASE_PROB = 0.5;
+const MAX_BUBBLE_FRACTION = 0.08;
+
+let grid = new Uint8Array(CELL_COUNT);
+let moved = new Uint8Array(CELL_COUNT);
+let shade = new Float32Array(CELL_COUNT); // texture de grain, stable entre deux images
+const idx = (x, y) => y * GRID_W + x;
+const inBounds = (x, y) => x >= 0 && x < GRID_W && y >= 0 && y < GRID_H;
+
+let gravityDown = true; // sens de la gravité dans le repère de la grille (inversé par "Retourner")
+const params = { gravityStrength: 1.1, viscosity: 5, bubblePct: 30 };
+
+function countBubbles() {
+  let c = 0;
+  for (let p = 0; p < CELL_COUNT; p++) if (grid[p] === BUBBLE) c++;
+  return c;
+}
+function bubbleTargetCount() {
+  return Math.round(GRID_W * GRID_H * MAX_BUBBLE_FRACTION * (params.bubblePct / 100));
+}
+function spawnBubblesTo(target) {
+  let count = countBubbles();
+  let guard = 0;
+  while (count < target && guard < target * 6 + 200) {
+    guard++;
+    const x = Math.floor(Math.random() * GRID_W);
+    const y = Math.floor(Math.random() * GRID_H);
+    const i = idx(x, y);
+    if (grid[i] === EMPTY) { grid[i] = BUBBLE; count++; }
+  }
+}
+function removeBubblesTo(target) {
+  let count = countBubbles();
+  let guard = 0;
+  while (count > target && guard < count * 4 + 200) {
+    guard++;
+    const p = Math.floor(Math.random() * CELL_COUNT);
+    if (grid[p] === BUBBLE) { grid[p] = EMPTY; count--; }
+  }
+}
+
+// Place le sable et les bulles au hasard dans la grille, puis fait avancer la simulation
+// à blanc (sans affichage) pour partir directement d'un paysage déjà formé.
+function scatterInitial() {
+  grid.fill(EMPTY);
+  const sandCount = Math.round(CELL_COUNT * 0.34);
+  for (let n = 0; n < sandCount; n++) {
+    let attempts = 0;
+    while (attempts < 10) {
+      attempts++;
+      const x = Math.floor(Math.random() * GRID_W);
+      const y = Math.floor(GRID_H * 0.12 + Math.random() * GRID_H * 0.88);
+      const i = idx(x, y);
+      if (grid[i] === EMPTY) { grid[i] = 1 + Math.floor(Math.random() * 4); break; }
+    }
+  }
+  spawnBubblesTo(bubbleTargetCount());
+  for (let p = 0; p < CELL_COUNT; p++) shade[p] = 0.82 + Math.random() * 0.36;
+  for (let t = 0; t < 400; t++) step();
+}
+
+function tryMoveSand(x, y) {
+  const i = idx(x, y);
+  const v = grid[i];
+  const prob = Math.min(1, BASE_PROB * params.gravityStrength * DENSITY[v]);
+  if (Math.random() > prob) return;
+  const dy = gravityDown ? 1 : -1;
+  const ny = y + dy;
+  if (!inBounds(x, ny)) return;
+  const ni = idx(x, ny);
+  if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
+  // Bloqué à la verticale (mur, sable ou bulle) : cherche un passage en diagonale
+  // -> c'est cette règle qui crée à la fois l'angle de repos des dunes et le filtrage par les bulles.
+  const order = Math.random() < 0.5 ? [-1, 1] : [1, -1];
+  for (const dx of order) {
+    const tx = x + dx, ty = y + dy;
+    if (!inBounds(tx, ty)) continue;
+    const ti = idx(tx, ty);
+    if (!moved[ti] && grid[ti] === EMPTY) { grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1; return; }
+  }
+}
+
+function tryMoveBubble(x, y) {
+  const i = idx(x, y);
+  const dy = gravityDown ? -1 : 1; // flotte à l'inverse du sable
+  const prob = Math.min(1, BASE_PROB * params.gravityStrength * 0.95);
+  if (Math.random() < prob) {
+    const ny = y + dy;
+    if (inBounds(x, ny)) {
+      const ni = idx(x, ny);
+      if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = BUBBLE; grid[i] = EMPTY; moved[ni] = 1; return; }
+      const order = Math.random() < 0.5 ? [-1, 1] : [1, -1];
+      for (const dx of order) {
+        const tx = x + dx, ty = y + dy;
+        if (!inBounds(tx, ty)) continue;
+        const ti = idx(tx, ty);
+        if (!moved[ti] && grid[ti] === EMPTY) { grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
+      }
+    }
+  }
+  // Petite agitation latérale pour garder la couche de bulles vivante même sans mouvement vertical.
+  if (Math.random() < 0.12) {
+    const dx = Math.random() < 0.5 ? -1 : 1;
+    const tx = x + dx;
+    if (inBounds(tx, y)) {
+      const ti = idx(tx, y);
+      if (!moved[ti] && grid[ti] === EMPTY) { grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; }
+    }
+  }
+}
+
+function processCell(x, y) {
+  const i = idx(x, y);
+  if (moved[i]) return;
+  const v = grid[i];
+  if (v >= SAND_MIN && v <= SAND_MAX) tryMoveSand(x, y);
+  else if (v === BUBBLE) tryMoveBubble(x, y);
+}
+
+function step() {
+  moved.fill(0);
+  for (let y = 0; y < GRID_H; y++) {
+    if (y % 2 === 0) { for (let x = 0; x < GRID_W; x++) processCell(x, y); }
+    else { for (let x = GRID_W - 1; x >= 0; x--) processCell(x, y); }
+  }
+}
+
+// ---------- Rendu ----------
+const mainCanvas = document.getElementById("sandCanvas");
+const mainCtx = mainCanvas.getContext("2d");
+const offCanvas = document.createElement("canvas");
+offCanvas.width = GRID_W; offCanvas.height = GRID_H;
+const offCtx = offCanvas.getContext("2d");
+let imgData = offCtx.createImageData(GRID_W, GRID_H);
+
+// Reconstruit la grille à une nouvelle résolution (largeur en cellules ; la hauteur suit le même ratio).
+function rebuildGrid(newW) {
+  GRID_W = Math.round(newW);
+  GRID_H = Math.round(GRID_W * GRID_ASPECT);
+  CELL_COUNT = GRID_W * GRID_H;
+  grid = new Uint8Array(CELL_COUNT);
+  moved = new Uint8Array(CELL_COUNT);
+  shade = new Float32Array(CELL_COUNT);
+  offCanvas.width = GRID_W;
+  offCanvas.height = GRID_H;
+  imgData = offCtx.createImageData(GRID_W, GRID_H);
+  gravityDown = true;
+  jarWrap.classList.remove("flipped");
+  scatterInitial();
+}
+
+const waterGrad = mainCtx.createLinearGradient(0, 0, 0, mainCanvas.height);
+waterGrad.addColorStop(0, "#0f3549");
+waterGrad.addColorStop(1, "#081722");
+
+function render() {
+  const data = imgData.data;
+  for (let p = 0; p < CELL_COUNT; p++) {
+    const v = grid[p];
+    const o = p * 4;
+    if (v === EMPTY) {
+      data[o + 3] = 0;
+    } else if (v === BUBBLE) {
+      data[o] = 210; data[o + 1] = 235; data[o + 2] = 255; data[o + 3] = 165;
+    } else {
+      const c = COLOR_RGB[v];
+      const s = shade[p];
+      data[o] = Math.min(255, c[0] * s);
+      data[o + 1] = Math.min(255, c[1] * s);
+      data[o + 2] = Math.min(255, c[2] * s);
+      data[o + 3] = 255;
+    }
+  }
+  offCtx.putImageData(imgData, 0, 0);
+
+  mainCtx.fillStyle = waterGrad;
+  mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+  mainCtx.imageSmoothingEnabled = true;
+  mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
+}
+
+function stepsPerFrame() {
+  return Math.max(1, Math.round(7 - params.viscosity / 1.7));
+}
+
+function loop() {
+  const n = stepsPerFrame();
+  for (let i = 0; i < n; i++) step();
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ---------- Contrôles ----------
+const resolutionSlider = document.getElementById("resolutionSlider");
+const resolutionVal = document.getElementById("resolutionVal");
+resolutionSlider.addEventListener("input", () => {
+  const w = Number(resolutionSlider.value);
+  const h = Math.round(w * GRID_ASPECT);
+  resolutionVal.textContent = w + " × " + h;
+});
+resolutionSlider.addEventListener("change", () => {
+  rebuildGrid(Number(resolutionSlider.value));
+});
+
+const bubbleSlider = document.getElementById("bubbleSlider");
+const bubbleVal = document.getElementById("bubbleVal");
+bubbleSlider.addEventListener("input", () => {
+  params.bubblePct = Number(bubbleSlider.value);
+  bubbleVal.textContent = params.bubblePct + "%";
+  const target = bubbleTargetCount();
+  const current = countBubbles();
+  if (target > current) spawnBubblesTo(target); else removeBubblesTo(target);
+});
+
+const viscositySlider = document.getElementById("viscositySlider");
+const viscosityVal = document.getElementById("viscosityVal");
+viscositySlider.addEventListener("input", () => {
+  params.viscosity = Number(viscositySlider.value);
+  viscosityVal.textContent = params.viscosity;
+});
+
+const gravitySlider = document.getElementById("gravitySlider");
+const gravityVal = document.getElementById("gravityVal");
+gravitySlider.addEventListener("input", () => {
+  const v = Number(gravitySlider.value);
+  params.gravityStrength = 0.3 + ((v - 1) / 19) * 1.7;
+  gravityVal.textContent = "x" + params.gravityStrength.toFixed(1);
+});
+
+const DENSITY_SLIDERS = [
+  { name: "BLACK", type: BLACK },
+  { name: "BLUE", type: BLUE },
+  { name: "GOLD", type: GOLD },
+  { name: "WHITE", type: WHITE },
+];
+for (const { name, type } of DENSITY_SLIDERS) {
+  const slider = document.getElementById("dens" + name);
+  const val = document.getElementById("dens" + name + "Val");
+  slider.addEventListener("input", () => {
+    const v = Number(slider.value);
+    DENSITY[type] = v;
+    val.textContent = v.toFixed(2);
+  });
+}
+
+const jarWrap = document.getElementById("jarWrap");
+document.getElementById("flipBtn").addEventListener("click", () => {
+  gravityDown = !gravityDown;
+  jarWrap.classList.toggle("flipped");
+});
+document.getElementById("newBtn").addEventListener("click", () => {
+  gravityDown = true;
+  jarWrap.classList.remove("flipped");
+  scatterInitial();
+});
+
+// ---------- Démarrage ----------
+scatterInitial();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
