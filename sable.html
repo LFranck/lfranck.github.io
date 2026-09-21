@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.3.2
+  Version : 0.3.3
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-21
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -192,7 +192,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.3.2";
+const APP_VERSION = "0.3.3";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-21";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -266,6 +266,10 @@ const COLOR_RGB = {
 };
 const BASE_PROB = 0.5;
 const MAX_BUBBLE_FRACTION = 0.08;
+// Pression : plus il y a de sable empilé juste au-dessus d'un blocage de bulles, plus il a de
+// chances de forcer le passage plutôt que de rester coincé indéfiniment derrière une bulle.
+const FORCE_BASE_PROB = 0.006;
+const STACK_CAP = 50;
 
 let grid = new Uint8Array(CELL_COUNT);
 let moved = new Uint8Array(CELL_COUNT);
@@ -325,6 +329,21 @@ function scatterInitial() {
   for (let t = 0; t < 400; t++) step();
 }
 
+// Compte le sable empilé juste "au-dessus" (côté source, à l'opposé du sens de chute) de (x,y),
+// pour estimer le poids qui pèse sur ce grain quand il est bloqué par une bulle.
+function stackWeightAt(x, y) {
+  const dyUp = gravityDown ? -1 : 1;
+  let count = 0;
+  let cy = y + dyUp;
+  while (count < STACK_CAP && inBounds(x, cy)) {
+    const v = grid[idx(x, cy)];
+    if (v < SAND_MIN || v > SAND_MAX) break;
+    count++;
+    cy += dyUp;
+  }
+  return count;
+}
+
 function tryMoveSand(x, y) {
   const i = idx(x, y);
   const v = grid[i];
@@ -335,6 +354,16 @@ function tryMoveSand(x, y) {
   if (!inBounds(x, ny)) return;
   const ni = idx(x, ny);
   if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
+  if (!moved[ni] && grid[ni] === BUBBLE) {
+    // Le poids du sable accumulé juste au-dessus peut suffire à écraser/repousser la bulle
+    // et forcer le passage, plutôt que d'attendre indéfiniment un trou.
+    const weight = stackWeightAt(x, y);
+    const forceProb = Math.min(0.9, FORCE_BASE_PROB * weight * params.gravityStrength);
+    if (Math.random() < forceProb) {
+      grid[ni] = v; grid[i] = BUBBLE; moved[ni] = 1;
+      return;
+    }
+  }
   // Bloqué à la verticale (mur, sable ou bulle) : cherche un passage en diagonale
   // -> c'est cette règle qui crée à la fois l'angle de repos des dunes et le filtrage par les bulles.
   const order = Math.random() < 0.5 ? [-1, 1] : [1, -1];

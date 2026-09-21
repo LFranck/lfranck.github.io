@@ -17,7 +17,7 @@ Ceci un espace pour partager mes projets.
 
 ## [Sable Dynamique](sable.html)
 
-*Version 0.3.2*
+*Version 0.3.3*
 
 **Sable Dynamique** (prototype en cours de développement) reproduit dans le navigateur ces cadres de "sable animé" : plusieurs sables colorés (noir, bleu, or, blanc), de densités différentes, tombent dans un liquide transparent et se fraient lentement un passage à travers une couche de bulles d'air pour former des dunes et des paysages, avec un angle de repos naturel. Un bouton permet de retourner le cadre à 180° pour faire retomber le sable accumulé de l'autre côté, et des réglages ajustent la résolution de la grille de simulation, la quantité de bulles, la viscosité du liquide, la force de gravité, ainsi que la densité de chaque sable individuellement (panneau de réglage fin).
 
