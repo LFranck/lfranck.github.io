@@ -5,9 +5,9 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.3.3
+  Version : 0.15.34
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
-  Date    : 2026-09-21
+  Date    : 2026-09-22
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
   Statut  : En développement (V0) — simulation physique expérimentale, réglages à ajuster.
   © 2026 Franck Legrand. Tous droits réservés.
@@ -46,9 +46,13 @@
   #infoDialog dt { color:#999; }
   #infoDialog dd { margin:0; }
   #infoDialog button { padding:8px 16px; font-size:14px; border:0; border-radius:10px; cursor:pointer; background:#fff; color:#111; font-weight:700; }
+  #panelToggles { margin:0 0 18px; padding-top:14px; border-top:1px solid #333; }
+  #panelToggles h3 { margin:0 0 10px; font-size:13px; font-weight:700; color:#999; text-transform:uppercase; letter-spacing:.03em; }
+  #panelToggles label { flex-direction:row; align-items:center; gap:8px; margin-bottom:8px; font-size:14px; color:#eee; cursor:pointer; }
+  .cartoucheHidden { display:none !important; }
 
   .panel {
-    width:min(760px,94vw); max-height:100%;
+    width:min(1180px,94vw); max-height:100%;
     display:flex; flex-direction:column; align-items:center; gap:22px;
     background:#161616; border:1px solid #262626; border-radius:22px;
     padding:clamp(20px,4vh,32px) clamp(18px,4vw,28px);
@@ -56,7 +60,9 @@
     overflow:auto;
   }
   .stage { display:flex; flex-direction:column; align-items:center; gap:18px; flex:none; }
-  .sidebar { width:100%; display:flex; flex-direction:column; gap:16px; }
+  /* Les cartouches de réglages (Réglages / Courant / Densités) se placent côte à côte quand la
+     largeur le permet, et repassent à la ligne (empilés) sur un écran étroit. */
+  .sidebar { width:100%; display:flex; flex-direction:row; flex-wrap:wrap; align-items:flex-start; gap:16px; }
 
   /* À partir de cette largeur, les cartouches de réglages passent sur le côté du bocal. */
   @media (min-width:700px) {
@@ -90,10 +96,20 @@
   .btn:active { transform:scale(.97); }
   .btn.ghost { background:none; border:1px solid #333; color:#ddd; font-weight:600; }
 
+  /* Contrôle segmenté (boutons sélectionnables) utilisé pour la vitesse d'écoulement. */
+  .segmented { display:flex; flex-wrap:wrap; gap:6px; }
+  .segBtn {
+    flex:1 1 0; min-width:28px; background:#252525; color:#ccc; border:1px solid #3a3a3a;
+    border-radius:8px; padding:7px 0; font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .segBtn:hover { border-color:#555; }
+  .segBtn.active { background:#fff; color:#111; border-color:#fff; }
+
   .controls {
-    width:100%; background:#1b1b1b; border:1px solid #333; border-radius:14px;
+    flex:1 1 240px; min-width:220px; background:#1b1b1b; border:1px solid #333; border-radius:14px;
     padding:16px 18px; display:flex; flex-direction:column; gap:16px;
   }
+  .cartoucheTitle { font-weight:700; font-size:14px; color:#fff; }
   label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:13.5px; }
   .row { flex-direction:row; align-items:center; gap:8px; }
   .value { font-weight:700; color:#fff; }
@@ -123,6 +139,12 @@
     <dt>Date</dt><dd id="infoDate"></dd>
     <dt>Licence</dt><dd id="infoLicense"></dd>
   </dl>
+  <div id="panelToggles">
+    <h3>Cartouches affichés</h3>
+    <label class="row"><input type="checkbox" id="toggleSettings" checked><span>🎛️ Réglages</span></label>
+    <label class="row"><input type="checkbox" id="toggleFlow" checked><span>🌊 Courant</span></label>
+    <label class="row"><input type="checkbox" id="toggleDensity" checked><span>Densités des sables</span></label>
+  </div>
   <button id="infoClose" type="button">Fermer</button>
 </dialog>
 
@@ -140,47 +162,85 @@
     </div>
 
     <div class="sidebar">
-      <div class="controls">
+      <div class="controls" id="panelSettings">
+        <div class="cartoucheTitle">🎛️ Réglages</div>
+        <div>
+          <div class="row"><span>Performance</span><span class="value" id="perfVal">— fps</span></div>
+          <span class="sub">Images/seconde et part du budget d'image (16,7 ms à 60 fps) consommée par le calcul de la simulation. Indicatif : le navigateur ne donne pas accès au taux CPU réel de la machine.</span>
+        </div>
+        <div>
+          <div class="row"><span>Particules en mouvement</span><span class="value" id="activityVal">— / —</span></div>
+        </div>
         <label>
-          <div class="row"><span>Résolution du tableau</span><span class="value" id="resolutionVal">110 × 160</span></div>
-          <input type="range" id="resolutionSlider" min="50" max="160" value="110" step="5">
-          <span class="sub">Nombre de grains simulés en largeur. Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
+          <div class="row"><span>Résolution du tableau</span><span class="value" id="resolutionVal">160 × 233</span></div>
+          <input type="range" id="resolutionSlider" min="50" max="330" value="160" step="5">
+          <span class="sub">Nombre de grains simulés en largeur (jusqu'à 330 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
         </label>
         <label>
-          <div class="row"><span>Bulles d'air</span><span class="value" id="bubbleVal">30%</span></div>
-          <input type="range" id="bubbleSlider" min="0" max="100" value="30" step="1">
+          <div class="row"><span>Bulles d'air</span><span class="value" id="bubbleVal">50%</span></div>
+          <input type="range" id="bubbleSlider" min="0" max="100" value="50" step="1">
           <span class="sub">Plus de bulles = le sable trouve moins de passages et s'écoule plus lentement.</span>
         </label>
-        <label>
-          <div class="row"><span>Vitesse d'écoulement</span><span class="value" id="viscosityVal">5</span></div>
-          <input type="range" id="viscositySlider" min="1" max="10" value="5" step="1">
+        <div>
+          <div class="row"><span>Vitesse d'écoulement</span><span class="value" id="viscosityVal">8</span></div>
+          <div class="segmented" id="viscositySeg" role="group" aria-label="Vitesse d'écoulement">
+            <button type="button" class="segBtn" data-value="1">1</button>
+            <button type="button" class="segBtn" data-value="2">2</button>
+            <button type="button" class="segBtn" data-value="3">3</button>
+            <button type="button" class="segBtn" data-value="4">4</button>
+            <button type="button" class="segBtn" data-value="5">5</button>
+            <button type="button" class="segBtn" data-value="6">6</button>
+            <button type="button" class="segBtn" data-value="7">7</button>
+            <button type="button" class="segBtn active" data-value="8">8</button>
+            <button type="button" class="segBtn" data-value="9">9</button>
+            <button type="button" class="segBtn" data-value="10">10</button>
+          </div>
           <span class="sub">Viscosité du liquide : bas = fluide et rapide, haut = épais et lent.</span>
-        </label>
+        </div>
         <label>
-          <div class="row"><span>Gravité</span><span class="value" id="gravityVal">x1.1</span></div>
-          <input type="range" id="gravitySlider" min="1" max="20" value="10" step="1">
+          <div class="row"><span>Gravité</span><span class="value" id="gravityVal">x0.8</span></div>
+          <input type="range" id="gravitySlider" min="1" max="20" value="7" step="1">
           <span class="sub">Force qui entraîne le sable et les bulles vers le bas (ou le haut, une fois retourné).</span>
         </label>
+      </div>
+
+      <div class="controls" id="panelFlow">
+        <div class="cartoucheTitle">🌊 Courant</div>
+        <label>
+          <div class="row"><span>Courant (force maximale)</span><span class="value" id="flowVal">5%</span></div>
+          <input type="range" id="flowSlider" min="0" max="100" value="5" step="1">
+          <span class="sub">Tourbillons dans le liquide qui poussent le sable de côté. C'est un plafond : la force réelle suit l'activité du tableau (ci-dessous) — beaucoup de grains et de bulles en mouvement (ex. juste après avoir retourné le cadre) = courant fort ; un tableau qui s'est calmé = courant faible, sans réglage de durée à part.</span>
+        </label>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="flowShowCheckbox" checked>
+            <span>Afficher le courant en arrière-plan</span>
+          </label>
+          <span class="sub">Superpose la carte de couleurs (teintes de rouge selon la direction) derrière le sable. Décoché : le courant continue d'agir sur le sable, juste invisible.</span>
+        </div>
+        <div>
+          <div class="row"><span>Vitesse moyenne du courant</span><span class="value" id="flowSpeedVal">— cellules/s</span></div>
+        </div>
       </div>
 
       <details class="controls" id="densityPanel">
         <summary>Densités des sables (réglage fin)</summary>
         <div class="densityRows">
           <label>
-            <div class="row"><span class="swatch" style="background:#2a2624"></span><span>Noir</span><span class="value" id="densBLACKVal">1.15</span></div>
-            <input type="range" id="densBLACK" min="0.3" max="1.8" step="0.05" value="1.15">
+            <div class="row"><span class="swatch" style="background:#5c3a21"></span><span>Marron</span><span class="value" id="densBROWNVal">2.00</span></div>
+            <input type="range" id="densBROWN" min="0" max="5" step="0.05" value="2">
           </label>
           <label>
-            <div class="row"><span class="swatch" style="background:#3a6ea5"></span><span>Bleu</span><span class="value" id="densBLUEVal">1.00</span></div>
-            <input type="range" id="densBLUE" min="0.3" max="1.8" step="0.05" value="1.0">
+            <div class="row"><span class="swatch" style="background:#3a8f5f"></span><span>Vert</span><span class="value" id="densGREENVal">0.50</span></div>
+            <input type="range" id="densGREEN" min="0" max="5" step="0.05" value="0.5">
           </label>
           <label>
-            <div class="row"><span class="swatch" style="background:#d4af37"></span><span>Or</span><span class="value" id="densGOLDVal">0.85</span></div>
-            <input type="range" id="densGOLD" min="0.3" max="1.8" step="0.05" value="0.85">
+            <div class="row"><span class="swatch" style="background:#9a9690"></span><span>Gris</span><span class="value" id="densGRAYVal">0.20</span></div>
+            <input type="range" id="densGRAY" min="0" max="5" step="0.05" value="0.2">
           </label>
           <label>
-            <div class="row"><span class="swatch" style="background:#ece5d2"></span><span>Blanc</span><span class="value" id="densWHITEVal">0.70</span></div>
-            <input type="range" id="densWHITE" min="0.3" max="1.8" step="0.05" value="0.7">
+            <div class="row"><span class="swatch" style="background:#ece5d2"></span><span>Blanc</span><span class="value" id="densWHITEVal">0.01</span></div>
+            <input type="range" id="densWHITE" min="0" max="5" step="0.05" value="0.01">
           </label>
           <span class="sub">Plus la valeur est haute, plus ce sable coule vite et s'enfonce sous les autres.</span>
         </div>
@@ -192,9 +252,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.3.3";
+const APP_VERSION = "0.15.34";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-21";
+const APP_DATE = "2026-09-22";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 const infoDialog = document.getElementById("infoDialog");
@@ -204,6 +264,20 @@ document.getElementById("infoDate").textContent = APP_DATE;
 document.getElementById("infoLicense").textContent = APP_LICENSE;
 document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
 document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+
+// Affichage/masquage des cartouches optionnels, piloté depuis la fenêtre Informations.
+const PANEL_TOGGLES = [
+  { checkbox: "toggleSettings", panel: "panelSettings" },
+  { checkbox: "toggleFlow", panel: "panelFlow" },
+  { checkbox: "toggleDensity", panel: "densityPanel" },
+];
+for (const { checkbox, panel } of PANEL_TOGGLES) {
+  const cb = document.getElementById(checkbox);
+  const el = document.getElementById(panel);
+  cb.addEventListener("change", () => {
+    el.classList.toggle("cartoucheHidden", !cb.checked);
+  });
+}
 
 /* ==========================================================================
    TODO — pistes de réalisme discutées, à reprendre en session future.
@@ -227,13 +301,11 @@ document.getElementById("infoClose").addEventListener("click", () => infoDialog.
       agrandissement au rendu — impacte donc la grille de simulation elle-même,
       pas juste l'affichage. Complexifie le tassement fin, à tester.
 
-   3. Interaction par poids lors d'une collision entre deux grains
-      Demande : un grain lourd posé sur un grain léger devrait pouvoir couler
-      à travers lui avec le temps (tri par densité après le dépôt).
-      Résolution envisagée : dans tryMoveSand(), quand la cellule cible n'est
-      pas vide mais contient un sable de densité strictement inférieure,
-      ajouter une probabilité d'échanger les deux positions (swap) plutôt que
-      de uniquement chercher une diagonale vide.
+   3. Interaction par poids lors d'une collision entre deux grains — FAIT.
+      Un grain lourd qui tombe sur un grain de densité strictement inférieure
+      repousse ce dernier de côté (gauche/droite selon disponibilité, aléatoire
+      si les deux le sont) plutôt que de le traverser verticalement — voir
+      tryDisplaceSideways() et son appel dans tryMoveSand().
 
    4. Épaisseur du tableau (profondeur avant/arrière)
       Demande : les vrais cadres ont une épaisseur (deux plaques de verre avec
@@ -249,36 +321,218 @@ document.getElementById("infoClose").addEventListener("click", () => infoDialog.
 
 // ---------- Automate de sable (grille de cellules) ----------
 // Chaque cellule : 0 = liquide (vide), 1-4 = sable coloré, 5 = bulle d'air.
-const EMPTY = 0, BLACK = 1, BLUE = 2, GOLD = 3, WHITE = 4, BUBBLE = 5;
+const EMPTY = 0, BROWN = 1, GREEN = 2, GRAY = 3, WHITE = 4, BUBBLE = 5;
 const SAND_MIN = 1, SAND_MAX = 4;
 
 const GRID_ASPECT = 160 / 110; // hauteur/largeur, conservé quelle que soit la résolution choisie
-let GRID_W = 110, GRID_H = 160;
+let GRID_W = 160, GRID_H = 233;
 let CELL_COUNT = GRID_W * GRID_H;
 
-// Densité relative de chaque sable : le noir coule plus vite que l'or (le plus léger).
-const DENSITY = { [BLACK]: 1.15, [BLUE]: 1.0, [GOLD]: 0.85, [WHITE]: 0.7 };
+// Densité relative de chaque sable : le marron coule plus vite que le blanc (le plus léger).
+const DENSITY = { [BROWN]: 2, [GREEN]: 0.5, [GRAY]: 0.2, [WHITE]: 0.01 };
 const COLOR_RGB = {
-  [BLACK]: [42, 38, 36],
-  [BLUE]:  [58, 110, 165],
-  [GOLD]:  [212, 175, 55],
+  [BROWN]: [92, 58, 33],
+  [GREEN]: [58, 143, 95],
+  [GRAY]:  [154, 150, 144],
   [WHITE]: [236, 229, 210],
 };
+// Poids de tirage à la génération du paysage (somme = 100) : le blanc paraissait surreprésenté
+// (sa densité très faible le fait à peine bouger, donc il reste étalé partout au lieu de se tasser
+// comme les autres) et le vert sous-représenté — rééquilibré ici, indépendamment des densités.
+const SAND_COLOR_WEIGHTS = [[BROWN, 25], [GREEN, 32], [GRAY, 25], [WHITE, 18]];
+function pickSandColor() {
+  let r = Math.random() * 100;
+  for (const [type, w] of SAND_COLOR_WEIGHTS) {
+    if (r < w) return type;
+    r -= w;
+  }
+  return SAND_COLOR_WEIGHTS[SAND_COLOR_WEIGHTS.length - 1][0];
+}
 const BASE_PROB = 0.5;
 const MAX_BUBBLE_FRACTION = 0.08;
-// Pression : plus il y a de sable empilé juste au-dessus d'un blocage de bulles, plus il a de
-// chances de forcer le passage plutôt que de rester coincé indéfiniment derrière une bulle.
-const FORCE_BASE_PROB = 0.006;
+// Pression : plus il y a de poids de sable (densité comprise) empilé juste au-dessus d'un
+// blocage de bulles, plus il a de chances de forcer le passage — mais plus la poche de bulles à
+// traverser est épaisse, plus elle résiste. Retouché (0,006 -> 0,0085) pour compenser le passage
+// d'un simple comptage de grains à une somme pondérée par leur densité (souvent < 1 en moyenne).
+const FORCE_BASE_PROB = 0.0085;
 const STACK_CAP = 50;
+// Quand une colonne force le passage sur l'air, elle peut entraîner une colonne voisine (gauche
+// et/ou droite, indépendamment) dans le même mouvement — effet d'affaissement local.
+const DRAG_NEIGHBOR_PROB = 0.4;
+// Viscosité de l'air : une bulle isolée a une petite chance de rester engluée un pas de plus
+// quand le liquide est épais (viscosité haute) — léger, pas de quoi geler les bulles à l'arrêt.
+// Coalescence : chaque bulle voisine (touchant celle-ci) réduit cette résistance, comme si l'air
+// regroupé se frayait plus facilement un chemin qu'une bulle isolée.
+const BUBBLE_VISCOSITY_DRAG = 0.25; // résistance max (viscosité = 10), 0 à viscosité = 1
+const COALESCENCE_RELIEF = 0.34;    // fraction de résistance en moins par bulle voisine
 
 let grid = new Uint8Array(CELL_COUNT);
 let moved = new Uint8Array(CELL_COUNT);
-let shade = new Float32Array(CELL_COUNT); // texture de grain, stable entre deux images
+let shade = new Float32Array(CELL_COUNT); // luminosité par grain, stable entre deux images
+let tint = new Float32Array(CELL_COUNT);  // teinte chaud/froid par grain, stable entre deux images
+// Cases ayant bougé au moins une fois depuis le dernier rafraîchissement de l'affichage
+// "Particules en mouvement" (voir loop()) — remis à zéro à chaque rafraîchissement.
+let recentlyMoved = new Uint8Array(CELL_COUNT);
 const idx = (x, y) => y * GRID_W + x;
 const inBounds = (x, y) => x >= 0 && x < GRID_W && y >= 0 && y < GRID_H;
 
 let gravityDown = true; // sens de la gravité dans le repère de la grille (inversé par "Retourner")
-const params = { gravityStrength: 1.1, viscosity: 5, bubblePct: 30 };
+const params = { gravityStrength: 0.3 + (6 / 19) * 1.7, viscosity: 8, bubblePct: 50, flowPct: 5, flowShow: true }; // curseurs : gravité 7/20, viscosité 8, bulles 50%, courant 5% (plafond), affichage courant on
+
+// ---------- Bruit de Perlin 2D (pour le champ de courant du fluide) ----------
+// Implémentation classique (table de permutation + interpolation "fade"), suffisante pour
+// générer un motif organique de tourbillons — pas besoin de vraie précision cryptographique.
+const PERLIN_GRAD = [[1, 1], [-1, 1], [1, -1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]];
+const PERLIN_PERM = (() => {
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+  }
+  const perm = new Uint8Array(512);
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  return perm;
+})();
+function perlinFade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+function perlinLerp(a, b, t) { return a + t * (b - a); }
+function perlinGrad(hash, x, y) {
+  const g = PERLIN_GRAD[hash & 7];
+  return g[0] * x + g[1] * y;
+}
+function perlin2(x, y) {
+  const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+  const xf = x - Math.floor(x), yf = y - Math.floor(y);
+  const u = perlinFade(xf), v = perlinFade(yf);
+  const aa = PERLIN_PERM[PERLIN_PERM[X] + Y];
+  const ba = PERLIN_PERM[PERLIN_PERM[X + 1] + Y];
+  const ab = PERLIN_PERM[PERLIN_PERM[X] + Y + 1];
+  const bb = PERLIN_PERM[PERLIN_PERM[X + 1] + Y + 1];
+  const x1 = perlinLerp(perlinGrad(aa, xf, yf), perlinGrad(ba, xf - 1, yf), u);
+  const x2 = perlinLerp(perlinGrad(ab, xf, yf - 1), perlinGrad(bb, xf - 1, yf - 1), u);
+  return perlinLerp(x1, x2, v); // ~ -1..1
+}
+
+// ---------- Champ de courant : un vecteur vitesse par point de la grille, qui pousse le sable
+// dans une direction privilégiée. Calculé sur une grille grossière (une case de champ couvre
+// plusieurs cellules de sable) puis interpolé, et dérive lentement dans le temps en faisant
+// glisser la fenêtre d'échantillonnage du bruit — un vrai courant qui tourbillonne et évolue,
+// sans avoir à recalculer un bruit 3D coûteux à chaque image.
+const FLOW_CELL = 6;           // taille (en cellules de grille) d'une case du champ de courant
+const FLOW_NOISE_SCALE = 0.12; // "zoom" du bruit : plus petit = tourbillons plus larges (relatif à FLOW_CELL)
+const FLOW_DRIFT_SPEED = 0.015; // vitesse de dérive du motif de courant, par seconde
+const FLOW_BASE_PROB = 0.003;   // force de la poussée latérale du courant sur le sable
+let flowFW = 1, flowFH = 1;
+let flowVX = new Float32Array(1), flowVY = new Float32Array(1);
+let flowDriftX = 0, flowDriftY = 0;
+
+// Le courant n'est pas alimenté par une horloge : sa force suit l'activité réelle du tableau
+// (fraction de particules — sable + bulles — en mouvement, voir la mise à jour de activityFactor
+// dans loop()). Beaucoup de mouvement (ex. juste après avoir retourné le cadre, ou pendant que le
+// sable se dépose) -> courant fort ; un tableau qui s'est calmé -> courant faible, naturellement,
+// sans minuterie ni demi-vie à régler. ACTIVITY_REFERENCE = fraction de particules en mouvement
+// (sur une fenêtre d'affichage) correspondant à une activité "maximale" (facteur = 1).
+const ACTIVITY_REFERENCE = 0.05;
+let activityFactor = 0;
+// Force effective du courant (0-100, comme le curseur "Courant"), plafonnée par lui et modulée
+// par l'activité actuelle du tableau.
+function effectiveFlowPct() {
+  return params.flowPct * activityFactor;
+}
+
+function rebuildFlowField() {
+  flowFW = Math.floor(GRID_W / FLOW_CELL) + 2;
+  flowFH = Math.floor(GRID_H / FLOW_CELL) + 2;
+  flowVX = new Float32Array(flowFW * flowFH);
+  flowVY = new Float32Array(flowFW * flowFH);
+  updateFlowField(0);
+}
+
+// Recalcule le champ grossier à partir du bruit (peu coûteux : quelques centaines de points au
+// maximum). dtSeconds fait avancer la dérive ; 0 pour un simple recalcul sans dérive (init/resize).
+function updateFlowField(dtSeconds) {
+  flowDriftX += dtSeconds * FLOW_DRIFT_SPEED;
+  flowDriftY -= dtSeconds * FLOW_DRIFT_SPEED * 0.6; // dérive en diagonale, pas alignée aux axes
+  for (let fy = 0; fy < flowFH; fy++) {
+    for (let fx = 0; fx < flowFW; fx++) {
+      const n = perlin2(fx * FLOW_NOISE_SCALE + flowDriftX, fy * FLOW_NOISE_SCALE + flowDriftY);
+      const angle = n * Math.PI * 2;
+      const p = fy * flowFW + fx;
+      flowVX[p] = Math.cos(angle);
+      flowVY[p] = Math.sin(angle);
+    }
+  }
+}
+
+// Vitesse locale du courant en (x,y), par interpolation bilinéaire entre les points du champ
+// grossier — une variation douce plutôt que par blocs visibles.
+function sampleFlow(x, y) {
+  const fx = x / FLOW_CELL, fy = y / FLOW_CELL;
+  const fx0 = Math.min(Math.floor(fx), flowFW - 2), fy0 = Math.min(Math.floor(fy), flowFH - 2);
+  const tx = fx - fx0, ty = fy - fy0;
+  const fx1 = fx0 + 1, fy1 = fy0 + 1;
+  const p00 = fy0 * flowFW + fx0, p10 = fy0 * flowFW + fx1;
+  const p01 = fy1 * flowFW + fx0, p11 = fy1 * flowFW + fx1;
+  const vx = perlinLerp(perlinLerp(flowVX[p00], flowVX[p10], tx), perlinLerp(flowVX[p01], flowVX[p11], tx), ty);
+  const vy = perlinLerp(perlinLerp(flowVY[p00], flowVY[p10], tx), perlinLerp(flowVY[p01], flowVY[p11], tx), ty);
+  return { vx, vy };
+}
+
+// Visualisation du courant : une carte de couleurs en arrière-plan (derrière le sable), où chaque
+// zone est teintée d'une nuance de rouge selon LAQUELLE des 8 directions (N/NE/E/SE/S/SO/O/NO)
+// le courant y pousse localement — plus la teinte est claire, plus la direction tourne dans le
+// sens horaire à partir de l'est. Calculée sur un petit canvas basse résolution (une case tous les
+// FLOW_VIZ_SCALE cellules) puis agrandie, pour rester bon marché à recalculer à chaque image.
+const FLOW_VIZ_SCALE = 4;
+function hslToRgb(h, s, l) {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+// 8 nuances de rouge (même teinte, luminosité croissante), une par direction du courant.
+const FLOW_DIR_COLORS = Array.from({ length: 8 }, (_, i) => hslToRgb(0, 0.8, 0.18 + i * 0.075));
+
+let flowVizCanvas = document.createElement("canvas");
+let flowVizCtx = flowVizCanvas.getContext("2d");
+let flowVizW = 1, flowVizH = 1;
+let flowVizData = null;
+
+function rebuildFlowViz() {
+  flowVizW = Math.max(1, Math.ceil(GRID_W / FLOW_VIZ_SCALE));
+  flowVizH = Math.max(1, Math.ceil(GRID_H / FLOW_VIZ_SCALE));
+  flowVizCanvas.width = flowVizW;
+  flowVizCanvas.height = flowVizH;
+  flowVizData = flowVizCtx.createImageData(flowVizW, flowVizH);
+}
+
+// Recalcule la carte de couleurs à partir du champ de courant courant (chaque pixel = direction
+// la plus proche parmi 8, arrondie à 45°, colorée selon FLOW_DIR_COLORS).
+function updateFlowViz() {
+  const data = flowVizData.data;
+  const alpha = Math.round((0.4 + 0.3 * (effectiveFlowPct() / 100)) * 255);
+  for (let py = 0; py < flowVizH; py++) {
+    for (let px = 0; px < flowVizW; px++) {
+      const flow = sampleFlow(px * FLOW_VIZ_SCALE, py * FLOW_VIZ_SCALE);
+      const angle = Math.atan2(flow.vy, flow.vx); // -π..π
+      const dir = ((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8;
+      const c = FLOW_DIR_COLORS[dir];
+      const o = (py * flowVizW + px) * 4;
+      data[o] = c[0]; data[o + 1] = c[1]; data[o + 2] = c[2]; data[o + 3] = alpha;
+    }
+  }
+  flowVizCtx.putImageData(flowVizData, 0, 0);
+}
+
+function renderFlowViz(ctx, canvasW, canvasH) {
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(flowVizCanvas, 0, 0, flowVizW, flowVizH, 0, 0, canvasW, canvasH);
+}
+
+rebuildFlowField();
+rebuildFlowViz();
 
 function countBubbles() {
   let c = 0;
@@ -321,32 +575,112 @@ function scatterInitial() {
       const x = Math.floor(Math.random() * GRID_W);
       const y = Math.floor(GRID_H * 0.12 + Math.random() * GRID_H * 0.88);
       const i = idx(x, y);
-      if (grid[i] === EMPTY) { grid[i] = 1 + Math.floor(Math.random() * 4); break; }
+      if (grid[i] === EMPTY) { grid[i] = pickSandColor(); break; }
     }
   }
   spawnBubblesTo(bubbleTargetCount());
-  for (let p = 0; p < CELL_COUNT; p++) shade[p] = 0.82 + Math.random() * 0.36;
+  for (let p = 0; p < CELL_COUNT; p++) {
+    shade[p] = 0.82 + Math.random() * 0.36;
+    tint[p] = Math.random() * 2 - 1;
+  }
   for (let t = 0; t < 400; t++) step();
 }
 
-// Compte le sable empilé juste "au-dessus" (côté source, à l'opposé du sens de chute) de (x,y),
-// pour estimer le poids qui pèse sur ce grain quand il est bloqué par une bulle.
+// Poids du sable empilé juste "au-dessus" (côté source, à l'opposé du sens de chute) de (x,y) —
+// pondéré par la densité de chaque grain (pas un simple comptage) : une pile de sable lourd
+// (marron) pèse plus qu'une pile de même hauteur de sable léger (blanc).
 function stackWeightAt(x, y) {
   const dyUp = gravityDown ? -1 : 1;
+  let weight = 0;
   let count = 0;
   let cy = y + dyUp;
   while (count < STACK_CAP && inBounds(x, cy)) {
     const v = grid[idx(x, cy)];
     if (v < SAND_MIN || v > SAND_MAX) break;
+    weight += DENSITY[v];
     count++;
     cy += dyUp;
   }
+  return weight;
+}
+
+// Épaisseur de la poche de bulles contigües juste après (x,y) dans le sens de la chute — plus
+// elle est épaisse, plus il y a d'air à repousser d'un coup, donc plus de résistance à la pression.
+function bubblePocketDepth(x, y) {
+  const dy = gravityDown ? 1 : -1;
+  let cy = y + dy;
+  let count = 0;
+  while (count < STACK_CAP && inBounds(x, cy) && grid[idx(x, cy)] === BUBBLE) {
+    count++;
+    cy += dy;
+  }
   return count;
+}
+
+// Sous pression, le sable ne traverse jamais la bulle : toute la colonne de sable ET la bulle
+// (ou la poche de bulles contigües) qui la bloque descendent ensemble d'un cran, comme un seul
+// bloc rigide qui se tasse. Ça suppose une case libre juste après la poche de bulles pour que
+// le bloc ait où atterrir ; sinon le forçage échoue ce tour-ci (retombe sur la diagonale).
+// Au tour suivant, la bulle — désormais entourée différemment — retrouve sa physique normale
+// (tryMoveBubble) et cherchera un passage de côté pour continuer à remonter, libérant le sable.
+function tryPressureShift(x, y) {
+  const dy = gravityDown ? 1 : -1;
+  const landY = y + dy * (bubblePocketDepth(x, y) + 1);
+  if (!inBounds(x, landY)) return false;
+  const landI = idx(x, landY);
+  if (moved[landI] || grid[landI] !== EMPTY) return false; // pas de place : le forçage échoue
+
+  // Fait glisser tout le bloc (colonne de sable + poche de bulles) d'une case, en partant de la
+  // place libre et en remontant jusqu'au sommet de la colonne de sable, qui se retrouve vide.
+  let dst = landY;
+  let src = landY - dy;
+  let steps = 0;
+  while (steps < STACK_CAP && inBounds(x, src)) {
+    const sv = grid[idx(x, src)];
+    if (sv !== BUBBLE && (sv < SAND_MIN || sv > SAND_MAX)) break;
+    const dstI = idx(x, dst);
+    grid[dstI] = sv; moved[dstI] = 1;
+    dst = src; src -= dy; steps++;
+  }
+  grid[idx(x, dst)] = EMPTY;
+  return true;
+}
+
+// Repousse de côté le grain (léger) situé en (x,y) pour faire de la place à un grain plus lourd
+// qui tombe dessus : priorité à une case libre à gauche ou à droite ; si les deux le sont, le
+// choix entre les deux est aléatoire (même priorité), sinon c'est déterministe.
+function tryDisplaceSideways(x, y) {
+  const i = idx(x, y);
+  const leftFree = inBounds(x - 1, y) && !moved[idx(x - 1, y)] && grid[idx(x - 1, y)] === EMPTY;
+  const rightFree = inBounds(x + 1, y) && !moved[idx(x + 1, y)] && grid[idx(x + 1, y)] === EMPTY;
+  if (!leftFree && !rightFree) return false;
+  const dx = leftFree && rightFree ? (Math.random() < 0.5 ? -1 : 1) : (leftFree ? -1 : 1);
+  const ti = idx(x + dx, y);
+  grid[ti] = grid[i]; moved[ti] = 1;
+  grid[i] = EMPTY;
+  return true;
 }
 
 function tryMoveSand(x, y) {
   const i = idx(x, y);
   const v = grid[i];
+
+  // Courant : une poussée latérale indépendante de la gravité, dans la direction locale du champ
+  // de courant. Tentée en premier et à part du reste : si elle réussit, le grain a simplement
+  // dérivé ce tour-ci, sans lien avec sa chute normale.
+  let flow = null;
+  if (params.flowPct > 0) {
+    flow = sampleFlow(x, y);
+    const flowProb = Math.min(0.9, FLOW_BASE_PROB * effectiveFlowPct() * Math.abs(flow.vx));
+    if (Math.random() < flowProb) {
+      const fx = x + (flow.vx > 0 ? 1 : -1);
+      if (inBounds(fx, y)) {
+        const fi = idx(fx, y);
+        if (!moved[fi] && grid[fi] === EMPTY) { grid[fi] = v; grid[i] = EMPTY; moved[fi] = 1; return; }
+      }
+    }
+  }
+
   const prob = Math.min(1, BASE_PROB * params.gravityStrength * DENSITY[v]);
   if (Math.random() > prob) return;
   const dy = gravityDown ? 1 : -1;
@@ -355,18 +689,39 @@ function tryMoveSand(x, y) {
   const ni = idx(x, ny);
   if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
   if (!moved[ni] && grid[ni] === BUBBLE) {
-    // Le poids du sable accumulé juste au-dessus peut suffire à écraser/repousser la bulle
-    // et forcer le passage, plutôt que d'attendre indéfiniment un trou.
+    // Le poids du sable accumulé juste au-dessus (pondéré par densité) peut suffire à forcer le
+    // passage plutôt que d'attendre indéfiniment un trou — mais plus la poche de bulles à
+    // traverser est épaisse, plus elle résiste (division par son épaisseur). Si le passage est
+    // forcé, le sable ne traverse pas la bulle : toute la colonne (sable + bulle) descend
+    // ensemble d'un cran (voir tryPressureShift).
     const weight = stackWeightAt(x, y);
-    const forceProb = Math.min(0.9, FORCE_BASE_PROB * weight * params.gravityStrength);
-    if (Math.random() < forceProb) {
-      grid[ni] = v; grid[i] = BUBBLE; moved[ni] = 1;
+    const resistance = bubblePocketDepth(x, y);
+    const forceProb = Math.min(0.9, (FORCE_BASE_PROB * weight * params.gravityStrength) / resistance);
+    if (Math.random() < forceProb && tryPressureShift(x, y)) {
+      // La colonne qui vient de forcer le passage peut entraîner une colonne voisine dans le même
+      // mouvement (gauche et/ou droite, tirages indépendants) — tryPressureShift() gère elle-même
+      // le cas où le voisin n'a rien à forcer (simple chute d'une case) ou est bloqué (aucun effet).
+      if (Math.random() < DRAG_NEIGHBOR_PROB) tryPressureShift(x - 1, y);
+      if (Math.random() < DRAG_NEIGHBOR_PROB) tryPressureShift(x + 1, y);
       return;
     }
   }
+  if (!moved[ni] && grid[ni] >= SAND_MIN && grid[ni] <= SAND_MAX && DENSITY[grid[ni]] < DENSITY[v]) {
+    // Un grain plus lourd tombe sur un grain plus léger : celui-ci est repoussé de côté pour
+    // libérer la place, plutôt que d'être traversé verticalement.
+    if (tryDisplaceSideways(x, ny)) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
+  }
   // Bloqué à la verticale (mur, sable ou bulle) : cherche un passage en diagonale
   // -> c'est cette règle qui crée à la fois l'angle de repos des dunes et le filtrage par les bulles.
-  const order = Math.random() < 0.5 ? [-1, 1] : [1, -1];
+  // Le courant, s'il y en a, penche le choix du côté vers lequel il pousse (sans jamais l'imposer).
+  let order;
+  if (flow) {
+    const favorRight = flow.vx >= 0;
+    const biasProb = 0.5 + Math.min(0.4, Math.abs(flow.vx) * 0.4);
+    order = Math.random() < biasProb ? (favorRight ? [1, -1] : [-1, 1]) : (favorRight ? [-1, 1] : [1, -1]);
+  } else {
+    order = Math.random() < 0.5 ? [-1, 1] : [1, -1];
+  }
   for (const dx of order) {
     const tx = x + dx, ty = y + dy;
     if (!inBounds(tx, ty)) continue;
@@ -378,30 +733,50 @@ function tryMoveSand(x, y) {
 function tryMoveBubble(x, y) {
   const i = idx(x, y);
   const dy = gravityDown ? -1 : 1; // flotte à l'inverse du sable
-  const prob = Math.min(1, BASE_PROB * params.gravityStrength * 0.95);
-  if (Math.random() < prob) {
-    const ny = y + dy;
-    if (inBounds(x, ny)) {
-      const ni = idx(x, ny);
-      if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = BUBBLE; grid[i] = EMPTY; moved[ni] = 1; return; }
-      const order = Math.random() < 0.5 ? [-1, 1] : [1, -1];
-      for (const dx of order) {
-        const tx = x + dx, ty = y + dy;
-        if (!inBounds(tx, ty)) continue;
-        const ti = idx(tx, ty);
-        if (!moved[ti] && grid[ti] === EMPTY) { grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
-      }
+
+  // Viscosité (atténuée par coalescence) : une bulle seule dans un liquide épais a une petite
+  // chance de ne pas bouger du tout ce pas-ci. Chaque bulle voisine directe (haut/bas/gauche/
+  // droite) réduit cette résistance — c'est ça, la coalescence : l'air groupé s'en affranchit
+  // plus vite qu'une bulle isolée. Ne touche pas au choix de direction (priorités 1/2/3 inchangées).
+  let neighborBubbles = 0;
+  if (inBounds(x - 1, y) && grid[idx(x - 1, y)] === BUBBLE) neighborBubbles++;
+  if (inBounds(x + 1, y) && grid[idx(x + 1, y)] === BUBBLE) neighborBubbles++;
+  if (inBounds(x, y - 1) && grid[idx(x, y - 1)] === BUBBLE) neighborBubbles++;
+  if (inBounds(x, y + 1) && grid[idx(x, y + 1)] === BUBBLE) neighborBubbles++;
+  const relief = Math.min(1, neighborBubbles * COALESCENCE_RELIEF);
+  const drag = BUBBLE_VISCOSITY_DRAG * ((params.viscosity - 1) / 9) * (1 - relief);
+  if (Math.random() < drag) return;
+
+  const ny = y + dy;
+  if (inBounds(x, ny)) {
+    // Priorité 1 : une place libre juste au-dessus -> la bulle y va directement, sans tirage.
+    const ni = idx(x, ny);
+    if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = BUBBLE; grid[i] = EMPTY; moved[ni] = 1; return; }
+    // Priorité 2 : sinon une diagonale libre au-dessus. Si les deux côtés sont libres à la fois,
+    // seul le choix entre les deux est aléatoire (même priorité) ; sinon c'est déterministe.
+    const leftFree = inBounds(x - 1, ny) && !moved[idx(x - 1, ny)] && grid[idx(x - 1, ny)] === EMPTY;
+    const rightFree = inBounds(x + 1, ny) && !moved[idx(x + 1, ny)] && grid[idx(x + 1, ny)] === EMPTY;
+    if (leftFree && rightFree) {
+      const dx = Math.random() < 0.5 ? -1 : 1;
+      const ti = idx(x + dx, ny);
+      grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return;
     }
+    if (leftFree) { const ti = idx(x - 1, ny); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
+    if (rightFree) { const ti = idx(x + 1, ny); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
   }
-  // Petite agitation latérale pour garder la couche de bulles vivante même sans mouvement vertical.
-  if (Math.random() < 0.12) {
+  // Priorité 3 : bloquée à la verticale ET en diagonale (typiquement collée sous une couche de
+  // sable) -> se répand directement sur le côté, comme un gaz qui se love sous une surface plutôt
+  // que de tâtonner lentement au hasard. Même règle que les priorités 1/2 : déterministe, tirage
+  // uniquement pour départager si les deux côtés sont libres à la fois.
+  const sideLeftFree = inBounds(x - 1, y) && !moved[idx(x - 1, y)] && grid[idx(x - 1, y)] === EMPTY;
+  const sideRightFree = inBounds(x + 1, y) && !moved[idx(x + 1, y)] && grid[idx(x + 1, y)] === EMPTY;
+  if (sideLeftFree && sideRightFree) {
     const dx = Math.random() < 0.5 ? -1 : 1;
-    const tx = x + dx;
-    if (inBounds(tx, y)) {
-      const ti = idx(tx, y);
-      if (!moved[ti] && grid[ti] === EMPTY) { grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; }
-    }
+    const ti = idx(x + dx, y);
+    grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return;
   }
+  if (sideLeftFree) { const ti = idx(x - 1, y); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
+  if (sideRightFree) { const ti = idx(x + 1, y); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; }
 }
 
 function processCell(x, y) {
@@ -436,6 +811,10 @@ function rebuildGrid(newW) {
   grid = new Uint8Array(CELL_COUNT);
   moved = new Uint8Array(CELL_COUNT);
   shade = new Float32Array(CELL_COUNT);
+  tint = new Float32Array(CELL_COUNT);
+  recentlyMoved = new Uint8Array(CELL_COUNT);
+  rebuildFlowField();
+  rebuildFlowViz();
   offCanvas.width = GRID_W;
   offCanvas.height = GRID_H;
   imgData = offCtx.createImageData(GRID_W, GRID_H);
@@ -460,9 +839,10 @@ function render() {
     } else {
       const c = COLOR_RGB[v];
       const s = shade[p];
-      data[o] = Math.min(255, c[0] * s);
-      data[o + 1] = Math.min(255, c[1] * s);
-      data[o + 2] = Math.min(255, c[2] * s);
+      const t = tint[p] * 14; // léger écart chaud/froid par grain, en plus de la luminosité
+      data[o] = Math.max(0, Math.min(255, c[0] * s + t));
+      data[o + 1] = Math.max(0, Math.min(255, c[1] * s));
+      data[o + 2] = Math.max(0, Math.min(255, c[2] * s - t));
       data[o + 3] = 255;
     }
   }
@@ -470,6 +850,10 @@ function render() {
 
   mainCtx.fillStyle = waterGrad;
   mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+  if (params.flowPct > 0 && params.flowShow) {
+    updateFlowViz();
+    renderFlowViz(mainCtx, mainCanvas.width, mainCanvas.height);
+  }
   mainCtx.imageSmoothingEnabled = true;
   mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
 }
@@ -478,10 +862,74 @@ function stepsPerFrame() {
   return Math.max(1, Math.round(7 - params.viscosity / 1.7));
 }
 
-function loop() {
+// Mesure de performance : fps réel (écart entre deux images) et part du budget d'image (16,7 ms
+// à 60 fps) consommée par le calcul (step + render). Lissage exponentiel pour un affichage stable.
+const perfVal = document.getElementById("perfVal");
+const activityVal = document.getElementById("activityVal");
+const flowSpeedVal = document.getElementById("flowSpeedVal");
+const FRAME_BUDGET_MS = 1000 / 60;
+let fpsSmoothed = 0;
+let computeMsSmoothed = 0;
+let lastFrameTs = 0;
+let perfDisplayAccum = 0;
+
+function loop(ts) {
+  let dtMs = 0;
+  if (lastFrameTs) {
+    dtMs = ts - lastFrameTs;
+    if (dtMs > 0) {
+      const instFps = 1000 / dtMs;
+      fpsSmoothed = fpsSmoothed ? fpsSmoothed * 0.9 + instFps * 0.1 : instFps;
+    }
+  }
+  lastFrameTs = ts;
+  // Fait dériver lentement le champ de courant ; borné pour éviter un saut si l'onglet était
+  // en arrière-plan (rAF suspendu, donc dtMs potentiellement énorme au retour).
+  updateFlowField(Math.min(dtMs, 100) / 1000);
+
+  const t0 = performance.now();
   const n = stepsPerFrame();
   for (let i = 0; i < n; i++) step();
   render();
+  const computeMs = performance.now() - t0;
+  computeMsSmoothed = computeMsSmoothed ? computeMsSmoothed * 0.9 + computeMs * 0.1 : computeMs;
+
+  // Marque comme "récemment en mouvement" toute case qui a bougé lors du dernier pas de CETTE
+  // image (fait à chaque image, pas seulement au rafraîchissement de l'affichage) : sinon on
+  // n'échantillonnerait qu'un seul pas de simulation sur ~15 images, ce qui sous-estime largement
+  // l'activité réellement visible à l'œil sur toute la fenêtre entre deux rafraîchissements.
+  for (let p = 0; p < CELL_COUNT; p++) if (moved[p]) recentlyMoved[p] = 1;
+
+  // Rafraîchit le libellé FPS/calcul 4 fois par seconde environ, pas à chaque image (illisible
+  // sinon, et ce sont des moyennes lissées qui n'ont pas besoin d'un affichage plus fréquent).
+  perfDisplayAccum += 1;
+  if (perfDisplayAccum >= 15) {
+    perfDisplayAccum = 0;
+    const pct = Math.min(999, Math.round((computeMsSmoothed / FRAME_BUDGET_MS) * 100));
+    perfVal.textContent = Math.round(fpsSmoothed) + " fps · " + pct + "% calcul";
+    // Particules (sable + bulles) ayant bougé au moins une fois depuis le dernier rafraîchissement
+    // (~250 ms), sur le total présent dans la grille — puis on repart à zéro pour la fenêtre suivante.
+    let total = 0, moving = 0;
+    for (let p = 0; p < CELL_COUNT; p++) {
+      if (grid[p] !== EMPTY) total++;
+      if (recentlyMoved[p]) moving++;
+    }
+    recentlyMoved.fill(0);
+    activityVal.textContent = moving.toLocaleString("fr-FR") + " / " + total.toLocaleString("fr-FR");
+    // C'est cette même activité qui alimente le courant (voir effectiveFlowPct()) : plus il y a
+    // de particules en mouvement, plus le courant se rapproche de son plafond (curseur "Courant") ;
+    // un tableau qui s'est calmé fait retomber le courant tout seul, sans minuterie.
+    const activityRatio = total > 0 ? moving / total : 0;
+    const activityTarget = Math.min(1, activityRatio / ACTIVITY_REFERENCE);
+    activityFactor = activityFactor * 0.5 + activityTarget * 0.5;
+  }
+
+  // Vitesse moyenne "réelle" du courant : même formule que la poussée sur le sable, mais exprimée
+  // en cellules/seconde pour être lisible. Rafraîchie à chaque image (activityFactor, lui, ne
+  // change qu'au rythme du panneau Performance ci-dessus) pour rester réactive à l'œil.
+  const flowSpeed = 48 * (effectiveFlowPct() / 100); // 0 à 100% de courant effectif -> 0 à 48 cellules/s
+  flowSpeedVal.textContent = flowSpeed.toFixed(2) + " cellules/s";
+
   requestAnimationFrame(loop);
 }
 
@@ -507,11 +955,14 @@ bubbleSlider.addEventListener("input", () => {
   if (target > current) spawnBubblesTo(target); else removeBubblesTo(target);
 });
 
-const viscositySlider = document.getElementById("viscositySlider");
+const viscositySeg = document.getElementById("viscositySeg");
 const viscosityVal = document.getElementById("viscosityVal");
-viscositySlider.addEventListener("input", () => {
-  params.viscosity = Number(viscositySlider.value);
+viscositySeg.addEventListener("click", (e) => {
+  const btn = e.target.closest(".segBtn");
+  if (!btn) return;
+  params.viscosity = Number(btn.dataset.value);
   viscosityVal.textContent = params.viscosity;
+  for (const b of viscositySeg.children) b.classList.toggle("active", b === btn);
 });
 
 const gravitySlider = document.getElementById("gravitySlider");
@@ -522,10 +973,22 @@ gravitySlider.addEventListener("input", () => {
   gravityVal.textContent = "x" + params.gravityStrength.toFixed(1);
 });
 
+const flowSlider = document.getElementById("flowSlider");
+const flowVal = document.getElementById("flowVal");
+flowSlider.addEventListener("input", () => {
+  params.flowPct = Number(flowSlider.value);
+  flowVal.textContent = params.flowPct + "%";
+});
+
+const flowShowCheckbox = document.getElementById("flowShowCheckbox");
+flowShowCheckbox.addEventListener("change", () => {
+  params.flowShow = flowShowCheckbox.checked;
+});
+
 const DENSITY_SLIDERS = [
-  { name: "BLACK", type: BLACK },
-  { name: "BLUE", type: BLUE },
-  { name: "GOLD", type: GOLD },
+  { name: "BROWN", type: BROWN },
+  { name: "GREEN", type: GREEN },
+  { name: "GRAY", type: GRAY },
   { name: "WHITE", type: WHITE },
 ];
 for (const { name, type } of DENSITY_SLIDERS) {
@@ -542,6 +1005,8 @@ const jarWrap = document.getElementById("jarWrap");
 document.getElementById("flipBtn").addEventListener("click", () => {
   gravityDown = !gravityDown;
   jarWrap.classList.toggle("flipped");
+  // Pas besoin de relancer le courant manuellement : le flot de sable que ça déclenche fait
+  // naturellement remonter l'activité, donc le courant, via activityFactor (voir loop()).
 });
 document.getElementById("newBtn").addEventListener("click", () => {
   gravityDown = true;
