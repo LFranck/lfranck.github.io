@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.15.34
+  Version : 0.17.47
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-22
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -112,9 +112,21 @@
   .cartoucheTitle { font-weight:700; font-size:14px; color:#fff; }
   label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:13.5px; }
   .row { flex-direction:row; align-items:center; gap:8px; }
+  /* Sépare visiblement le libellé de sa valeur (poussée à droite) — mais pas les lignes de case à
+     cocher (qui n'ont pas de .value), pour ne pas écarter la case de son texte. */
+  .row:has(.value) { justify-content:space-between; }
   .value { font-weight:700; color:#fff; }
   input[type=range] { width:100%; }
-  .sub { color:#888; font-size:11.5px; }
+  .sub { color:#888; font-size:11.5px; display:none; }
+  .sub.show { display:block; margin-top:6px; }
+  /* Petit bouton "i" qui révèle l'explication (.sub) associée, cachée par défaut. */
+  .infoBtn {
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+    width:15px; height:15px; margin-left:5px; border-radius:50%;
+    background:#2a2a2a; color:#999; border:1px solid #444; font-size:10px; font-weight:700;
+    font-style:italic; font-family:Georgia,serif; cursor:pointer; line-height:1; padding:0;
+  }
+  .infoBtn:hover, .infoBtn.active { background:#444; color:#fff; }
 
   #densityPanel { cursor:default; }
   #densityPanel summary { cursor:pointer; color:#ccc; font-size:13.5px; font-weight:600; list-style:none; }
@@ -123,6 +135,7 @@
   #densityPanel[open] summary::before { content:"▾ "; }
   .densityRows { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
   .swatch { width:12px; height:12px; border-radius:50%; display:inline-block; flex:none; }
+  .labelGroup { display:inline-flex; align-items:center; gap:6px; }
 </style>
 </head>
 <body>
@@ -141,9 +154,9 @@
   </dl>
   <div id="panelToggles">
     <h3>Cartouches affichés</h3>
-    <label class="row"><input type="checkbox" id="toggleSettings" checked><span>🎛️ Réglages</span></label>
-    <label class="row"><input type="checkbox" id="toggleFlow" checked><span>🌊 Courant</span></label>
-    <label class="row"><input type="checkbox" id="toggleDensity" checked><span>Densités des sables</span></label>
+    <label class="row"><input type="checkbox" id="toggleSettings"><span>🎛️ Réglages</span></label>
+    <label class="row"><input type="checkbox" id="toggleFlow"><span>🌊 Courant</span></label>
+    <label class="row"><input type="checkbox" id="toggleDensity"><span>Densités des sables</span></label>
   </div>
   <button id="infoClose" type="button">Fermer</button>
 </dialog>
@@ -162,27 +175,24 @@
     </div>
 
     <div class="sidebar">
-      <div class="controls" id="panelSettings">
+      <div class="controls cartoucheHidden" id="panelSettings">
         <div class="cartoucheTitle">🎛️ Réglages</div>
         <div>
-          <div class="row"><span>Performance</span><span class="value" id="perfVal">— fps</span></div>
-          <span class="sub">Images/seconde et part du budget d'image (16,7 ms à 60 fps) consommée par le calcul de la simulation. Indicatif : le navigateur ne donne pas accès au taux CPU réel de la machine.</span>
-        </div>
-        <div>
-          <div class="row"><span>Particules en mouvement</span><span class="value" id="activityVal">— / —</span></div>
+          <div class="row"><span>Performance<button type="button" class="infoBtn" data-target="subPerf" aria-label="Informations">i</button></span><span class="value" id="perfVal">— fps</span></div>
+          <span class="sub" id="subPerf">Images/seconde et part du budget d'image (16,7 ms à 60 fps) consommée par le calcul de la simulation. Indicatif : le navigateur ne donne pas accès au taux CPU réel de la machine.</span>
         </div>
         <label>
-          <div class="row"><span>Résolution du tableau</span><span class="value" id="resolutionVal">160 × 233</span></div>
-          <input type="range" id="resolutionSlider" min="50" max="330" value="160" step="5">
-          <span class="sub">Nombre de grains simulés en largeur (jusqu'à 330 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
+          <div class="row"><span>Résolution du tableau<button type="button" class="infoBtn" data-target="subResolution" aria-label="Informations">i</button></span><span class="value" id="resolutionVal">245 × 356</span></div>
+          <input type="range" id="resolutionSlider" min="50" max="330" value="245" step="5">
+          <span class="sub" id="subResolution">Nombre de grains simulés en largeur (jusqu'à 330 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
         </label>
         <label>
-          <div class="row"><span>Bulles d'air</span><span class="value" id="bubbleVal">50%</span></div>
-          <input type="range" id="bubbleSlider" min="0" max="100" value="50" step="1">
-          <span class="sub">Plus de bulles = le sable trouve moins de passages et s'écoule plus lentement.</span>
+          <div class="row"><span>Bulles d'air<button type="button" class="infoBtn" data-target="subBubbles" aria-label="Informations">i</button></span><span class="value" id="bubbleVal">25%</span></div>
+          <input type="range" id="bubbleSlider" min="0" max="100" value="25" step="1">
+          <span class="sub" id="subBubbles">Plus de bulles = le sable trouve moins de passages et s'écoule plus lentement.</span>
         </label>
         <div>
-          <div class="row"><span>Vitesse d'écoulement</span><span class="value" id="viscosityVal">8</span></div>
+          <div class="row"><span>Vitesse d'écoulement<button type="button" class="infoBtn" data-target="subViscosity" aria-label="Informations">i</button></span><span class="value" id="viscosityVal">7</span></div>
           <div class="segmented" id="viscositySeg" role="group" aria-label="Vitesse d'écoulement">
             <button type="button" class="segBtn" data-value="1">1</button>
             <button type="button" class="segBtn" data-value="2">2</button>
@@ -190,59 +200,67 @@
             <button type="button" class="segBtn" data-value="4">4</button>
             <button type="button" class="segBtn" data-value="5">5</button>
             <button type="button" class="segBtn" data-value="6">6</button>
-            <button type="button" class="segBtn" data-value="7">7</button>
-            <button type="button" class="segBtn active" data-value="8">8</button>
+            <button type="button" class="segBtn active" data-value="7">7</button>
+            <button type="button" class="segBtn" data-value="8">8</button>
             <button type="button" class="segBtn" data-value="9">9</button>
             <button type="button" class="segBtn" data-value="10">10</button>
           </div>
-          <span class="sub">Viscosité du liquide : bas = fluide et rapide, haut = épais et lent.</span>
+          <span class="sub" id="subViscosity">Viscosité du liquide : bas = fluide et rapide, haut = épais et lent.</span>
         </div>
         <label>
-          <div class="row"><span>Gravité</span><span class="value" id="gravityVal">x0.8</span></div>
-          <input type="range" id="gravitySlider" min="1" max="20" value="7" step="1">
-          <span class="sub">Force qui entraîne le sable et les bulles vers le bas (ou le haut, une fois retourné).</span>
+          <div class="row"><span>Gravité<button type="button" class="infoBtn" data-target="subGravity" aria-label="Informations">i</button></span><span class="value" id="gravityVal">x1.5</span></div>
+          <input type="range" id="gravitySlider" min="1" max="20" value="14" step="1">
+          <span class="sub" id="subGravity">Force qui entraîne le sable et les bulles vers le bas (ou le haut, une fois retourné).</span>
         </label>
       </div>
 
-      <div class="controls" id="panelFlow">
+      <div class="controls cartoucheHidden" id="panelFlow">
         <div class="cartoucheTitle">🌊 Courant</div>
         <label>
-          <div class="row"><span>Courant (force maximale)</span><span class="value" id="flowVal">5%</span></div>
-          <input type="range" id="flowSlider" min="0" max="100" value="5" step="1">
-          <span class="sub">Tourbillons dans le liquide qui poussent le sable de côté. C'est un plafond : la force réelle suit l'activité du tableau (ci-dessous) — beaucoup de grains et de bulles en mouvement (ex. juste après avoir retourné le cadre) = courant fort ; un tableau qui s'est calmé = courant faible, sans réglage de durée à part.</span>
+          <div class="row"><span>Courant (force maximale)<button type="button" class="infoBtn" data-target="subFlow" aria-label="Informations">i</button></span><span class="value" id="flowVal">15%</span></div>
+          <input type="range" id="flowSlider" min="0" max="100" value="15" step="1">
+          <span class="sub" id="subFlow">Tourbillons dans le liquide qui poussent le sable de côté. C'est un plafond : la force réelle suit l'activité du tableau (ci-dessous) — beaucoup de grains et de bulles en mouvement (ex. juste après avoir retourné le cadre) = courant fort ; un tableau qui s'est calmé = courant faible, sans réglage de durée à part.</span>
         </label>
         <div>
           <label class="row" style="cursor:pointer;">
-            <input type="checkbox" id="flowShowCheckbox" checked>
+            <input type="checkbox" id="flowShowCheckbox">
             <span>Afficher le courant en arrière-plan</span>
+            <button type="button" class="infoBtn" data-target="subFlowShow" aria-label="Informations">i</button>
           </label>
-          <span class="sub">Superpose la carte de couleurs (teintes de rouge selon la direction) derrière le sable. Décoché : le courant continue d'agir sur le sable, juste invisible.</span>
+          <span class="sub" id="subFlowShow">Superpose la carte de couleurs (teintes de rouge selon la direction) derrière le sable. Décoché : le courant continue d'agir sur le sable, juste invisible.</span>
         </div>
         <div>
           <div class="row"><span>Vitesse moyenne du courant</span><span class="value" id="flowSpeedVal">— cellules/s</span></div>
         </div>
+        <div>
+          <div class="row"><span>Particules en mouvement</span><span class="value" id="activityVal">— / —</span></div>
+        </div>
       </div>
 
-      <details class="controls" id="densityPanel">
-        <summary>Densités des sables (réglage fin)</summary>
+      <details class="controls cartoucheHidden" id="densityPanel">
+        <summary>Densités des sables (réglage fin)<button type="button" class="infoBtn" data-target="subDensity" aria-label="Informations">i</button></summary>
         <div class="densityRows">
           <label>
-            <div class="row"><span class="swatch" style="background:#5c3a21"></span><span>Marron</span><span class="value" id="densBROWNVal">2.00</span></div>
-            <input type="range" id="densBROWN" min="0" max="5" step="0.05" value="2">
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#5c3a21"></span><span>Marron</span></span><span class="value" id="densBROWNVal">0.75</span></div>
+            <input type="range" id="densBROWN" min="0" max="1.5" step="0.01" value="0.75">
           </label>
           <label>
-            <div class="row"><span class="swatch" style="background:#3a8f5f"></span><span>Vert</span><span class="value" id="densGREENVal">0.50</span></div>
-            <input type="range" id="densGREEN" min="0" max="5" step="0.05" value="0.5">
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#8cc152"></span><span>Vert prairie</span></span><span class="value" id="densMEADOWVal">0.25</span></div>
+            <input type="range" id="densMEADOW" min="0" max="1.5" step="0.01" value="0.25">
           </label>
           <label>
-            <div class="row"><span class="swatch" style="background:#9a9690"></span><span>Gris</span><span class="value" id="densGRAYVal">0.20</span></div>
-            <input type="range" id="densGRAY" min="0" max="5" step="0.05" value="0.2">
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#225230"></span><span>Vert forêt</span></span><span class="value" id="densFORESTVal">0.10</span></div>
+            <input type="range" id="densFOREST" min="0" max="1.5" step="0.01" value="0.1">
           </label>
           <label>
-            <div class="row"><span class="swatch" style="background:#ece5d2"></span><span>Blanc</span><span class="value" id="densWHITEVal">0.01</span></div>
-            <input type="range" id="densWHITE" min="0" max="5" step="0.05" value="0.01">
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#9a9690"></span><span>Gris rocher</span></span><span class="value" id="densGRAYVal">0.05</span></div>
+            <input type="range" id="densGRAY" min="0" max="1.5" step="0.01" value="0.05">
           </label>
-          <span class="sub">Plus la valeur est haute, plus ce sable coule vite et s'enfonce sous les autres.</span>
+          <label>
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#ece5d2"></span><span>Blanc neige</span></span><span class="value" id="densWHITEVal">0.01</span></div>
+            <input type="range" id="densWHITE" min="0" max="1.5" step="0.01" value="0.01">
+          </label>
+          <span class="sub" id="subDensity">Plus la valeur est haute, plus ce sable coule vite et s'enfonce sous les autres.</span>
         </div>
       </details>
     </div>
@@ -252,7 +270,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.15.34";
+const APP_VERSION = "0.17.47";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-22";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -278,6 +296,20 @@ for (const { checkbox, panel } of PANEL_TOGGLES) {
     el.classList.toggle("cartoucheHidden", !cb.checked);
   });
 }
+
+// Boutons "i" qui révèlent l'explication (.sub) associée, cachée par défaut. Délégué sur tout le
+// document : marche pour n'importe quel .infoBtn présent dans la page, pas de câblage par bouton.
+// Chaque bouton référence son .sub par id (data-target), pas par proximité DOM — nécessaire pour
+// la note des densités, partagée par les 5 curseurs plutôt que liée à une seule ligne.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".infoBtn");
+  if (!btn) return;
+  e.preventDefault(); // au cas où le bouton est dans un <label> : n'active pas son input associé
+  const sub = document.getElementById(btn.dataset.target);
+  if (!sub) return;
+  const show = sub.classList.toggle("show");
+  btn.classList.toggle("active", show);
+});
 
 /* ==========================================================================
    TODO — pistes de réalisme discutées, à reprendre en session future.
@@ -321,25 +353,27 @@ for (const { checkbox, panel } of PANEL_TOGGLES) {
 
 // ---------- Automate de sable (grille de cellules) ----------
 // Chaque cellule : 0 = liquide (vide), 1-4 = sable coloré, 5 = bulle d'air.
-const EMPTY = 0, BROWN = 1, GREEN = 2, GRAY = 3, WHITE = 4, BUBBLE = 5;
-const SAND_MIN = 1, SAND_MAX = 4;
+const EMPTY = 0, BROWN = 1, FOREST = 2, MEADOW = 3, GRAY = 4, WHITE = 5, BUBBLE = 6;
+const SAND_MIN = 1, SAND_MAX = 5;
 
 const GRID_ASPECT = 160 / 110; // hauteur/largeur, conservé quelle que soit la résolution choisie
-let GRID_W = 160, GRID_H = 233;
+let GRID_W = 245, GRID_H = 356;
 let CELL_COUNT = GRID_W * GRID_H;
 
 // Densité relative de chaque sable : le marron coule plus vite que le blanc (le plus léger).
-const DENSITY = { [BROWN]: 2, [GREEN]: 0.5, [GRAY]: 0.2, [WHITE]: 0.01 };
+const DENSITY = { [BROWN]: 0.75, [FOREST]: 0.1, [MEADOW]: 0.25, [GRAY]: 0.05, [WHITE]: 0.01 };
 const COLOR_RGB = {
-  [BROWN]: [92, 58, 33],
-  [GREEN]: [58, 143, 95],
-  [GRAY]:  [154, 150, 144],
-  [WHITE]: [236, 229, 210],
+  [BROWN]:  [92, 58, 33],
+  [FOREST]: [34, 82, 48],
+  [MEADOW]: [140, 193, 82],
+  [GRAY]:   [154, 150, 144],
+  [WHITE]:  [236, 229, 210],
 };
 // Poids de tirage à la génération du paysage (somme = 100) : le blanc paraissait surreprésenté
 // (sa densité très faible le fait à peine bouger, donc il reste étalé partout au lieu de se tasser
-// comme les autres) et le vert sous-représenté — rééquilibré ici, indépendamment des densités.
-const SAND_COLOR_WEIGHTS = [[BROWN, 25], [GREEN, 32], [GRAY, 25], [WHITE, 18]];
+// comme les autres) — rééquilibré ici, indépendamment des densités. Le vert d'origine (32%) est
+// partagé également entre forêt et prairie.
+const SAND_COLOR_WEIGHTS = [[BROWN, 25], [FOREST, 16], [MEADOW, 16], [GRAY, 25], [WHITE, 18]];
 function pickSandColor() {
   let r = Math.random() * 100;
   for (const [type, w] of SAND_COLOR_WEIGHTS) {
@@ -377,7 +411,7 @@ const idx = (x, y) => y * GRID_W + x;
 const inBounds = (x, y) => x >= 0 && x < GRID_W && y >= 0 && y < GRID_H;
 
 let gravityDown = true; // sens de la gravité dans le repère de la grille (inversé par "Retourner")
-const params = { gravityStrength: 0.3 + (6 / 19) * 1.7, viscosity: 8, bubblePct: 50, flowPct: 5, flowShow: true }; // curseurs : gravité 7/20, viscosité 8, bulles 50%, courant 5% (plafond), affichage courant on
+const params = { gravityStrength: 0.3 + (13 / 19) * 1.7, viscosity: 7, bubblePct: 25, flowPct: 15, flowShow: false }; // curseurs : gravité 14/20 (x1.5), viscosité 7, bulles 25%, courant 15% (plafond), affichage courant off
 
 // ---------- Bruit de Perlin 2D (pour le champ de courant du fluide) ----------
 // Implémentation classique (table de permutation + interpolation "fade"), suffisante pour
@@ -730,6 +764,15 @@ function tryMoveSand(x, y) {
   }
 }
 
+// Bande proche du haut (côté opposé à la gravité) où le répandage latéral (priorité 3 ci-dessous)
+// est coupé — recalculée à chaque appel à partir de gravityDown, donc se retourne automatiquement
+// avec le cadre.
+const BUBBLE_SURFACE_BAND = 0.05;
+function isInSurfaceBand(y) {
+  const band = Math.max(1, Math.round(GRID_H * BUBBLE_SURFACE_BAND));
+  return gravityDown ? y < band : y >= GRID_H - band;
+}
+
 function tryMoveBubble(x, y) {
   const i = idx(x, y);
   const dy = gravityDown ? -1 : 1; // flotte à l'inverse du sable
@@ -767,7 +810,10 @@ function tryMoveBubble(x, y) {
   // Priorité 3 : bloquée à la verticale ET en diagonale (typiquement collée sous une couche de
   // sable) -> se répand directement sur le côté, comme un gaz qui se love sous une surface plutôt
   // que de tâtonner lentement au hasard. Même règle que les priorités 1/2 : déterministe, tirage
-  // uniquement pour départager si les deux côtés sont libres à la fois.
+  // uniquement pour départager si les deux côtés sont libres à la fois. Désactivée près du haut
+  // (voir isInSurfaceBand) : dans cette zone, une bulle bloquée doit rester bloquée (collision
+  // naturelle avec ses voisines), pas se répandre sans cesse sur le côté façon "courant" latéral.
+  if (isInSurfaceBand(y)) return;
   const sideLeftFree = inBounds(x - 1, y) && !moved[idx(x - 1, y)] && grid[idx(x - 1, y)] === EMPTY;
   const sideRightFree = inBounds(x + 1, y) && !moved[idx(x + 1, y)] && grid[idx(x + 1, y)] === EMPTY;
   if (sideLeftFree && sideRightFree) {
@@ -987,7 +1033,8 @@ flowShowCheckbox.addEventListener("change", () => {
 
 const DENSITY_SLIDERS = [
   { name: "BROWN", type: BROWN },
-  { name: "GREEN", type: GREEN },
+  { name: "MEADOW", type: MEADOW },
+  { name: "FOREST", type: FOREST },
   { name: "GRAY", type: GRAY },
   { name: "WHITE", type: WHITE },
 ];
@@ -1005,6 +1052,8 @@ const jarWrap = document.getElementById("jarWrap");
 document.getElementById("flipBtn").addEventListener("click", () => {
   gravityDown = !gravityDown;
   jarWrap.classList.toggle("flipped");
+  // Pas besoin de relâcher quoi que ce soit manuellement : isInSurfaceBand() se recalcule à
+  // partir de gravityDown à chaque cellule, donc "le haut" change de côté tout seul.
   // Pas besoin de relancer le courant manuellement : le flot de sable que ça déclenche fait
   // naturellement remonter l'activité, donc le courant, via activityFactor (voir loop()).
 });
