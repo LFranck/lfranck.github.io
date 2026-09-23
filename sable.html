@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.23.56
+  Version : 0.25.56
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-23
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -81,6 +81,10 @@
   /* En plein écran, le bocal (300px max normalement) profite de tout l'espace disponible. */
   .stage:fullscreen { width:100vw; height:100vh; justify-content:center; background:#0a0a0a; }
   .stage:fullscreen .jarWrap { width:auto; height:min(80vh,880px); max-width:90vw; }
+  /* Format horizontal (bouton "Horizontal") : même rapport, en paysage. En plein écran, la largeur
+     est calculée pour tenir à la fois dans 90% de la largeur et 80% de la hauteur, sans déformer. */
+  .jarWrap.landscape { width:min(440px,90vw); aspect-ratio:160/110; }
+  .stage:fullscreen .jarWrap.landscape { height:auto; max-width:none; width:min(90vw, calc(80vh * 160 / 110), 1280px); }
   .jarWrap.flipped { transform:rotate(180deg); }
   .jarWrap canvas { width:100%; height:100%; display:block; }
   /* Reflet de verre, purement décoratif */
@@ -185,6 +189,8 @@
         <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
         <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
         <button class="btn ghost" id="dayNightBtn" type="button" title="Jour : ciel bleu, soleil et nuages blancs. Nuit : ciel étoilé, lune, nuages gris-bleu et sable éclairé d'une lumière lunaire bleutée. Passage en fondu.">🌙 Nuit</button>
+        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris). Un clic passe au thème suivant.">🏔️ Montagne</button>
+        <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
         <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
       </div>
     </div>
@@ -199,7 +205,7 @@
         <label>
           <div class="row"><span>Résolution du tableau<button type="button" class="infoBtn" data-target="subResolution" aria-label="Informations">i</button></span><span class="value" id="resolutionVal">245 × 356</span></div>
           <input type="range" id="resolutionSlider" min="50" max="330" value="245" step="5">
-          <span class="sub" id="subResolution">Nombre de grains simulés en largeur (jusqu'à 330 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
+          <span class="sub" id="subResolution">Nombre de grains simulés sur le petit côté du tableau (la largeur en vertical, la hauteur en horizontal ; jusqu'à 330 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
         </label>
         <label>
           <div class="row"><span>Bulles d'air<button type="button" class="infoBtn" data-target="subBubbles" aria-label="Informations">i</button></span><span class="value" id="bubbleVal">38%</span></div>
@@ -333,7 +339,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.23.56";
+const APP_VERSION = "0.25.56";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-23";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -420,19 +426,64 @@ document.addEventListener("click", (e) => {
 const EMPTY = 0, BROWN = 1, FOREST = 2, MEADOW = 3, GRAY = 4, WHITE = 5, BUBBLE = 6;
 const SAND_MIN = 1, SAND_MAX = 5;
 
-const GRID_ASPECT = 160 / 110; // hauteur/largeur, conservé quelle que soit la résolution choisie
+// Format du tableau (bouton Vertical/Horizontal) : même rapport 160/110 entre grand et petit côté,
+// en portrait (vertical, par défaut) ou en paysage (horizontal). Le curseur de résolution règle
+// le PETIT côté, pour garder le même nombre de cellules (donc le même coût) dans les deux formats.
+const FORMAT_RATIO = 160 / 110; // grand côté / petit côté, conservé quelle que soit la résolution
+const CANVAS_SHORT = 330, CANVAS_LONG = 480; // taille native du canvas (petit côté × grand côté)
+let landscape = false;
+function gridDims(shortSide) {
+  const s = Math.round(shortSide), l = Math.round(shortSide * FORMAT_RATIO);
+  return landscape ? [l, s] : [s, l];
+}
 let GRID_W = 245, GRID_H = 356;
 let CELL_COUNT = GRID_W * GRID_H;
 
 // Densité relative de chaque sable : le marron coule plus vite que le blanc (le plus léger).
 const DENSITY = { [BROWN]: 0.75, [FOREST]: 0.1, [MEADOW]: 0.25, [GRAY]: 0.05, [WHITE]: 0.01 };
-const COLOR_RGB = {
-  [BROWN]:  [92, 58, 33],
-  [FOREST]: [34, 82, 48],
-  [MEADOW]: [140, 193, 82],
-  [GRAY]:   [154, 150, 144],
-  [WHITE]:  [236, 229, 210],
-};
+// Thèmes (bouton "Thème") : chacun redéfinit la couleur et le nom affiché des 5 types de sable,
+// sans toucher à la simulation (densités, proportions et identifiants BROWN…WHITE inchangés — ce
+// sont les rôles des 5 sables, du plus lourd au plus léger avec les densités par défaut).
+// glowType = le sable qui devient luminescent la nuit (le plus clair du thème).
+const THEMES = [
+  {
+    label: "🏔️ Montagne", glowType: WHITE,
+    colors: {
+      [BROWN]:  ["Marron",       [92, 58, 33]],
+      [MEADOW]: ["Vert prairie", [140, 193, 82]],
+      [FOREST]: ["Vert forêt",   [34, 82, 48]],
+      [GRAY]:   ["Gris rocher",  [154, 150, 144]],
+      [WHITE]:  ["Blanc neige",  [236, 229, 210]],
+    },
+  },
+  {
+    // Désert : de l'orange (le plus lourd) au jaune (le plus léger).
+    label: "🏜️ Désert", glowType: WHITE,
+    colors: {
+      [BROWN]:  ["Terre brûlée", [138, 59, 18]],
+      [MEADOW]: ["Orange",       [217, 101, 30]],
+      [FOREST]: ["Ocre",         [232, 154, 60]],
+      [GRAY]:   ["Sable doré",   [233, 194, 82]],
+      [WHITE]:  ["Jaune pâle",   [244, 228, 166]],
+    },
+  },
+  {
+    // Arctique : du bleu au blanc, en finissant par le gris (dans l'ordre des cartouches).
+    label: "❄️ Arctique", glowType: GRAY,
+    colors: {
+      [BROWN]:  ["Bleu profond", [31, 78, 122]],
+      [MEADOW]: ["Bleu glace",   [74, 140, 196]],
+      [FOREST]: ["Bleu ciel",    [164, 207, 238]],
+      [GRAY]:   ["Blanc neige",  [241, 246, 250]],
+      [WHITE]:  ["Gris pierre",  [142, 149, 156]],
+    },
+  },
+];
+let themeIndex = 0;
+let glowType = THEMES[0].glowType;
+// Couleur courante de chaque sable, lue par render() — remplie depuis le thème actif.
+const COLOR_RGB = {};
+for (const [type, [, rgb]] of Object.entries(THEMES[0].colors)) COLOR_RGB[type] = rgb;
 // Poids de tirage à la génération du paysage, indépendants des densités : paysage à dominante
 // verte (prairie et forêt), un peu de marron, peu de gris et de blanc. Modifiables via le cartouche
 // "Proportions des sables" : les poids sont relatifs (leur somme n'est pas forcément 100),
@@ -987,11 +1038,11 @@ offCanvas.width = GRID_W; offCanvas.height = GRID_H;
 const offCtx = offCanvas.getContext("2d");
 let imgData = offCtx.createImageData(GRID_W, GRID_H);
 
-// Reconstruit la grille à une nouvelle résolution (largeur en cellules ; la hauteur suit le même ratio).
-function rebuildGrid(newW) {
+// Reconstruit la grille à une nouvelle résolution (petit côté en cellules ; le grand côté suit le
+// même ratio, dans le sens du format courant).
+function rebuildGrid(shortSide) {
   const oldCellCount = CELL_COUNT;
-  GRID_W = Math.round(newW);
-  GRID_H = Math.round(GRID_W * GRID_ASPECT);
+  [GRID_W, GRID_H] = gridDims(shortSide);
   CELL_COUNT = GRID_W * GRID_H;
   grid = new Uint8Array(CELL_COUNT);
   moved = new Uint8Array(CELL_COUNT);
@@ -1017,16 +1068,36 @@ function rebuildGrid(newW) {
 // rotation CSS actuel du cadre (y compris pendant l'animation de "Retourner") et on dessine le
 // décor tourné d'autant en sens inverse, comme vu à travers une fenêtre. Il est dessiné sur une
 // zone plus grande que le canvas pour que les coins restent couverts pendant la rotation.
-const SKY_W = mainCanvas.width, SKY_H = mainCanvas.height;
-const SKY_PAD = Math.hypot(SKY_W, SKY_H) / 2; // marge couvrant le canvas sous n'importe quel angle
-const skyGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
-skyGrad.addColorStop(0, "#2f7fc4");
-skyGrad.addColorStop(0.55, "#8cc6ec");
-skyGrad.addColorStop(1, "#e3f1f8");
+// Tout ce qui dépend de la taille du canvas (dégradés, soleil, étoiles) est recalculé par
+// layoutSky() quand le format change (vertical/horizontal).
+let SKY_W, SKY_H, SKY_PAD, SKY_UNIT, skyGrad, nightGrad, SUN_R, STARS;
+function layoutSky() {
+  SKY_W = mainCanvas.width; SKY_H = mainCanvas.height;
+  SKY_PAD = Math.hypot(SKY_W, SKY_H) / 2; // marge couvrant le canvas sous n'importe quel angle
+  SKY_UNIT = Math.min(SKY_W, SKY_H); // taille de référence (soleil, nuages), identique dans les deux formats
+  skyGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
+  skyGrad.addColorStop(0, "#2f7fc4");
+  skyGrad.addColorStop(0.55, "#8cc6ec");
+  skyGrad.addColorStop(1, "#e3f1f8");
+  nightGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
+  nightGrad.addColorStop(0, "#050b1e");
+  nightGrad.addColorStop(0.6, "#13224a");
+  nightGrad.addColorStop(1, "#2a3b66");
+  SUN_R = SKY_UNIT * 0.09;
+  // Étoiles : positions fixes (tirées ici) couvrant toute la zone dessinée, marge de rotation
+  // comprise ; [x, y, rayon, vitesse de scintillement, phase].
+  STARS = Array.from({ length: 110 }, () => [
+    -SKY_PAD + Math.random() * (SKY_W + 2 * SKY_PAD),
+    -SKY_PAD + Math.random() * (SKY_H * 0.75 + SKY_PAD),
+    0.5 + Math.random() * 1.1,
+    0.8 + Math.random() * 2.2,
+    Math.random() * Math.PI * 2,
+  ]);
+}
+layoutSky();
 
 // Soleil : traverse le ciel de gauche à droite en arc (haut au milieu, plus bas aux bords), puis
 // repart de la gauche. SUN_PERIOD = durée d'une traversée, en secondes.
-const SUN_R = SKY_W * 0.09;
 const SUN_PERIOD = 120;
 // Nuages : [x de départ, y, échelle, opacité, vitesse en px/s] — vitesses différentes pour un
 // effet de profondeur (les petits, plus lointains, vont moins vite). Chaque nuage est un amas de
@@ -1052,22 +1123,9 @@ function jarAngle() {
 const NIGHT_FADE_S = 1.5;
 let nightMix = 0;
 let lastSkyTs = 0;
-const nightGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
-nightGrad.addColorStop(0, "#050b1e");
-nightGrad.addColorStop(0.6, "#13224a");
-nightGrad.addColorStop(1, "#2a3b66");
 // Facteurs de lumière appliqués au sable et aux bulles, par canal (R, G, B), en pleine nuit.
 // Relevés (0,42/0,48/0,68 -> 0,68/0,72/0,86) : les grains étaient trop sombres la nuit.
 const NIGHT_LIGHT = [0.68, 0.72, 0.86];
-// Étoiles : positions fixes (tirées une fois) couvrant toute la zone dessinée, marge de rotation
-// comprise ; [x, y, rayon, vitesse de scintillement, phase].
-const STARS = Array.from({ length: 110 }, () => [
-  -SKY_PAD + Math.random() * (SKY_W + 2 * SKY_PAD),
-  -SKY_PAD + Math.random() * (SKY_H * 0.75 + SKY_PAD),
-  0.5 + Math.random() * 1.1,
-  0.8 + Math.random() * 2.2,
-  Math.random() * Math.PI * 2,
-]);
 // Cratères de la lune : [dx, dy, rayon] en fractions du rayon de la lune.
 const MOON_CRATERS = [[-0.3, -0.2, 0.22], [0.25, 0.1, 0.16], [-0.05, 0.4, 0.13], [0.35, -0.35, 0.1]];
 
@@ -1079,7 +1137,7 @@ function celestialPos(t) {
 
 function drawClouds(ctx, t, shadowColor, bodyRgb, alphaScale) {
   for (const [cx, cy, scale, alpha, speed] of CLOUDS) {
-    const u = SKY_W * 0.12 * scale;
+    const u = SKY_UNIT * 0.12 * scale;
     const margin = 1.7 * u; // demi-largeur du nuage : il sort entièrement avant de revenir
     const span = SKY_W + 2 * margin;
     const x0 = ((cx * SKY_W + margin + speed * t) % span) - margin;
@@ -1220,7 +1278,7 @@ function render() {
     const v = grid[p];
     const o = p * 4;
     if (gdata) {
-      if (v === WHITE) {
+      if (v === glowType) {
         gdata[o] = WHITE_GLOW_RGB[0]; gdata[o + 1] = WHITE_GLOW_RGB[1]; gdata[o + 2] = WHITE_GLOW_RGB[2]; gdata[o + 3] = 255;
       } else {
         gdata[o + 3] = 0;
@@ -1234,7 +1292,7 @@ function render() {
       const c = COLOR_RGB[v];
       const s = shade[p];
       const t = tint[p] * 14; // léger écart chaud/froid par grain, en plus de la luminosité
-      const isWhite = v === WHITE;
+      const isWhite = v === glowType; // le sable luminescent du thème n'est pas assombri la nuit
       data[o] = Math.max(0, Math.min(255, (c[0] * s + t) * (isWhite ? wr : lr)));
       data[o + 1] = Math.max(0, Math.min(255, c[1] * s * (isWhite ? wg : lg)));
       data[o + 2] = Math.max(0, Math.min(255, (c[2] * s - t) * (isWhite ? wb : lb)));
@@ -1345,10 +1403,26 @@ function loop(ts) {
 // ---------- Contrôles ----------
 const resolutionSlider = document.getElementById("resolutionSlider");
 const resolutionVal = document.getElementById("resolutionVal");
-resolutionSlider.addEventListener("input", () => {
-  const w = Number(resolutionSlider.value);
-  const h = Math.round(w * GRID_ASPECT);
+function updateResolutionLabel() {
+  const [w, h] = gridDims(Number(resolutionSlider.value));
   resolutionVal.textContent = w + " × " + h;
+}
+resolutionSlider.addEventListener("input", updateResolutionLabel);
+
+// Bouton de format, à côté de "Retourner le cadre" : bascule vertical/horizontal. Échange les
+// dimensions du canvas, du cadre (classe .landscape) et de la grille, puis recalcule le ciel et
+// génère un nouveau paysage — le sable ne peut pas être "tourné" d'un format à l'autre. Son
+// libellé annonce le format vers lequel il fait passer (comme le bouton Jour/Nuit).
+const formatBtn = document.getElementById("formatBtn");
+formatBtn.addEventListener("click", () => {
+  landscape = !landscape;
+  mainCanvas.width = landscape ? CANVAS_LONG : CANVAS_SHORT;
+  mainCanvas.height = landscape ? CANVAS_SHORT : CANVAS_LONG;
+  jarWrap.classList.toggle("landscape", landscape);
+  layoutSky();
+  rebuildGrid(Number(resolutionSlider.value));
+  updateResolutionLabel();
+  formatBtn.textContent = landscape ? "▯ Vertical" : "▭ Horizontal";
 });
 resolutionSlider.addEventListener("change", () => {
   rebuildGrid(Number(resolutionSlider.value));
@@ -1473,6 +1547,29 @@ sandCountInput.addEventListener("change", () => {
 });
 syncSandCountInput();
 updateProportionLabels(); // libellés % calculés depuis SAND_COLOR_WEIGHTS
+
+// Bouton Thème (à côté de "Retourner le cadre") : passe au thème suivant (Montagne -> Désert ->
+// Arctique -> Montagne) et affiche le thème actif. Recolore le sable en direct, sans régénérer le
+// paysage, et met à jour pastilles et noms des cartouches Densités et Proportions.
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme() {
+  const theme = THEMES[themeIndex];
+  glowType = theme.glowType;
+  for (const { name, type } of DENSITY_SLIDERS) {
+    const [label, rgb] = theme.colors[type];
+    COLOR_RGB[type] = rgb;
+    for (const prefix of ["dens", "prop"]) {
+      const group = document.getElementById(prefix + name + "Val").parentElement.querySelector(".labelGroup");
+      group.querySelector(".swatch").style.background = "rgb(" + rgb.join(",") + ")";
+      group.lastElementChild.textContent = label;
+    }
+  }
+  themeBtn.textContent = theme.label;
+}
+themeBtn.addEventListener("click", () => {
+  themeIndex = (themeIndex + 1) % THEMES.length;
+  applyTheme();
+});
 
 const frozenCheckbox = document.getElementById("frozenCheckbox");
 frozenCheckbox.addEventListener("change", () => {
