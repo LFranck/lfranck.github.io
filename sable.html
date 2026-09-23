@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.25.56
+  Version : 0.26.56
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-23
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -85,7 +85,11 @@
      est calculée pour tenir à la fois dans 90% de la largeur et 80% de la hauteur, sans déformer. */
   .jarWrap.landscape { width:min(440px,90vw); aspect-ratio:160/110; }
   .stage:fullscreen .jarWrap.landscape { height:auto; max-width:none; width:min(90vw, calc(80vh * 160 / 110), 1280px); }
-  .jarWrap.flipped { transform:rotate(180deg); }
+  /* Case "Incliner le tableau" : le cadre s'attrape pour le faire tourner (touch-action:none pour
+     qu'un glisser au doigt tourne le cadre au lieu de faire défiler la page). Pendant le glisser,
+     pas de transition : le cadre suit le pointeur sans retard. */
+  .jarWrap.tiltable { cursor:grab; touch-action:none; }
+  .jarWrap.dragging { cursor:grabbing; transition:none; }
   .jarWrap canvas { width:100%; height:100%; display:block; }
   /* Reflet de verre, purement décoratif */
   .jarWrap::before {
@@ -188,7 +192,7 @@
       <div class="actions">
         <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
         <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
-        <button class="btn ghost" id="dayNightBtn" type="button" title="Jour : ciel bleu, soleil et nuages blancs. Nuit : ciel étoilé, lune, nuages gris-bleu et sable éclairé d'une lumière lunaire bleutée. Passage en fondu.">🌙 Nuit</button>
+        <button class="btn ghost" id="dayNightBtn" type="button" title="Ambiance : Jour (soleil et nuages), Nuit (ciel étoilé, lune, sable éclairé d'une lumière lunaire bleutée) ou Auto (la nuit tombe quand le soleil sort du ciel, le jour revient avec la lune). Un clic passe au mode suivant.">☀️ Jour</button>
         <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris). Un clic passe au thème suivant.">🏔️ Montagne</button>
         <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
         <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
@@ -240,6 +244,14 @@
             <button type="button" class="infoBtn" data-target="subWrapEdges" aria-label="Informations">i</button>
           </label>
           <span class="sub" id="subWrapEdges">Le tableau se referme sur lui-même comme un cylindre : le sable et les bulles qui sortent par un bord réapparaissent par l'autre, sans mur pour les retenir. Le haut et le bas restent fermés.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="tiltCheckbox">
+            <span>Incliner le tableau</span>
+            <button type="button" class="infoBtn" data-target="subTilt" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subTilt">Attrapez le cadre (souris ou doigt) et faites-le tourner : la gravité suit son inclinaison et le sable coule dans le nouveau sens. Sur téléphone ou tablette, la gravité suit aussi l'inclinaison de l'appareil (sur iPhone/iPad, autorisez l'accès aux capteurs quand il est demandé). Décoché : le cadre revient droit, ou retourné.</span>
         </div>
       </div>
 
@@ -339,7 +351,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.25.56";
+const APP_VERSION = "0.26.56";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-23";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -381,46 +393,6 @@ document.addEventListener("click", (e) => {
   btn.classList.toggle("active", show);
 });
 
-/* ==========================================================================
-   TODO — pistes de réalisme discutées, à reprendre en session future.
-   Pour chaque point : la demande, puis la piste de résolution envisagée.
-   ==========================================================================
-
-   1. Flottabilité des particules légères
-      Demande : le fluide devrait pouvoir faire remonter les grains les plus
-      légers (blanc) au lieu de les laisser seulement tomber ou rester bloqués.
-      Résolution envisagée : dans tryMoveSand(), en dessous d'un seuil de
-      densité, donner au grain une petite probabilité de se déplacer À
-      L'ENCONTRE de la gravité quand il est bloqué (même mécanisme que
-      tryMoveBubble mais avec une probabilité bien plus faible), pour simuler
-      une mise en suspension par le courant.
-
-   2. Taille des grains proportionnelle au poids
-      Demande : les grains plus lourds devraient aussi être visuellement plus
-      gros (comme dans la réalité, où taille et poids sont liés).
-      Résolution envisagée : faire occuper aux sables les plus denses un bloc
-      de plusieurs cellules (ex. 2×2) au lieu d'une seule, plutôt qu'un simple
-      agrandissement au rendu — impacte donc la grille de simulation elle-même,
-      pas juste l'affichage. Complexifie le tassement fin, à tester.
-
-   3. Interaction par poids lors d'une collision entre deux grains — FAIT.
-      Un grain lourd qui tombe sur un grain de densité strictement inférieure
-      repousse ce dernier de côté (gauche/droite selon disponibilité, aléatoire
-      si les deux le sont) plutôt que de le traverser verticalement — voir
-      tryDisplaceSideways() et son appel dans tryMoveSand().
-
-   4. Épaisseur du tableau (profondeur avant/arrière)
-      Demande : les vrais cadres ont une épaisseur (deux plaques de verre avec
-      du sable entre les deux), alors que la simulation actuelle est purement
-      2D (une seule grille plate).
-      Résolution envisagée : plutôt qu'une vraie grille 3D (coût cubique,
-      probablement trop lourd), faire tourner 2-3 grilles 2D indépendantes
-      (couches avant/arrière, chacune avec sa propre simulation) et les
-      superposer au rendu avec un léger décalage de position, du flou/une
-      opacité réduite pour les couches arrière, et éventuellement une
-      parallaxe au mouvement de la souris.
-   ========================================================================== */
-
 // ---------- Automate de sable (grille de cellules) ----------
 // Chaque cellule : 0 = liquide (vide), 1-4 = sable coloré, 5 = bulle d'air.
 const EMPTY = 0, BROWN = 1, FOREST = 2, MEADOW = 3, GRAY = 4, WHITE = 5, BUBBLE = 6;
@@ -445,6 +417,9 @@ const DENSITY = { [BROWN]: 0.75, [FOREST]: 0.1, [MEADOW]: 0.25, [GRAY]: 0.05, [W
 // sans toucher à la simulation (densités, proportions et identifiants BROWN…WHITE inchangés — ce
 // sont les rôles des 5 sables, du plus lourd au plus léger avec les densités par défaut).
 // glowType = le sable qui devient luminescent la nuit (le plus clair du thème).
+// sky = le ciel du thème : dégradés de jour et de nuit ([position, couleur]), couleurs du soleil
+// (cœur, bord) et de son halo, couleur et opacité des nuages de jour, et effets propres au thème
+// (haze : brume de chaleur le jour ; aurora : aurore boréale la nuit).
 const THEMES = [
   {
     label: "🏔️ Montagne", glowType: WHITE,
@@ -455,9 +430,16 @@ const THEMES = [
       [GRAY]:   ["Gris rocher",  [154, 150, 144]],
       [WHITE]:  ["Blanc neige",  [236, 229, 210]],
     },
+    sky: {
+      day: [[0, "#2f7fc4"], [0.55, "#8cc6ec"], [1, "#e3f1f8"]],
+      night: [[0, "#050b1e"], [0.6, "#13224a"], [1, "#2a3b66"]],
+      sun: ["#fffbe6", "#ffd95a"], halo: "255,245,200", haloAlpha: 0.75,
+      cloud: "255,255,255", cloudAlpha: 1,
+    },
   },
   {
-    // Désert : de l'orange (le plus lourd) au jaune (le plus léger).
+    // Désert : de l'orange (le plus lourd) au jaune (le plus léger). Ciel chaud qui pâlit vers un
+    // horizon sable, soleil plus orangé et plus éblouissant, nuages rares et légers, brume de chaleur.
     label: "🏜️ Désert", glowType: WHITE,
     colors: {
       [BROWN]:  ["Terre brûlée", [138, 59, 18]],
@@ -466,9 +448,17 @@ const THEMES = [
       [GRAY]:   ["Sable doré",   [233, 194, 82]],
       [WHITE]:  ["Jaune pâle",   [244, 228, 166]],
     },
+    sky: {
+      day: [[0, "#3b86cc"], [0.5, "#a4cbe2"], [1, "#f6dcaa"]],
+      night: [[0, "#0d0820"], [0.6, "#2a1840"], [1, "#4a2a48"]],
+      sun: ["#fffbe0", "#ffb838"], halo: "255,215,140", haloAlpha: 0.9,
+      cloud: "255,248,236", cloudAlpha: 0.55,
+      haze: true,
+    },
   },
   {
-    // Arctique : du bleu au blanc, en finissant par le gris (dans l'ordre des cartouches).
+    // Arctique : du bleu au blanc, en finissant par le gris (dans l'ordre des cartouches). Ciel
+    // froid et pâle, soleil blanc, nuit très sombre avec aurore boréale.
     label: "❄️ Arctique", glowType: GRAY,
     colors: {
       [BROWN]:  ["Bleu profond", [31, 78, 122]],
@@ -476,6 +466,13 @@ const THEMES = [
       [FOREST]: ["Bleu ciel",    [164, 207, 238]],
       [GRAY]:   ["Blanc neige",  [241, 246, 250]],
       [WHITE]:  ["Gris pierre",  [142, 149, 156]],
+    },
+    sky: {
+      day: [[0, "#5f9fd2"], [0.55, "#b9daf0"], [1, "#f1f8fc"]],
+      night: [[0, "#02060f"], [0.6, "#0b1a33"], [1, "#1a2d4d"]],
+      sun: ["#ffffff", "#fff1c4"], halo: "235,245,255", haloAlpha: 0.6,
+      cloud: "255,255,255", cloudAlpha: 1,
+      aurora: true,
     },
   },
 ];
@@ -537,9 +534,82 @@ let recentlyMoved = new Uint8Array(CELL_COUNT);
 // Bords non liés : inBounds() refuse x hors grille avant tout appel à idx(), la correction ne sert pas.
 const idx = (x, y) => y * GRID_W + (x < 0 ? x + GRID_W : x >= GRID_W ? x - GRID_W : x);
 const inBounds = (x, y) => (params.wrapEdges || (x >= 0 && x < GRID_W)) && y >= 0 && y < GRID_H;
+// Ramène x dans la grille quand les bords sont liés (pour les parcours de plusieurs cases, où le
+// décalage s'accumule) ; bords non liés : x inchangé, c'est inBounds() qui le refusera.
+const wx = (x) => (params.wrapEdges ? (x < 0 ? x + GRID_W : x >= GRID_W ? x - GRID_W : x) : x);
+const isEmptyAt = (x, y) => inBounds(x, y) && grid[idx(x, y)] === EMPTY;
+const isFreeAt = (x, y) => { if (!inBounds(x, y)) return false; const i = idx(x, y); return !moved[i] && grid[i] === EMPTY; };
 
-let gravityDown = true; // sens de la gravité dans le repère de la grille (inversé par "Retourner")
-const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 38, flowPct: 10, flowShow: false, wrapEdges: true, frozen: false, night: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 38%, courant 10% (plafond), affichage courant off, bords liés on, paysage figé off, jour (sandCount : voir plus bas)
+// ---------- Direction de la gravité ----------
+// La gravité peut pointer dans n'importe quelle direction (case "Incliner le tableau") : c'est un
+// angle continu (gravityAngle, repère de la grille, atan2(y, x) ; π/2 = vers le bas). L'automate,
+// lui, ne connaît que les 8 directions de la grille : à chaque pas, setStepGravity() tire l'une des
+// deux directions qui encadrent l'angle, au prorata de sa proximité — en moyenne, le sable tombe
+// exactement selon l'angle voulu. Directions, dans l'ordre (chaque voisin ±1 est tourné de 45°) :
+// 0 bas, 1 bas-droite, 2 droite, 3 haut-droite, 4 haut, 5 haut-gauche, 6 gauche, 7 bas-gauche.
+const DIR_X = [0, 1, 1, 1, 0, -1, -1, -1];
+const DIR_Y = [1, 1, 0, -1, -1, -1, 0, 1];
+let gravityAngle = Math.PI / 2;
+let gravityMixed = false; // angle entre deux directions : la mise en veille des blocs est suspendue
+// Directions utilisées pendant le pas en cours : chute (g), montée (up), diagonales de chute (dA/dB),
+// côtés (sA/sB) et diagonales de montée des bulles (uA/uB).
+let gDX = 0, gDY = 1, upDX = 0, upDY = -1;
+let dAX, dAY, dBX, dBY, sAX, sAY, sBX, sBY, uAX, uAY, uBX, uBY;
+function setStepGravity() {
+  let k = (Math.PI / 2 - gravityAngle) / (Math.PI / 4);
+  k = ((k % 8) + 8) % 8;
+  if (Math.abs(k - Math.round(k)) < 1e-6) k = Math.round(k) % 8; // angle pile sur une direction
+  const k0 = Math.floor(k), frac = k - k0;
+  gravityMixed = frac > 0;
+  const g = (Math.random() < frac ? k0 + 1 : k0) & 7;
+  gDX = DIR_X[g]; gDY = DIR_Y[g];
+  upDX = -gDX; upDY = -gDY;
+  dAX = DIR_X[(g + 1) & 7]; dAY = DIR_Y[(g + 1) & 7]; dBX = DIR_X[(g + 7) & 7]; dBY = DIR_Y[(g + 7) & 7];
+  sAX = DIR_X[(g + 2) & 7]; sAY = DIR_Y[(g + 2) & 7]; sBX = DIR_X[(g + 6) & 7]; sBY = DIR_Y[(g + 6) & 7];
+  uAX = DIR_X[(g + 3) & 7]; uAY = DIR_Y[(g + 3) & 7]; uBX = DIR_X[(g + 5) & 7]; uBY = DIR_Y[(g + 5) & 7];
+}
+setStepGravity();
+// La gravité pointe-t-elle plutôt vers le bas de la grille ? (vue en couches)
+const gravityPointsDown = () => Math.sin(gravityAngle) >= 0;
+
+// ---------- Mise en veille des zones au repos ----------
+// La grille est découpée en blocs de 16 × 16 cellules. Un bloc n'est simulé au pas suivant que
+// s'il est "éveillé" : parce qu'un grain y a bougé (ou juste à côté — wake() réveille le bloc et
+// ses 8 voisins), ou parce qu'un de ses grains a encore une case où aller même s'il n'a pas bougé
+// ce pas-ci (déplacements aléatoires — keepAwake()). Un tas de sable tassé n'est donc plus
+// recalculé à chaque pas : seules la surface, les zones en mouvement et le liquide qui les touche
+// coûtent. Toute modification extérieure de la grille (nouveau paysage, bulles, gravité, densités…)
+// appelle wakeAll().
+const CHUNK_SHIFT = 4; // blocs de 2^4 = 16 cellules de côté
+let chunkCols = 1, chunkRows = 1;
+let chunkNow = new Uint8Array(1), chunkNext = new Uint8Array(1);
+function allocChunks() {
+  chunkCols = (GRID_W + (1 << CHUNK_SHIFT) - 1) >> CHUNK_SHIFT;
+  chunkRows = (GRID_H + (1 << CHUNK_SHIFT) - 1) >> CHUNK_SHIFT;
+  chunkNow = new Uint8Array(chunkCols * chunkRows).fill(1);
+  chunkNext = new Uint8Array(chunkCols * chunkRows).fill(1);
+}
+allocChunks();
+function wakeAll() { chunkNow.fill(1); chunkNext.fill(1); }
+function wake(x, y) {
+  if (x < 0) x += GRID_W; else if (x >= GRID_W) x -= GRID_W;
+  const cx = x >> CHUNK_SHIFT, cy = y >> CHUNK_SHIFT;
+  for (let dy = -1; dy <= 1; dy++) {
+    const ry = cy + dy;
+    if (ry < 0 || ry >= chunkRows) continue;
+    for (let dx = -1; dx <= 1; dx++) {
+      let rx = cx + dx;
+      if (rx < 0 || rx >= chunkCols) {
+        if (!params.wrapEdges) continue;
+        rx = (rx + chunkCols) % chunkCols;
+      }
+      chunkNext[ry * chunkCols + rx] = 1;
+    }
+  }
+}
+function keepAwake(x, y) { chunkNext[(y >> CHUNK_SHIFT) * chunkCols + (x >> CHUNK_SHIFT)] = 1; }
+
+const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 38, flowPct: 10, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 38%, courant 10% (plafond), affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
 
 // ---------- Bruit de Perlin 2D (pour le champ de courant du fluide) ----------
 // Implémentation classique (table de permutation + interpolation "fade"), suffisante pour
@@ -724,6 +794,7 @@ function spawnBubblesTo(target) {
     const i = idx(x, y);
     if (grid[i] === EMPTY) { grid[i] = BUBBLE; count++; }
   }
+  wakeAll();
 }
 function removeBubblesTo(target) {
   let count = countBubbles();
@@ -733,6 +804,7 @@ function removeBubblesTo(target) {
     const p = Math.floor(Math.random() * CELL_COUNT);
     if (grid[p] === BUBBLE) { grid[p] = EMPTY; count--; }
   }
+  wakeAll();
 }
 
 // Place le sable et les bulles au hasard dans la grille, puis fait avancer la simulation
@@ -754,7 +826,7 @@ function scatterInitial() {
     const tmp = cells[n]; cells[n] = cells[j]; cells[j] = tmp;
     grid[cells[n]] = pickSandColor();
   }
-  spawnBubblesTo(bubbleTargetCount());
+  spawnBubblesTo(bubbleTargetCount()); // (réveille aussi tous les blocs)
   for (let p = 0; p < CELL_COUNT; p++) {
     shade[p] = 0.82 + Math.random() * 0.36;
     tint[p] = Math.random() * 2 - 1;
@@ -792,10 +864,11 @@ function buildLayers() {
   for (let k = 0; k < types.length; k++) {
     for (let c = 0; c < counts[k]; c++, n++) {
       const row = Math.floor(n / GRID_W);
-      const y = gravityDown ? GRID_H - 1 - row : row;
+      const y = gravityPointsDown() ? GRID_H - 1 - row : row;
       grid[idx(n % GRID_W, y)] = types[k];
     }
   }
+  wakeAll();
 }
 function enterLayerView() {
   layerSnapshot = grid.slice();
@@ -804,6 +877,7 @@ function enterLayerView() {
 function exitLayerView() {
   if (layerSnapshot && layerSnapshot.length === CELL_COUNT) grid.set(layerSnapshot);
   layerSnapshot = null;
+  wakeAll();
   // Les bulles ont pu être réglées pendant la vue en couches : on les ajuste maintenant.
   const target = bubbleTargetCount();
   if (target > countBubbles()) spawnBubblesTo(target); else removeBubblesTo(target);
@@ -813,16 +887,15 @@ function exitLayerView() {
 // pondéré par la densité de chaque grain (pas un simple comptage) : une pile de sable lourd
 // (marron) pèse plus qu'une pile de même hauteur de sable léger (blanc).
 function stackWeightAt(x, y) {
-  const dyUp = gravityDown ? -1 : 1;
   let weight = 0;
   let count = 0;
-  let cy = y + dyUp;
-  while (count < STACK_CAP && inBounds(x, cy)) {
-    const v = grid[idx(x, cy)];
+  let cx = wx(x + upDX), cy = y + upDY;
+  while (count < STACK_CAP && inBounds(cx, cy)) {
+    const v = grid[idx(cx, cy)];
     if (v < SAND_MIN || v > SAND_MAX) break;
     weight += DENSITY[v];
     count++;
-    cy += dyUp;
+    cx = wx(cx + upDX); cy += upDY;
   }
   return weight;
 }
@@ -830,12 +903,11 @@ function stackWeightAt(x, y) {
 // Épaisseur de la poche de bulles contigües juste après (x,y) dans le sens de la chute — plus
 // elle est épaisse, plus il y a d'air à repousser d'un coup, donc plus de résistance à la pression.
 function bubblePocketDepth(x, y) {
-  const dy = gravityDown ? 1 : -1;
-  let cy = y + dy;
+  let cx = wx(x + gDX), cy = y + gDY;
   let count = 0;
-  while (count < STACK_CAP && inBounds(x, cy) && grid[idx(x, cy)] === BUBBLE) {
+  while (count < STACK_CAP && inBounds(cx, cy) && grid[idx(cx, cy)] === BUBBLE) {
     count++;
-    cy += dy;
+    cx = wx(cx + gDX); cy += gDY;
   }
   return count;
 }
@@ -847,38 +919,45 @@ function bubblePocketDepth(x, y) {
 // Au tour suivant, la bulle — désormais entourée différemment — retrouve sa physique normale
 // (tryMoveBubble) et cherchera un passage de côté pour continuer à remonter, libérant le sable.
 function tryPressureShift(x, y) {
-  const dy = gravityDown ? 1 : -1;
-  const landY = y + dy * (bubblePocketDepth(x, y) + 1);
-  if (!inBounds(x, landY)) return false;
-  const landI = idx(x, landY);
+  if (!inBounds(x, y)) return false; // colonne voisine hors du tableau (bords non liés)
+  x = wx(x);
+  const depth = bubblePocketDepth(x, y) + 1;
+  let landX = x, landY = y;
+  for (let k = 0; k < depth; k++) { landX = wx(landX + gDX); landY += gDY; }
+  if (!inBounds(landX, landY)) return false;
+  const landI = idx(landX, landY);
   if (moved[landI] || grid[landI] !== EMPTY) return false; // pas de place : le forçage échoue
 
   // Fait glisser tout le bloc (colonne de sable + poche de bulles) d'une case, en partant de la
   // place libre et en remontant jusqu'au sommet de la colonne de sable, qui se retrouve vide.
-  let dst = landY;
-  let src = landY - dy;
+  // Chaque case modifiée réveille son bloc : la colonne peut s'étendre sur plusieurs blocs.
+  let dstX = landX, dstY = landY;
+  let srcX = wx(landX - gDX), srcY = landY - gDY;
   let steps = 0;
-  while (steps < STACK_CAP && inBounds(x, src)) {
-    const sv = grid[idx(x, src)];
+  while (steps < STACK_CAP && inBounds(srcX, srcY)) {
+    const sv = grid[idx(srcX, srcY)];
     if (sv !== BUBBLE && (sv < SAND_MIN || sv > SAND_MAX)) break;
-    const dstI = idx(x, dst);
+    const dstI = idx(dstX, dstY);
     grid[dstI] = sv; moved[dstI] = 1;
-    dst = src; src -= dy; steps++;
+    wake(dstX, dstY);
+    dstX = srcX; dstY = srcY;
+    srcX = wx(srcX - gDX); srcY -= gDY; steps++;
   }
-  grid[idx(x, dst)] = EMPTY;
+  grid[idx(dstX, dstY)] = EMPTY;
+  wake(dstX, dstY);
   return true;
 }
 
-// Repousse de côté le grain (léger) situé en (x,y) pour faire de la place à un grain plus lourd
-// qui tombe dessus : priorité à une case libre à gauche ou à droite ; si les deux le sont, le
-// choix entre les deux est aléatoire (même priorité), sinon c'est déterministe.
+// Repousse de côté (perpendiculairement à la gravité) le grain léger situé en (x,y) pour faire de
+// la place à un grain plus lourd qui tombe dessus : priorité à une case libre d'un côté ou de
+// l'autre ; si les deux le sont, le choix est aléatoire (même priorité), sinon déterministe.
 function tryDisplaceSideways(x, y) {
   const i = idx(x, y);
-  const leftFree = inBounds(x - 1, y) && !moved[idx(x - 1, y)] && grid[idx(x - 1, y)] === EMPTY;
-  const rightFree = inBounds(x + 1, y) && !moved[idx(x + 1, y)] && grid[idx(x + 1, y)] === EMPTY;
-  if (!leftFree && !rightFree) return false;
-  const dx = leftFree && rightFree ? (Math.random() < 0.5 ? -1 : 1) : (leftFree ? -1 : 1);
-  const ti = idx(x + dx, y);
+  const aFree = isFreeAt(x + sAX, y + sAY);
+  const bFree = isFreeAt(x + sBX, y + sBY);
+  if (!aFree && !bFree) return false;
+  const useA = aFree && bFree ? Math.random() < 0.5 : aFree;
+  const ti = useA ? idx(x + sAX, y + sAY) : idx(x + sBX, y + sBY);
   grid[ti] = grid[i]; moved[ti] = 1;
   grid[i] = EMPTY;
   return true;
@@ -906,65 +985,95 @@ function tryMoveSand(x, y) {
 
   const prob = Math.min(1, BASE_PROB * params.gravityStrength * DENSITY[v]);
   if (Math.random() > prob) return;
-  const dy = gravityDown ? 1 : -1;
-  const ny = y + dy;
-  if (!inBounds(x, ny)) return;
-  const ni = idx(x, ny);
-  if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
-  if (!moved[ni] && grid[ni] === BUBBLE) {
-    // Le poids du sable accumulé juste au-dessus (pondéré par densité) peut suffire à forcer le
-    // passage plutôt que d'attendre indéfiniment un trou — mais plus la poche de bulles à
-    // traverser est épaisse, plus elle résiste (division par son épaisseur). Si le passage est
-    // forcé, le sable ne traverse pas la bulle : toute la colonne (sable + bulle) descend
-    // ensemble d'un cran (voir tryPressureShift).
-    const weight = stackWeightAt(x, y);
-    const resistance = bubblePocketDepth(x, y);
-    const forceProb = Math.min(0.9, (FORCE_BASE_PROB * weight * params.gravityStrength) / resistance);
-    if (Math.random() < forceProb && tryPressureShift(x, y)) {
-      // La colonne qui vient de forcer le passage peut entraîner une colonne voisine dans le même
-      // mouvement (gauche et/ou droite, tirages indépendants) — tryPressureShift() gère elle-même
-      // le cas où le voisin n'a rien à forcer (simple chute d'une case) ou est bloqué (aucun effet).
-      if (Math.random() < DRAG_NEIGHBOR_PROB) tryPressureShift(x - 1, y);
-      if (Math.random() < DRAG_NEIGHBOR_PROB) tryPressureShift(x + 1, y);
-      return;
+  const nx = x + gDX, ny = y + gDY;
+  if (inBounds(nx, ny)) {
+    const ni = idx(nx, ny);
+    if (!moved[ni]) {
+      const n = grid[ni];
+      if (n === EMPTY) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
+      if (n === BUBBLE) {
+        // Le poids du sable accumulé juste au-dessus (pondéré par densité) peut suffire à forcer le
+        // passage plutôt que d'attendre indéfiniment un trou — mais plus la poche de bulles à
+        // traverser est épaisse, plus elle résiste (division par son épaisseur). Si le passage est
+        // forcé, le sable ne traverse pas la bulle : toute la colonne (sable + bulle) descend
+        // ensemble d'un cran (voir tryPressureShift).
+        const weight = stackWeightAt(x, y);
+        const resistance = bubblePocketDepth(x, y);
+        const forceProb = Math.min(0.9, (FORCE_BASE_PROB * weight * params.gravityStrength) / resistance);
+        if (Math.random() < forceProb && tryPressureShift(x, y)) {
+          // La colonne qui vient de forcer le passage peut entraîner une colonne voisine dans le
+          // même mouvement (d'un côté et/ou de l'autre, tirages indépendants) — tryPressureShift()
+          // gère elle-même le cas où le voisin n'a rien à forcer ou est bloqué (aucun effet).
+          if (Math.random() < DRAG_NEIGHBOR_PROB) tryPressureShift(x + sAX, y + sAY);
+          if (Math.random() < DRAG_NEIGHBOR_PROB) tryPressureShift(x + sBX, y + sBY);
+          return;
+        }
+      } else if (n >= SAND_MIN && n <= SAND_MAX && DENSITY[n] < DENSITY[v]) {
+        // Un grain plus lourd tombe sur un grain plus léger : celui-ci est repoussé de côté pour
+        // libérer la place, plutôt que d'être traversé.
+        if (tryDisplaceSideways(nx, ny)) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
+      }
     }
   }
-  if (!moved[ni] && grid[ni] >= SAND_MIN && grid[ni] <= SAND_MAX && DENSITY[grid[ni]] < DENSITY[v]) {
-    // Un grain plus lourd tombe sur un grain plus léger : celui-ci est repoussé de côté pour
-    // libérer la place, plutôt que d'être traversé verticalement.
-    if (tryDisplaceSideways(x, ny)) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
-  }
-  // Bloqué à la verticale (mur, sable ou bulle) : cherche un passage en diagonale
+  // Bloqué dans le sens de la chute (mur, sable ou bulle) : cherche un passage en diagonale
   // -> c'est cette règle qui crée à la fois l'angle de repos des dunes et le filtrage par les bulles.
   // Le courant, s'il y en a, penche le choix du côté vers lequel il pousse (sans jamais l'imposer).
-  let order;
+  let aFirst;
   if (flow) {
-    const favorRight = flow.vx >= 0;
-    const biasProb = 0.5 + Math.min(0.4, Math.abs(flow.vx) * 0.4);
-    order = Math.random() < biasProb ? (favorRight ? [1, -1] : [-1, 1]) : (favorRight ? [-1, 1] : [1, -1]);
+    const push = (dAX - dBX) * flow.vx + (dAY - dBY) * flow.vy; // > 0 : le courant pousse vers la diagonale A
+    const biasProb = 0.5 + Math.min(0.4, Math.abs(push) * 0.2);
+    aFirst = Math.random() < biasProb ? push >= 0 : push < 0;
   } else {
-    order = Math.random() < 0.5 ? [-1, 1] : [1, -1];
+    aFirst = Math.random() < 0.5;
   }
-  for (const dx of order) {
-    const tx = x + dx, ty = y + dy;
-    if (!inBounds(tx, ty)) continue;
-    const ti = idx(tx, ty);
-    if (!moved[ti] && grid[ti] === EMPTY) { grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1; return; }
-  }
+  const t1x = aFirst ? dAX : dBX, t1y = aFirst ? dAY : dBY;
+  const t2x = aFirst ? dBX : dAX, t2y = aFirst ? dBY : dAY;
+  if (isFreeAt(x + t1x, y + t1y)) { const ti = idx(x + t1x, y + t1y); grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1; return; }
+  if (isFreeAt(x + t2x, y + t2y)) { const ti = idx(x + t2x, y + t2y); grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1; }
 }
 
-// Bande proche du haut (côté opposé à la gravité) où le répandage latéral (priorité 3 ci-dessous)
-// est coupé — recalculée à chaque appel à partir de gravityDown, donc se retourne automatiquement
-// avec le cadre.
+// Un grain immobile a-t-il encore une case où aller ? (mêmes règles que tryMoveSand, sans les
+// tirages au sort) — sert à garder son bloc éveillé (keepAwake) tant que c'est le cas.
+function sandCanMove(x, y, v) {
+  const nx = x + gDX, ny = y + gDY;
+  if (inBounds(nx, ny)) {
+    const n = grid[idx(nx, ny)];
+    if (n === EMPTY) return true;
+    if (n === BUBBLE) {
+      // Forçage par la pression possible seulement s'il y a une case libre après la poche de bulles.
+      let lx = wx(nx), ly = ny, k = 0;
+      while (k < STACK_CAP && inBounds(lx, ly) && grid[idx(lx, ly)] === BUBBLE) { lx = wx(lx + gDX); ly += gDY; k++; }
+      if (isEmptyAt(lx, ly)) return true;
+    } else if (n >= SAND_MIN && n <= SAND_MAX && DENSITY[n] < DENSITY[v]) {
+      if (isEmptyAt(nx + sAX, ny + sAY) || isEmptyAt(nx + sBX, ny + sBY)) return true;
+    }
+  }
+  if (isEmptyAt(x + dAX, y + dAY) || isEmptyAt(x + dBX, y + dBY)) return true;
+  // Courant : poussée le long de l'axe horizontal de la grille, vers une case libre.
+  return params.flowPct > 0 && (isEmptyAt(x - 1, y) || isEmptyAt(x + 1, y));
+}
+function bubbleCanMove(x, y) {
+  if (isEmptyAt(x + upDX, y + upDY) || isEmptyAt(x + uAX, y + uAY) || isEmptyAt(x + uBX, y + uBY)) return true;
+  return !isInSurfaceBand(x, y) && (isEmptyAt(x + sAX, y + sAY) || isEmptyAt(x + sBX, y + sBY));
+}
+
+// Bande proche du "haut" (côté opposé à la gravité) où le répandage latéral des bulles (priorité 3
+// ci-dessous) est coupé — calculée à partir de la direction de chute du pas en cours, donc suit le
+// cadre retourné ou incliné. Gravité horizontale : bande le long du bord gauche ou droit (aucune
+// si les bords sont liés, il n'y a alors pas de "haut").
 const BUBBLE_SURFACE_BAND = 0.05;
-function isInSurfaceBand(y) {
-  const band = Math.max(1, Math.round(GRID_H * BUBBLE_SURFACE_BAND));
-  return gravityDown ? y < band : y >= GRID_H - band;
+function isInSurfaceBand(x, y) {
+  if (gDY !== 0) {
+    const band = Math.max(1, Math.round(GRID_H * BUBBLE_SURFACE_BAND));
+    return gDY > 0 ? y < band : y >= GRID_H - band;
+  }
+  if (params.wrapEdges) return false;
+  const band = Math.max(1, Math.round(GRID_W * BUBBLE_SURFACE_BAND));
+  return gDX > 0 ? x < band : x >= GRID_W - band;
 }
 
 function tryMoveBubble(x, y) {
   const i = idx(x, y);
-  const dy = gravityDown ? -1 : 1; // flotte à l'inverse du sable
 
   // Viscosité (atténuée par coalescence) : une bulle seule dans un liquide épais a une petite
   // chance de ne pas bouger du tout ce pas-ci. Chaque bulle voisine directe (haut/bas/gauche/
@@ -979,54 +1088,72 @@ function tryMoveBubble(x, y) {
   const drag = BUBBLE_VISCOSITY_DRAG * ((params.viscosity - 1) / 9) * (1 - relief);
   if (Math.random() < drag) return;
 
-  const ny = y + dy;
-  if (inBounds(x, ny)) {
-    // Priorité 1 : une place libre juste au-dessus -> la bulle y va directement, sans tirage.
-    const ni = idx(x, ny);
-    if (!moved[ni] && grid[ni] === EMPTY) { grid[ni] = BUBBLE; grid[i] = EMPTY; moved[ni] = 1; return; }
-    // Priorité 2 : sinon une diagonale libre au-dessus. Si les deux côtés sont libres à la fois,
-    // seul le choix entre les deux est aléatoire (même priorité) ; sinon c'est déterministe.
-    const leftFree = inBounds(x - 1, ny) && !moved[idx(x - 1, ny)] && grid[idx(x - 1, ny)] === EMPTY;
-    const rightFree = inBounds(x + 1, ny) && !moved[idx(x + 1, ny)] && grid[idx(x + 1, ny)] === EMPTY;
-    if (leftFree && rightFree) {
-      const dx = Math.random() < 0.5 ? -1 : 1;
-      const ti = idx(x + dx, ny);
-      grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return;
-    }
-    if (leftFree) { const ti = idx(x - 1, ny); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
-    if (rightFree) { const ti = idx(x + 1, ny); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
+  // Priorité 1 : une place libre juste au-dessus (à l'opposé de la gravité) -> la bulle y va
+  // directement, sans tirage.
+  if (isFreeAt(x + upDX, y + upDY)) { const ti = idx(x + upDX, y + upDY); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
+  // Priorité 2 : sinon une diagonale libre au-dessus. Si les deux côtés sont libres à la fois,
+  // seul le choix entre les deux est aléatoire (même priorité) ; sinon c'est déterministe.
+  const aFree = isFreeAt(x + uAX, y + uAY);
+  const bFree = isFreeAt(x + uBX, y + uBY);
+  if (aFree || bFree) {
+    const useA = aFree && bFree ? Math.random() < 0.5 : aFree;
+    const ti = useA ? idx(x + uAX, y + uAY) : idx(x + uBX, y + uBY);
+    grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return;
   }
-  // Priorité 3 : bloquée à la verticale ET en diagonale (typiquement collée sous une couche de
-  // sable) -> se répand directement sur le côté, comme un gaz qui se love sous une surface plutôt
-  // que de tâtonner lentement au hasard. Même règle que les priorités 1/2 : déterministe, tirage
+  // Priorité 3 : bloquée au-dessus ET en diagonale (typiquement collée sous une couche de sable)
+  // -> se répand directement sur le côté, comme un gaz qui se love sous une surface plutôt que de
+  // tâtonner lentement au hasard. Même règle que les priorités 1/2 : déterministe, tirage
   // uniquement pour départager si les deux côtés sont libres à la fois. Désactivée près du haut
   // (voir isInSurfaceBand) : dans cette zone, une bulle bloquée doit rester bloquée (collision
   // naturelle avec ses voisines), pas se répandre sans cesse sur le côté façon "courant" latéral.
-  if (isInSurfaceBand(y)) return;
-  const sideLeftFree = inBounds(x - 1, y) && !moved[idx(x - 1, y)] && grid[idx(x - 1, y)] === EMPTY;
-  const sideRightFree = inBounds(x + 1, y) && !moved[idx(x + 1, y)] && grid[idx(x + 1, y)] === EMPTY;
-  if (sideLeftFree && sideRightFree) {
-    const dx = Math.random() < 0.5 ? -1 : 1;
-    const ti = idx(x + dx, y);
-    grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return;
+  if (isInSurfaceBand(x, y)) return;
+  const sideAFree = isFreeAt(x + sAX, y + sAY);
+  const sideBFree = isFreeAt(x + sBX, y + sBY);
+  if (sideAFree || sideBFree) {
+    const useA = sideAFree && sideBFree ? Math.random() < 0.5 : sideAFree;
+    const ti = useA ? idx(x + sAX, y + sAY) : idx(x + sBX, y + sBY);
+    grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1;
   }
-  if (sideLeftFree) { const ti = idx(x - 1, y); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
-  if (sideRightFree) { const ti = idx(x + 1, y); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; }
 }
 
 function processCell(x, y) {
   const i = idx(x, y);
   if (moved[i]) return;
   const v = grid[i];
-  if (v >= SAND_MIN && v <= SAND_MAX) tryMoveSand(x, y);
-  else if (v === BUBBLE) tryMoveBubble(x, y);
+  if (v === EMPTY) return;
+  if (v === BUBBLE) tryMoveBubble(x, y); else tryMoveSand(x, y);
+  // A bougé (case vidée, ou remplie par un bloc poussé par la pression) : réveille les blocs
+  // alentour, ses voisins ont peut-être maintenant la place de bouger. Sinon, garde son propre
+  // bloc éveillé s'il avait une case où aller (il n'a juste pas été tiré au sort ce pas-ci).
+  if (moved[i] || grid[i] !== v) wake(x, y);
+  else if (v === BUBBLE ? bubbleCanMove(x, y) : sandCanMove(x, y, v)) keepAwake(x, y);
 }
 
+// Un pas de simulation : lignes parcourues alternativement dans un sens puis dans l'autre (pour ne
+// pas favoriser un côté), bloc par bloc, en sautant les blocs endormis.
 function step() {
   moved.fill(0);
+  setStepGravity();
+  const prev = chunkNow; chunkNow = chunkNext; chunkNext = prev; chunkNext.fill(0);
+  // Gravité entre deux directions (cadre incliné) : la direction change d'un pas à l'autre, donc
+  // "pas de case où aller ce pas-ci" ne veut pas dire "au repos" -> tout est simulé.
+  if (gravityMixed) chunkNow.fill(1);
+  const S = 1 << CHUNK_SHIFT;
   for (let y = 0; y < GRID_H; y++) {
-    if (y % 2 === 0) { for (let x = 0; x < GRID_W; x++) processCell(x, y); }
-    else { for (let x = GRID_W - 1; x >= 0; x--) processCell(x, y); }
+    const rowBase = (y >> CHUNK_SHIFT) * chunkCols;
+    if (y % 2 === 0) {
+      for (let cx = 0; cx < chunkCols; cx++) {
+        if (!chunkNow[rowBase + cx]) continue;
+        const x1 = Math.min(GRID_W, (cx + 1) * S);
+        for (let x = cx * S; x < x1; x++) processCell(x, y);
+      }
+    } else {
+      for (let cx = chunkCols - 1; cx >= 0; cx--) {
+        if (!chunkNow[rowBase + cx]) continue;
+        const x0 = cx * S;
+        for (let x = Math.min(GRID_W, (cx + 1) * S) - 1; x >= x0; x--) processCell(x, y);
+      }
+    }
   }
 }
 
@@ -1038,10 +1165,9 @@ offCanvas.width = GRID_W; offCanvas.height = GRID_H;
 const offCtx = offCanvas.getContext("2d");
 let imgData = offCtx.createImageData(GRID_W, GRID_H);
 
-// Reconstruit la grille à une nouvelle résolution (petit côté en cellules ; le grand côté suit le
-// même ratio, dans le sens du format courant).
-function rebuildGrid(shortSide) {
-  const oldCellCount = CELL_COUNT;
+// Réalloue la grille et tout ce qui en dépend à une nouvelle résolution (petit côté en cellules ;
+// le grand côté suit le même ratio, dans le sens du format courant), sans générer de paysage.
+function allocateGrid(shortSide) {
   [GRID_W, GRID_H] = gridDims(shortSide);
   CELL_COUNT = GRID_W * GRID_H;
   grid = new Uint8Array(CELL_COUNT);
@@ -1049,17 +1175,22 @@ function rebuildGrid(shortSide) {
   shade = new Float32Array(CELL_COUNT);
   tint = new Float32Array(CELL_COUNT);
   recentlyMoved = new Uint8Array(CELL_COUNT);
+  allocChunks();
   rebuildFlowField();
   rebuildFlowViz();
   offCanvas.width = GRID_W;
   offCanvas.height = GRID_H;
   imgData = offCtx.createImageData(GRID_W, GRID_H);
+}
+// Change de résolution (ou de format) et repart sur un nouveau paysage.
+function rebuildGrid(shortSide) {
+  const oldCellCount = CELL_COUNT;
+  allocateGrid(shortSide);
   // Le nombre de grains suit la résolution (même taux de remplissage), sinon passer en basse
   // résolution puis revenir laisserait un tableau presque vide.
   params.sandCount = clampSandCount(params.sandCount * (CELL_COUNT / oldCellCount));
   syncSandCountInput();
-  gravityDown = true;
-  jarWrap.classList.remove("flipped");
+  resetFrame();
   scatterInitial();
 }
 
@@ -1075,14 +1206,7 @@ function layoutSky() {
   SKY_W = mainCanvas.width; SKY_H = mainCanvas.height;
   SKY_PAD = Math.hypot(SKY_W, SKY_H) / 2; // marge couvrant le canvas sous n'importe quel angle
   SKY_UNIT = Math.min(SKY_W, SKY_H); // taille de référence (soleil, nuages), identique dans les deux formats
-  skyGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
-  skyGrad.addColorStop(0, "#2f7fc4");
-  skyGrad.addColorStop(0.55, "#8cc6ec");
-  skyGrad.addColorStop(1, "#e3f1f8");
-  nightGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
-  nightGrad.addColorStop(0, "#050b1e");
-  nightGrad.addColorStop(0.6, "#13224a");
-  nightGrad.addColorStop(1, "#2a3b66");
+  buildSkyGradients();
   SUN_R = SKY_UNIT * 0.09;
   // Étoiles : positions fixes (tirées ici) couvrant toute la zone dessinée, marge de rotation
   // comprise ; [x, y, rayon, vitesse de scintillement, phase].
@@ -1093,6 +1217,15 @@ function layoutSky() {
     0.8 + Math.random() * 2.2,
     Math.random() * Math.PI * 2,
   ]);
+}
+// Dégradés du ciel de jour et de nuit, propres au thème actif (voir THEMES[].sky) — recalculés au
+// changement de format (layoutSky) et de thème (applyTheme).
+function buildSkyGradients() {
+  const sky = THEMES[themeIndex].sky;
+  skyGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
+  for (const [pos, color] of sky.day) skyGrad.addColorStop(pos, color);
+  nightGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
+  for (const [pos, color] of sky.night) nightGrad.addColorStop(pos, color);
 }
 layoutSky();
 
@@ -1115,11 +1248,14 @@ function jarAngle() {
 }
 
 // ---------- Jour / Nuit ----------
-// Le choix Jour/Nuit (cartouche Réglages) ne bascule pas d'un coup : nightMix glisse de 0 (jour)
-// à 1 (nuit) en NIGHT_FADE_S secondes, et le ciel de nuit est dessiné par-dessus celui de jour
-// avec cette opacité — un fondu façon crépuscule. La nuit, la lune suit la même course que le
+// Le choix Jour/Nuit/Auto (bouton sous le cadre) ne bascule pas d'un coup : nightMix glisse de 0
+// (jour) à 1 (nuit) en NIGHT_FADE_S secondes, et le ciel de nuit est dessiné par-dessus celui de
+// jour avec cette opacité — un fondu façon crépuscule. La nuit, la lune suit la même course que le
 // soleil, des étoiles scintillent, les nuages virent au gris-bleu et le sable est assombri
-// (lumière lunaire bleutée, voir NIGHT_LIGHT dans render()).
+// (lumière lunaire bleutée, voir NIGHT_LIGHT dans render()). En mode Auto, jour et nuit alternent
+// à chaque traversée : la nuit tombe quand le soleil sort du ciel, le jour revient quand la lune
+// en sort à son tour (un cycle complet = 2 × SUN_PERIOD).
+let dayMode = "day"; // "day" | "night" | "auto" (voir setDayMode())
 const NIGHT_FADE_S = 1.5;
 let nightMix = 0;
 let lastSkyTs = 0;
@@ -1156,26 +1292,73 @@ function drawClouds(ctx, t, shadowColor, bodyRgb, alphaScale) {
 }
 
 function drawDaySky(ctx, t) {
+  const sky = THEMES[themeIndex].sky;
   ctx.fillStyle = skyGrad;
   ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
 
   const [sunX, sunY] = celestialPos(t);
   const halo = ctx.createRadialGradient(sunX, sunY, SUN_R * 0.6, sunX, sunY, SUN_R * 4);
-  halo.addColorStop(0, "rgba(255,245,200,0.75)");
-  halo.addColorStop(1, "rgba(255,245,200,0)");
+  halo.addColorStop(0, "rgba(" + sky.halo + "," + sky.haloAlpha + ")");
+  halo.addColorStop(1, "rgba(" + sky.halo + ",0)");
   ctx.fillStyle = halo;
   ctx.beginPath();
   ctx.arc(sunX, sunY, SUN_R * 4, 0, Math.PI * 2);
   ctx.fill();
   const disc = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, SUN_R);
-  disc.addColorStop(0, "#fffbe6");
-  disc.addColorStop(1, "#ffd95a");
+  disc.addColorStop(0, sky.sun[0]);
+  disc.addColorStop(1, sky.sun[1]);
   ctx.fillStyle = disc;
   ctx.beginPath();
   ctx.arc(sunX, sunY, SUN_R, 0, Math.PI * 2);
   ctx.fill();
 
-  drawClouds(ctx, t, "rgba(150,180,210,0.45)", "255,255,255", 1);
+  drawClouds(ctx, t, "rgba(150,180,210,0.45)", sky.cloud, sky.cloudAlpha);
+  if (sky.haze) drawHeatHaze(ctx, t);
+}
+
+// Brume de chaleur (Désert, le jour) : fines bandes chaudes et translucides vers le bas du ciel,
+// qui ondulent et respirent chacune à son rythme, comme l'air qui tremble au-dessus du sable.
+function drawHeatHaze(ctx, t) {
+  for (let k = 0; k < 7; k++) {
+    const y = SKY_H * (0.38 + k * 0.045) + Math.sin(t * 0.9 + k * 1.7) * 3;
+    const h = 5 + 3 * Math.sin(t * 0.7 + k * 2.1);
+    ctx.fillStyle = "rgba(255,214,150," + (0.06 + 0.04 * Math.sin(t * 1.3 + k)) + ")";
+    ctx.fillRect(-SKY_PAD, y, SKY_W + 2 * SKY_PAD, h);
+  }
+}
+
+// Aurore boréale (Arctique, la nuit) : trois rideaux de lumière (vert, bleu, violet) dont le bord
+// inférieur ondule lentement, en dégradé vers le haut, ajoutés en mode "lighter" pour qu'ils
+// éclairent le ciel au lieu de le recouvrir.
+const AURORA_RIBBONS = [
+  // [hauteur relative de la base, couleur RVB, intensité, vitesse]
+  [0.2, "80,255,170", 1.0, 0.5],
+  [0.27, "110,200,255", 0.7, 0.35],
+  [0.14, "190,120,255", 0.55, 0.6],
+];
+function drawAurora(ctx, t) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const x0 = -SKY_PAD, x1 = SKY_W + SKY_PAD;
+  for (const [yRel, rgb, amp, speed] of AURORA_RIBBONS) {
+    const base = SKY_H * yRel, height = SKY_H * 0.16;
+    const grad = ctx.createLinearGradient(0, base - height, 0, base + 14);
+    grad.addColorStop(0, "rgba(" + rgb + ",0)");
+    grad.addColorStop(0.75, "rgba(" + rgb + "," + 0.3 * amp + ")");
+    grad.addColorStop(1, "rgba(" + rgb + ",0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    for (let x = x0; x <= x1; x += 10) {
+      const y = base + Math.sin(x * 0.02 + t * speed) * 12 + Math.sin(x * 0.047 - t * speed * 1.6) * 6;
+      if (x === x0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    for (let x = x1; x >= x0; x -= 10) {
+      ctx.lineTo(x, base - height + Math.sin(x * 0.015 + t * speed * 0.8) * 14);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawNightSky(ctx, t) {
@@ -1190,6 +1373,7 @@ function drawNightSky(ctx, t) {
     ctx.fill();
   }
   ctx.globalAlpha = nightMix;
+  if (THEMES[themeIndex].sky.aurora) drawAurora(ctx, t);
 
   const [moonX, moonY] = celestialPos(t);
   const moonR = SUN_R * 0.85;
@@ -1221,6 +1405,7 @@ function drawSky(ctx, t) {
   // Avance le fondu jour/nuit vers le choix courant (borné si l'onglet était en arrière-plan).
   const dt = lastSkyTs ? Math.min(0.1, t - lastSkyTs) : 0;
   lastSkyTs = t;
+  if (dayMode === "auto") params.night = t % (2 * SUN_PERIOD) >= SUN_PERIOD;
   const target = params.night ? 1 : 0;
   const stepMix = dt / NIGHT_FADE_S;
   nightMix = target > nightMix ? Math.min(target, nightMix + stepMix) : Math.max(target, nightMix - stepMix);
@@ -1412,17 +1597,21 @@ resolutionSlider.addEventListener("input", updateResolutionLabel);
 // Bouton de format, à côté de "Retourner le cadre" : bascule vertical/horizontal. Échange les
 // dimensions du canvas, du cadre (classe .landscape) et de la grille, puis recalcule le ciel et
 // génère un nouveau paysage — le sable ne peut pas être "tourné" d'un format à l'autre. Son
-// libellé annonce le format vers lequel il fait passer (comme le bouton Jour/Nuit).
+// libellé annonce le format vers lequel il fait passer.
 const formatBtn = document.getElementById("formatBtn");
-formatBtn.addEventListener("click", () => {
-  landscape = !landscape;
+// Applique le format (canvas, cadre, ciel, libellé du bouton) sans toucher à la grille.
+function setLandscape(on) {
+  landscape = on;
   mainCanvas.width = landscape ? CANVAS_LONG : CANVAS_SHORT;
   mainCanvas.height = landscape ? CANVAS_SHORT : CANVAS_LONG;
   jarWrap.classList.toggle("landscape", landscape);
   layoutSky();
+  formatBtn.textContent = landscape ? "▯ Vertical" : "▭ Horizontal";
+}
+formatBtn.addEventListener("click", () => {
+  setLandscape(!landscape);
   rebuildGrid(Number(resolutionSlider.value));
   updateResolutionLabel();
-  formatBtn.textContent = landscape ? "▯ Vertical" : "▭ Horizontal";
 });
 resolutionSlider.addEventListener("change", () => {
   rebuildGrid(Number(resolutionSlider.value));
@@ -1453,12 +1642,24 @@ viscositySeg.addEventListener("click", (e) => {
 });
 
 // Bouton d'ambiance, à côté de "Retourner le cadre" (toujours visible, y compris en plein écran) :
-// bascule jour/nuit, son libellé annonce l'ambiance vers laquelle il fait passer (comme le bouton
-// plein écran). Le fondu lui-même est géré par drawSky().
+// passe au mode suivant (Jour -> Nuit -> Auto -> Jour) et affiche le mode actif, comme le bouton
+// Thème. En mode Auto, drawSky() choisit jour ou nuit selon la course du soleil. Le fondu lui-même
+// est géré par drawSky().
 const dayNightBtn = document.getElementById("dayNightBtn");
+const DAY_MODES = [
+  { id: "day", label: "☀️ Jour" },
+  { id: "night", label: "🌙 Nuit" },
+  { id: "auto", label: "🌗 Auto" },
+];
+function setDayMode(id) {
+  const mode = DAY_MODES.find((m) => m.id === id) || DAY_MODES[0];
+  dayMode = mode.id;
+  if (dayMode !== "auto") params.night = dayMode === "night";
+  dayNightBtn.textContent = mode.label;
+}
 dayNightBtn.addEventListener("click", () => {
-  params.night = !params.night;
-  dayNightBtn.textContent = params.night ? "☀️ Jour" : "🌙 Nuit";
+  const k = DAY_MODES.findIndex((m) => m.id === dayMode);
+  setDayMode(DAY_MODES[(k + 1) % DAY_MODES.length].id);
 });
 
 const gravitySlider = document.getElementById("gravitySlider");
@@ -1472,6 +1673,7 @@ gravitySlider.addEventListener("input", () => {
 const wrapEdgesCheckbox = document.getElementById("wrapEdgesCheckbox");
 wrapEdgesCheckbox.addEventListener("change", () => {
   params.wrapEdges = wrapEdgesCheckbox.checked;
+  wakeAll(); // les grains du bord ont (ou n'ont plus) un passage de l'autre côté
 });
 
 const flowSlider = document.getElementById("flowSlider");
@@ -1479,6 +1681,7 @@ const flowVal = document.getElementById("flowVal");
 flowSlider.addEventListener("input", () => {
   params.flowPct = Number(flowSlider.value);
   flowVal.textContent = params.flowPct + "%";
+  wakeAll(); // le courant donne (ou retire) des possibilités de mouvement latéral
 });
 
 const flowShowCheckbox = document.getElementById("flowShowCheckbox");
@@ -1500,6 +1703,7 @@ for (const { name, type } of DENSITY_SLIDERS) {
     const v = Number(slider.value);
     DENSITY[type] = v;
     val.textContent = v.toFixed(2);
+    wakeAll(); // un grain devenu plus lourd que son voisin du dessous peut maintenant le repousser
     if (params.frozen) buildLayers(); // l'ordre des couches suit les densités
   });
 }
@@ -1524,8 +1728,7 @@ for (const { name, type } of DENSITY_SLIDERS) {
     if (params.frozen) buildLayers(); // vue en couches : l'épaisseur suit le curseur en direct
   });
   slider.addEventListener("change", () => {
-    gravityDown = true;
-    jarWrap.classList.remove("flipped");
+    resetFrame();
     scatterInitial();
   });
 }
@@ -1541,8 +1744,7 @@ function syncSandCountInput() {
 sandCountInput.addEventListener("change", () => {
   params.sandCount = clampSandCount(Number(sandCountInput.value));
   syncSandCountInput(); // réaffiche la valeur réellement retenue si elle a été plafonnée
-  gravityDown = true;
-  jarWrap.classList.remove("flipped");
+  resetFrame();
   scatterInitial();
 });
 syncSandCountInput();
@@ -1565,6 +1767,7 @@ function applyTheme() {
     }
   }
   themeBtn.textContent = theme.label;
+  buildSkyGradients(); // chaque thème a son propre ciel
 }
 themeBtn.addEventListener("click", () => {
   themeIndex = (themeIndex + 1) % THEMES.length;
@@ -1577,21 +1780,132 @@ frozenCheckbox.addEventListener("change", () => {
   if (params.frozen) enterLayerView(); else exitLayerView();
 });
 
+// ---------- Cadre : rotation, retournement et inclinaison ----------
+// frameAngleDeg = rotation du cadre à l'écran (CSS), en degrés, dans le sens horaire. "Retourner"
+// y ajoute 180° ; la case "Incliner le tableau" permet de la régler librement en faisant glisser
+// le cadre. La gravité, dans le repère de la grille, est la gravité "écran" (vers le bas, ou celle
+// mesurée par les capteurs du téléphone) tournée de -frameAngleDeg (voir updateGravity()).
 const jarWrap = document.getElementById("jarWrap");
-document.getElementById("flipBtn").addEventListener("click", () => {
-  gravityDown = !gravityDown;
-  jarWrap.classList.toggle("flipped");
+let frameAngleDeg = 0;
+let deviceGravity = null; // [x, y] unitaire, repère écran, mesuré par l'accéléromètre (ou null)
+
+function applyFrame() {
+  jarWrap.style.transform = "rotate(" + frameAngleDeg + "deg)";
+}
+function updateGravity() {
+  const th = frameAngleDeg * Math.PI / 180;
+  const [sx, sy] = params.tilt && deviceGravity ? deviceGravity : [0, 1];
+  const gx = sx * Math.cos(th) + sy * Math.sin(th);
+  const gy = -sx * Math.sin(th) + sy * Math.cos(th);
+  const angle = Math.atan2(gy, gx);
+  let diff = Math.abs(angle - gravityAngle) % (2 * Math.PI);
+  if (diff > Math.PI) diff = 2 * Math.PI - diff;
+  if (diff < 1e-4) return;
+  gravityAngle = angle;
+  wakeAll(); // tout ce qui était au repos peut se remettre à couler
   if (params.frozen) buildLayers(); // les couches se reposent du nouveau côté de la gravité
-  // Pas besoin de relâcher quoi que ce soit manuellement : isInSurfaceBand() se recalcule à
-  // partir de gravityDown à chaque cellule, donc "le haut" change de côté tout seul.
+}
+// Remet le cadre à l'endroit (tour complet le plus proche, pour ne pas le faire tournoyer).
+function resetFrame() {
+  frameAngleDeg = Math.round(frameAngleDeg / 360) * 360;
+  applyFrame();
+  updateGravity();
+}
+
+document.getElementById("flipBtn").addEventListener("click", () => {
+  frameAngleDeg += 180;
+  applyFrame();
+  updateGravity();
   // Pas besoin de relancer le courant manuellement : le flot de sable que ça déclenche fait
   // naturellement remonter l'activité, donc le courant, via activityFactor (voir loop()).
 });
 document.getElementById("newBtn").addEventListener("click", () => {
-  gravityDown = true;
-  jarWrap.classList.remove("flipped");
+  resetFrame();
   scatterInitial();
 });
+
+// Inclinaison à la souris ou au doigt : on "attrape" le cadre et on le fait tourner autour de son
+// centre (l'angle suit celui du pointeur). Pendant le glisser, la transition CSS est coupée
+// (classe .dragging) pour que le cadre suive le pointeur sans retard.
+let frameDrag = null;
+jarWrap.addEventListener("pointerdown", (e) => {
+  if (!params.tilt || e.button !== 0) return;
+  const r = jarWrap.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  frameDrag = { id: e.pointerId, cx, cy, last: Math.atan2(e.clientY - cy, e.clientX - cx) };
+  jarWrap.setPointerCapture(e.pointerId);
+  jarWrap.classList.add("dragging");
+});
+jarWrap.addEventListener("pointermove", (e) => {
+  if (!frameDrag || e.pointerId !== frameDrag.id) return;
+  const a = Math.atan2(e.clientY - frameDrag.cy, e.clientX - frameDrag.cx);
+  let d = a - frameDrag.last;
+  if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
+  frameDrag.last = a;
+  frameAngleDeg += d * 180 / Math.PI;
+  applyFrame();
+  updateGravity();
+});
+function endFrameDrag(e) {
+  if (!frameDrag || e.pointerId !== frameDrag.id) return;
+  frameDrag = null;
+  jarWrap.classList.remove("dragging");
+}
+jarWrap.addEventListener("pointerup", endFrameDrag);
+jarWrap.addEventListener("pointercancel", endFrameDrag);
+
+// Inclinaison par les capteurs (téléphone, tablette) : l'accéléromètre donne la direction de la
+// gravité réelle, ramenée dans le repère de l'écran (en tenant compte de l'orientation portrait/
+// paysage de l'écran). Convention de signe inversée sur iOS par rapport à la norme (et à Android),
+// détectée par la présence de DeviceMotionEvent.requestPermission (propre à iOS 13+), qui exige
+// en plus une permission demandée lors d'un geste de l'utilisateur. Appareil posé à plat : la
+// gravité ne pointe plus dans le plan de l'écran, on garde la dernière direction connue.
+const MOTION_NEEDS_PERMISSION = typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function";
+function onDeviceMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null || a.y == null) return;
+  const sign = MOTION_NEEDS_PERMISSION ? -1 : 1;
+  const nx = -a.x * sign, ny = a.y * sign; // gravité, repère de l'écran dans son orientation naturelle
+  const ang = -((screen.orientation && screen.orientation.angle) || window.orientation || 0) * Math.PI / 180;
+  const x = nx * Math.cos(ang) - ny * Math.sin(ang);
+  const y = nx * Math.sin(ang) + ny * Math.cos(ang);
+  const mag = Math.hypot(x, y);
+  if (mag < 2) return; // à plat
+  // Léger lissage pour absorber les tremblements de la main.
+  const prev = deviceGravity || [x / mag, y / mag];
+  const sx = prev[0] * 0.8 + (x / mag) * 0.2, sy = prev[1] * 0.8 + (y / mag) * 0.2;
+  const m = Math.hypot(sx, sy) || 1;
+  deviceGravity = [sx / m, sy / m];
+  updateGravity();
+}
+function enableDeviceMotion(fromUser) {
+  if (typeof DeviceMotionEvent === "undefined") return;
+  if (!MOTION_NEEDS_PERMISSION) { window.addEventListener("devicemotion", onDeviceMotion); return; }
+  if (!fromUser) return; // iOS : permission seulement sur un geste (recocher la case après rechargement)
+  DeviceMotionEvent.requestPermission()
+    .then((state) => { if (state === "granted" && params.tilt) window.addEventListener("devicemotion", onDeviceMotion); })
+    .catch(() => {});
+}
+function disableDeviceMotion() {
+  window.removeEventListener("devicemotion", onDeviceMotion);
+  deviceGravity = null;
+}
+
+const tiltCheckbox = document.getElementById("tiltCheckbox");
+function setTilt(on, fromUser) {
+  params.tilt = on;
+  tiltCheckbox.checked = on;
+  jarWrap.classList.toggle("tiltable", on);
+  if (on) {
+    enableDeviceMotion(fromUser);
+  } else {
+    disableDeviceMotion();
+    frameAngleDeg = Math.round(frameAngleDeg / 180) * 180; // revient droit, ou retourné
+    applyFrame();
+  }
+  updateGravity();
+}
+tiltCheckbox.addEventListener("change", () => setTilt(tiltCheckbox.checked, true));
 
 const stageEl = document.querySelector(".stage");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
@@ -1604,7 +1918,91 @@ document.addEventListener("fullscreenchange", () => {
   fullscreenBtn.textContent = on ? "⛶ Quitter le plein écran" : "⛶ Plein écran";
 });
 
+// ---------- Réglages mémorisés ----------
+// Les réglages sont gardés dans le navigateur (localStorage) et restaurés au chargement : thème,
+// ambiance, format, curseurs, cases à cocher, cartouches affichés. Non mémorisés : la vue figée en
+// couches et l'angle du cadre (on repart toujours d'un tableau droit et animé). Sauvegarde
+// déclenchée par n'importe quelle interaction avec la page, regroupée (SAVE_DELAY_MS) pour ne pas
+// écrire à chaque cran d'un curseur. Stockage indisponible (navigation privée…) : ignoré.
+const SETTINGS_KEY = "sandsim.settings.v1";
+const SAVE_DELAY_MS = 300;
+let saveTimer = 0;
+function collectSettings() {
+  const dens = {}, prop = {};
+  for (const { name, type } of DENSITY_SLIDERS) {
+    dens[name] = DENSITY[type];
+    prop[name] = SAND_COLOR_WEIGHTS.find(([t]) => t === type)[1];
+  }
+  const panels = {};
+  for (const { checkbox } of PANEL_TOGGLES) panels[checkbox] = document.getElementById(checkbox).checked;
+  return {
+    res: Number(resolutionSlider.value), landscape, theme: themeIndex, dayMode,
+    bubbles: params.bubblePct, viscosity: params.viscosity, gravity: Number(gravitySlider.value),
+    flow: params.flowPct, flowShow: params.flowShow, wrap: params.wrapEdges, tilt: params.tilt,
+    sandCount: params.sandCount, dens, prop, panels,
+  };
+}
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(collectSettings())); } catch (e) { /* stockage indisponible */ }
+  }, SAVE_DELAY_MS);
+}
+for (const type of ["input", "change", "click"]) document.addEventListener(type, scheduleSave);
+
+// Restaure les réglages mémorisés, avant la génération du premier paysage. Chaque valeur est
+// vérifiée (type, bornes) : un réglage absent ou abîmé garde simplement sa valeur par défaut.
+// Les curseurs sont réglés puis reçoivent un événement "input", pour que leur propre gestionnaire
+// mette à jour paramètres et libellés — sans dupliquer cette logique ici.
+function loadSettings() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); } catch (e) { s = null; }
+  if (!s || typeof s !== "object") return;
+  const isNum = (v) => typeof v === "number" && isFinite(v);
+  const setRange = (el, v) => {
+    if (!isNum(v)) return;
+    el.value = String(v);
+    el.dispatchEvent(new Event("input"));
+  };
+  const setCheck = (el, v) => {
+    if (typeof v !== "boolean") return;
+    el.checked = v;
+    el.dispatchEvent(new Event("change"));
+  };
+
+  if (isNum(s.theme) && THEMES[s.theme]) { themeIndex = s.theme; applyTheme(); }
+  if (typeof s.dayMode === "string") setDayMode(s.dayMode);
+  if (typeof s.landscape === "boolean" && s.landscape !== landscape) setLandscape(s.landscape);
+  if (isNum(s.res)) resolutionSlider.value = String(s.res);
+  const [w, h] = gridDims(Number(resolutionSlider.value));
+  if (w !== GRID_W || h !== GRID_H) allocateGrid(Number(resolutionSlider.value));
+  updateResolutionLabel();
+
+  setRange(gravitySlider, s.gravity);
+  setRange(flowSlider, s.flow);
+  if (isNum(s.viscosity)) {
+    const btn = viscositySeg.querySelector('.segBtn[data-value="' + s.viscosity + '"]');
+    if (btn) btn.click();
+  }
+  setCheck(flowShowCheckbox, s.flowShow);
+  setCheck(wrapEdgesCheckbox, s.wrap);
+  if (s.dens && typeof s.dens === "object") {
+    for (const { name } of DENSITY_SLIDERS) setRange(document.getElementById("dens" + name), s.dens[name]);
+  }
+  if (s.prop && typeof s.prop === "object") {
+    for (const { name } of DENSITY_SLIDERS) setRange(document.getElementById("prop" + name), s.prop[name]);
+  }
+  if (s.panels && typeof s.panels === "object") {
+    for (const { checkbox } of PANEL_TOGGLES) setCheck(document.getElementById(checkbox), s.panels[checkbox]);
+  }
+  setRange(bubbleSlider, s.bubbles); // après la grille : le plafond de grains en dépend
+  if (isNum(s.sandCount)) params.sandCount = clampSandCount(s.sandCount);
+  syncSandCountInput();
+  if (s.tilt === true) setTilt(true, false);
+}
+
 // ---------- Démarrage ----------
+loadSettings();
 scatterInitial();
 requestAnimationFrame(loop);
 </script>
