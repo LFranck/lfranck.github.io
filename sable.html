@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <!--
-  Sable Dynamique — Simulation de paysage de sable coloré dans l'eau
+  SandSim.exe — Simulation de paysage de sable coloré dans l'eau
   Ces informations (version, auteur, date, licence) sont la source unique :
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.18.48
+  Version : 0.23.56
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
-  Date    : 2026-09-22
+  Date    : 2026-09-23
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
   Statut  : En développement (V0) — simulation physique expérimentale, réglages à ajuster.
   © 2026 Franck Legrand. Tous droits réservés.
@@ -16,7 +16,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sable Dynamique — Paysages de sable coloré</title>
+<title>SandSim.exe — Paysages de sable coloré</title>
 <style>
   * { box-sizing:border-box; }
   body {
@@ -100,10 +100,12 @@
   .btn.ghost { background:none; border:1px solid #333; color:#ddd; font-weight:600; }
 
   /* Contrôle segmenté (boutons sélectionnables) utilisé pour la vitesse d'écoulement. */
-  .segmented { display:flex; flex-wrap:wrap; gap:6px; }
+  /* Grille de 10 colonnes égales : les boutons tiennent toujours sur une seule ligne, en se
+     rétrécissant avec le cartouche (au lieu de passer à la ligne sous une largeur minimale). */
+  .segmented { display:grid; grid-template-columns:repeat(10, 1fr); gap:3px; }
   .segBtn {
-    flex:1 1 0; min-width:28px; background:#252525; color:#ccc; border:1px solid #3a3a3a;
-    border-radius:8px; padding:7px 0; font-size:13px; font-weight:700; cursor:pointer;
+    min-width:0; background:#252525; color:#ccc; border:1px solid #3a3a3a;
+    border-radius:6px; padding:6px 0; font-size:12px; font-weight:700; cursor:pointer;
   }
   .segBtn:hover { border-color:#555; }
   .segBtn.active { background:#fff; color:#111; border-color:#fff; }
@@ -114,12 +116,19 @@
   }
   .cartoucheTitle { font-weight:700; font-size:14px; color:#fff; }
   label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:13.5px; }
-  .row { flex-direction:row; align-items:center; gap:8px; }
+  /* display:flex explicite : sur un <div> (pas un <label>, déjà en flex), sans lui le libellé et sa
+     valeur restaient collés en ligne, le justify-content ci-dessous n'avait aucun effet. */
+  .row { display:flex; flex-direction:row; align-items:center; gap:8px; }
   /* Sépare visiblement le libellé de sa valeur (poussée à droite) — mais pas les lignes de case à
      cocher (qui n'ont pas de .value), pour ne pas écarter la case de son texte. */
   .row:has(.value) { justify-content:space-between; }
   .value { font-weight:700; color:#fff; }
   input[type=range] { width:100%; }
+  .numberInput {
+    width:100%; background:#252525; color:#fff; border:1px solid #3a3a3a; border-radius:8px;
+    padding:6px 8px; font-size:13.5px; font-family:inherit;
+  }
+  .numberInput:focus { outline:none; border-color:#888; }
   .sub { color:#888; font-size:11.5px; display:none; }
   .sub.show { display:block; margin-top:6px; }
   /* Petit bouton "i" qui révèle l'explication (.sub) associée, cachée par défaut. */
@@ -131,11 +140,11 @@
   }
   .infoBtn:hover, .infoBtn.active { background:#444; color:#fff; }
 
-  #densityPanel { cursor:default; }
-  #densityPanel summary { cursor:pointer; color:#ccc; font-size:13.5px; font-weight:600; list-style:none; }
-  #densityPanel summary::-webkit-details-marker { display:none; }
-  #densityPanel summary::before { content:"▸ "; }
-  #densityPanel[open] summary::before { content:"▾ "; }
+  #densityPanel, #proportionPanel { cursor:default; }
+  #densityPanel summary, #proportionPanel summary { cursor:pointer; color:#ccc; font-size:13.5px; font-weight:600; list-style:none; }
+  #densityPanel summary::-webkit-details-marker, #proportionPanel summary::-webkit-details-marker { display:none; }
+  #densityPanel summary::before, #proportionPanel summary::before { content:"▸ "; }
+  #densityPanel[open] summary::before, #proportionPanel[open] summary::before { content:"▾ "; }
   .densityRows { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
   .swatch { width:12px; height:12px; border-radius:50%; display:inline-block; flex:none; }
   .labelGroup { display:inline-flex; align-items:center; gap:6px; }
@@ -143,7 +152,7 @@
 </head>
 <body>
 <header>
-  <h1>🏜️ Sable Dynamique</h1>
+  <h1>🏜️ SandSim.exe</h1>
   <button id="infoLink" type="button">ℹ️ Informations</button>
 </header>
 
@@ -160,6 +169,7 @@
     <label class="row"><input type="checkbox" id="toggleSettings"><span>🎛️ Réglages</span></label>
     <label class="row"><input type="checkbox" id="toggleFlow"><span>🌊 Courant</span></label>
     <label class="row"><input type="checkbox" id="toggleDensity"><span>Densités des sables</span></label>
+    <label class="row"><input type="checkbox" id="toggleProportion"><span>Proportions des sables</span></label>
   </div>
   <button id="infoClose" type="button">Fermer</button>
 </dialog>
@@ -174,6 +184,7 @@
       <div class="actions">
         <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
         <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
+        <button class="btn ghost" id="dayNightBtn" type="button" title="Jour : ciel bleu, soleil et nuages blancs. Nuit : ciel étoilé, lune, nuages gris-bleu et sable éclairé d'une lumière lunaire bleutée. Passage en fondu.">🌙 Nuit</button>
         <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
       </div>
     </div>
@@ -191,20 +202,20 @@
           <span class="sub" id="subResolution">Nombre de grains simulés en largeur (jusqu'à 330 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
         </label>
         <label>
-          <div class="row"><span>Bulles d'air<button type="button" class="infoBtn" data-target="subBubbles" aria-label="Informations">i</button></span><span class="value" id="bubbleVal">25%</span></div>
-          <input type="range" id="bubbleSlider" min="0" max="100" value="25" step="1">
+          <div class="row"><span>Bulles d'air<button type="button" class="infoBtn" data-target="subBubbles" aria-label="Informations">i</button></span><span class="value" id="bubbleVal">38%</span></div>
+          <input type="range" id="bubbleSlider" min="0" max="100" value="38" step="1">
           <span class="sub" id="subBubbles">Plus de bulles = le sable trouve moins de passages et s'écoule plus lentement.</span>
         </label>
         <div>
-          <div class="row"><span>Vitesse d'écoulement<button type="button" class="infoBtn" data-target="subViscosity" aria-label="Informations">i</button></span><span class="value" id="viscosityVal">7</span></div>
+          <div class="row"><span>Vitesse d'écoulement<button type="button" class="infoBtn" data-target="subViscosity" aria-label="Informations">i</button></span><span class="value" id="viscosityVal">3</span></div>
           <div class="segmented" id="viscositySeg" role="group" aria-label="Vitesse d'écoulement">
             <button type="button" class="segBtn" data-value="1">1</button>
             <button type="button" class="segBtn" data-value="2">2</button>
-            <button type="button" class="segBtn" data-value="3">3</button>
+            <button type="button" class="segBtn active" data-value="3">3</button>
             <button type="button" class="segBtn" data-value="4">4</button>
             <button type="button" class="segBtn" data-value="5">5</button>
             <button type="button" class="segBtn" data-value="6">6</button>
-            <button type="button" class="segBtn active" data-value="7">7</button>
+            <button type="button" class="segBtn" data-value="7">7</button>
             <button type="button" class="segBtn" data-value="8">8</button>
             <button type="button" class="segBtn" data-value="9">9</button>
             <button type="button" class="segBtn" data-value="10">10</button>
@@ -212,17 +223,25 @@
           <span class="sub" id="subViscosity">Viscosité du liquide : bas = fluide et rapide, haut = épais et lent.</span>
         </div>
         <label>
-          <div class="row"><span>Gravité<button type="button" class="infoBtn" data-target="subGravity" aria-label="Informations">i</button></span><span class="value" id="gravityVal">x1.5</span></div>
-          <input type="range" id="gravitySlider" min="1" max="20" value="14" step="1">
+          <div class="row"><span>Gravité<button type="button" class="infoBtn" data-target="subGravity" aria-label="Informations">i</button></span><span class="value" id="gravityVal">x1.0</span></div>
+          <input type="range" id="gravitySlider" min="1" max="20" value="9" step="1">
           <span class="sub" id="subGravity">Force qui entraîne le sable et les bulles vers le bas (ou le haut, une fois retourné).</span>
         </label>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="wrapEdgesCheckbox" checked>
+            <span>Bords gauche et droite liés</span>
+            <button type="button" class="infoBtn" data-target="subWrapEdges" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subWrapEdges">Le tableau se referme sur lui-même comme un cylindre : le sable et les bulles qui sortent par un bord réapparaissent par l'autre, sans mur pour les retenir. Le haut et le bas restent fermés.</span>
+        </div>
       </div>
 
       <div class="controls cartoucheHidden" id="panelFlow">
         <div class="cartoucheTitle">🌊 Courant</div>
         <label>
-          <div class="row"><span>Courant (force maximale)<button type="button" class="infoBtn" data-target="subFlow" aria-label="Informations">i</button></span><span class="value" id="flowVal">15%</span></div>
-          <input type="range" id="flowSlider" min="0" max="100" value="15" step="1">
+          <div class="row"><span>Courant (force maximale)<button type="button" class="infoBtn" data-target="subFlow" aria-label="Informations">i</button></span><span class="value" id="flowVal">10%</span></div>
+          <input type="range" id="flowSlider" min="0" max="100" value="10" step="1">
           <span class="sub" id="subFlow">Tourbillons dans le liquide qui poussent le sable de côté. C'est un plafond : la force réelle suit l'activité du tableau (ci-dessous) — beaucoup de grains et de bulles en mouvement (ex. juste après avoir retourné le cadre) = courant fort ; un tableau qui s'est calmé = courant faible, sans réglage de durée à part.</span>
         </label>
         <div>
@@ -234,10 +253,10 @@
           <span class="sub" id="subFlowShow">Superpose la carte de couleurs (teintes de rouge selon la direction) derrière le sable. Décoché : le courant continue d'agir sur le sable, juste invisible.</span>
         </div>
         <div>
-          <div class="row"><span>Vitesse moyenne du courant</span><span class="value" id="flowSpeedVal">— cellules/s</span></div>
+          <div class="row"><span>Vitesse moy</span><span class="value" id="flowSpeedVal">— cellules/s</span></div>
         </div>
         <div>
-          <div class="row"><span>Particules en mouvement</span><span class="value" id="activityVal">— / —</span></div>
+          <div class="row"><span>Grains en mouv.</span><span class="value" id="activityVal">— / —</span></div>
         </div>
       </div>
 
@@ -267,6 +286,46 @@
           <span class="sub" id="subDensity">Plus la valeur est haute, plus ce sable coule vite et s'enfonce sous les autres.</span>
         </div>
       </details>
+
+      <details class="controls cartoucheHidden" id="proportionPanel">
+        <summary>Proportions des sables<button type="button" class="infoBtn" data-target="subProportion" aria-label="Informations">i</button></summary>
+        <div class="densityRows">
+          <label>
+            <div class="row"><span>Nombre total de grains<button type="button" class="infoBtn" data-target="subSandCount" aria-label="Informations">i</button></span><span class="value" id="sandCountMax">max —</span></div>
+            <input type="number" id="sandCountInput" min="0" step="100" class="numberInput">
+            <span class="sub" id="subSandCount">Nombre de grains de sable dans le tableau, toutes couleurs confondues (réparties selon les curseurs ci-dessous). Plafonné pour laisser la place aux bulles ; suit la résolution quand elle change. Un nouveau paysage est généré à la validation.</span>
+          </label>
+          <div>
+            <label class="row" style="cursor:pointer;">
+              <input type="checkbox" id="frozenCheckbox">
+              <span>Paysage figé (couches de couleurs)</span>
+              <button type="button" class="infoBtn" data-target="subFrozen" aria-label="Informations">i</button>
+            </label>
+            <span class="sub" id="subFrozen">Met la simulation en pause et range tout le sable en couches horizontales, une par couleur (la plus dense en bas) : l'épaisseur de chaque couche montre sa proportion, mise à jour en direct avec les curseurs. Décocher restaure le paysage et relance l'animation là où elle en était.</span>
+          </div>
+          <label>
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#5c3a21"></span><span>Marron</span></span><span class="value" id="propBROWNVal">15%</span></div>
+            <input type="range" id="propBROWN" min="0" max="100" step="1" value="15">
+          </label>
+          <label>
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#8cc152"></span><span>Vert prairie</span></span><span class="value" id="propMEADOWVal">35%</span></div>
+            <input type="range" id="propMEADOW" min="0" max="100" step="1" value="35">
+          </label>
+          <label>
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#225230"></span><span>Vert forêt</span></span><span class="value" id="propFORESTVal">35%</span></div>
+            <input type="range" id="propFOREST" min="0" max="100" step="1" value="35">
+          </label>
+          <label>
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#9a9690"></span><span>Gris rocher</span></span><span class="value" id="propGRAYVal">10%</span></div>
+            <input type="range" id="propGRAY" min="0" max="100" step="1" value="10">
+          </label>
+          <label>
+            <div class="row"><span class="labelGroup"><span class="swatch" style="background:#ece5d2"></span><span>Blanc neige</span></span><span class="value" id="propWHITEVal">5%</span></div>
+            <input type="range" id="propWHITE" min="0" max="100" step="1" value="5">
+          </label>
+          <span class="sub" id="subProportion">Part de chaque couleur dans le sable du paysage. Les curseurs sont relatifs les uns aux autres : le pourcentage affiché est la part réelle sur le total (100% au total). Un nouveau paysage est généré au relâchement du curseur.</span>
+        </div>
+      </details>
     </div>
   </div>
 </main>
@@ -274,9 +333,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.18.48";
+const APP_VERSION = "0.23.56";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-22";
+const APP_DATE = "2026-09-23";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 const infoDialog = document.getElementById("infoDialog");
@@ -292,6 +351,7 @@ const PANEL_TOGGLES = [
   { checkbox: "toggleSettings", panel: "panelSettings" },
   { checkbox: "toggleFlow", panel: "panelFlow" },
   { checkbox: "toggleDensity", panel: "densityPanel" },
+  { checkbox: "toggleProportion", panel: "proportionPanel" },
 ];
 for (const { checkbox, panel } of PANEL_TOGGLES) {
   const cb = document.getElementById(checkbox);
@@ -373,13 +433,21 @@ const COLOR_RGB = {
   [GRAY]:   [154, 150, 144],
   [WHITE]:  [236, 229, 210],
 };
-// Poids de tirage à la génération du paysage (somme = 100) : le blanc paraissait surreprésenté
-// (sa densité très faible le fait à peine bouger, donc il reste étalé partout au lieu de se tasser
-// comme les autres) — rééquilibré ici, indépendamment des densités. Le vert d'origine (32%) est
-// partagé également entre forêt et prairie.
-const SAND_COLOR_WEIGHTS = [[BROWN, 25], [FOREST, 16], [MEADOW, 16], [GRAY, 25], [WHITE, 18]];
+// Poids de tirage à la génération du paysage, indépendants des densités : paysage à dominante
+// verte (prairie et forêt), un peu de marron, peu de gris et de blanc. Modifiables via le cartouche
+// "Proportions des sables" : les poids sont relatifs (leur somme n'est pas forcément 100),
+// pickSandColor() normalise.
+const SAND_COLOR_WEIGHTS = [[BROWN, 15], [FOREST, 35], [MEADOW, 35], [GRAY, 10], [WHITE, 5]];
+function sandWeightTotal() {
+  let total = 0;
+  for (const [, w] of SAND_COLOR_WEIGHTS) total += w;
+  return total;
+}
 function pickSandColor() {
-  let r = Math.random() * 100;
+  const total = sandWeightTotal();
+  // Tous les curseurs à 0 : aucune préférence exprimée -> tirage uniforme entre les couleurs.
+  if (total <= 0) return SAND_COLOR_WEIGHTS[Math.floor(Math.random() * SAND_COLOR_WEIGHTS.length)][0];
+  let r = Math.random() * total;
   for (const [type, w] of SAND_COLOR_WEIGHTS) {
     if (r < w) return type;
     r -= w;
@@ -411,11 +479,16 @@ let tint = new Float32Array(CELL_COUNT);  // teinte chaud/froid par grain, stabl
 // Cases ayant bougé au moins une fois depuis le dernier rafraîchissement de l'affichage
 // "Particules en mouvement" (voir loop()) — remis à zéro à chaque rafraîchissement.
 let recentlyMoved = new Uint8Array(CELL_COUNT);
-const idx = (x, y) => y * GRID_W + x;
-const inBounds = (x, y) => x >= 0 && x < GRID_W && y >= 0 && y < GRID_H;
+// Bords gauche/droite liés (params.wrapEdges) : la grille se referme sur elle-même comme un
+// cylindre — un grain qui sort à gauche réapparaît à droite, et inversement. inBounds() accepte
+// alors tout x, et idx() le ramène dans la grille. Les voisins ne sont jamais à plus d'une case
+// (x-1 / x+1), donc une seule correction suffit (pas besoin d'un modulo, coûteux dans la boucle).
+// Bords non liés : inBounds() refuse x hors grille avant tout appel à idx(), la correction ne sert pas.
+const idx = (x, y) => y * GRID_W + (x < 0 ? x + GRID_W : x >= GRID_W ? x - GRID_W : x);
+const inBounds = (x, y) => (params.wrapEdges || (x >= 0 && x < GRID_W)) && y >= 0 && y < GRID_H;
 
 let gravityDown = true; // sens de la gravité dans le repère de la grille (inversé par "Retourner")
-const params = { gravityStrength: 0.3 + (13 / 19) * 1.7, viscosity: 7, bubblePct: 25, flowPct: 15, flowShow: false }; // curseurs : gravité 14/20 (x1.5), viscosité 7, bulles 25%, courant 15% (plafond), affichage courant off
+const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 38, flowPct: 10, flowShow: false, wrapEdges: true, frozen: false, night: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 38%, courant 10% (plafond), affichage courant off, bords liés on, paysage figé off, jour (sandCount : voir plus bas)
 
 // ---------- Bruit de Perlin 2D (pour le champ de courant du fluide) ----------
 // Implémentation classique (table de permutation + interpolation "fade"), suffisante pour
@@ -572,6 +645,16 @@ function renderFlowViz(ctx, canvasW, canvasH) {
 rebuildFlowField();
 rebuildFlowViz();
 
+// Nombre total de grains : 35 000 par défaut (à la résolution de départ, 245 × 356) ; plafonné
+// pour laisser la place aux bulles.
+params.sandCount = 35000;
+function maxSandCount() {
+  return Math.max(0, CELL_COUNT - bubbleTargetCount());
+}
+function clampSandCount(n) {
+  return Math.max(0, Math.min(maxSandCount(), Math.round(n) || 0));
+}
+
 function countBubbles() {
   let c = 0;
   for (let p = 0; p < CELL_COUNT; p++) if (grid[p] === BUBBLE) c++;
@@ -603,18 +686,22 @@ function removeBubblesTo(target) {
 
 // Place le sable et les bulles au hasard dans la grille, puis fait avancer la simulation
 // à blanc (sans affichage) pour partir directement d'un paysage déjà formé.
+// Nombre exact de grains demandé (champ "Nombre total de grains"), placé sans tirages ratés :
+// on mélange (Fisher-Yates partiel) les cases de la zone de départ (sous les 12% du haut) et on
+// prend les premières ; si le nombre demandé dépasse cette zone, le reste déborde dans le haut.
 function scatterInitial() {
   grid.fill(EMPTY);
-  const sandCount = Math.round(CELL_COUNT * 0.34);
+  const sandCount = clampSandCount(params.sandCount);
+  const topRows = Math.floor(GRID_H * 0.12);
+  const regionSize = (GRID_H - topRows) * GRID_W;
+  const cells = new Uint32Array(CELL_COUNT);
+  for (let k = 0; k < regionSize; k++) cells[k] = topRows * GRID_W + k; // zone de départ d'abord
+  for (let k = regionSize; k < CELL_COUNT; k++) cells[k] = k - regionSize; // puis la bande du haut
   for (let n = 0; n < sandCount; n++) {
-    let attempts = 0;
-    while (attempts < 10) {
-      attempts++;
-      const x = Math.floor(Math.random() * GRID_W);
-      const y = Math.floor(GRID_H * 0.12 + Math.random() * GRID_H * 0.88);
-      const i = idx(x, y);
-      if (grid[i] === EMPTY) { grid[i] = pickSandColor(); break; }
-    }
+    const end = n < regionSize ? regionSize : CELL_COUNT;
+    const j = n + Math.floor(Math.random() * (end - n));
+    const tmp = cells[n]; cells[n] = cells[j]; cells[j] = tmp;
+    grid[cells[n]] = pickSandColor();
   }
   spawnBubblesTo(bubbleTargetCount());
   for (let p = 0; p < CELL_COUNT; p++) {
@@ -622,6 +709,53 @@ function scatterInitial() {
     tint[p] = Math.random() * 2 - 1;
   }
   for (let t = 0; t < 400; t++) step();
+  // Paysage figé : le nouveau paysage est mis de côté (restauré au décochage) et remplacé à
+  // l'écran par la vue en couches.
+  if (params.frozen) enterLayerView();
+}
+
+// ---------- Vue en couches (case "Paysage figé") ----------
+// Simulation en pause, et tout le sable rangé en couches horizontales pleines, une par couleur,
+// dont l'épaisseur montre directement la proportion de chaque couleur. Empilées du côté de la
+// gravité, la plus dense en bas (l'ordre suit les curseurs de densité). Pas de bulles : seul le
+// sable compte ici. Le paysage animé est gardé dans layerSnapshot et restauré tel quel au décochage.
+let layerSnapshot = null;
+
+function buildLayers() {
+  grid.fill(EMPTY);
+  const sandCount = clampSandCount(params.sandCount);
+  const total = sandWeightTotal();
+  const types = SAND_COLOR_WEIGHTS.map(([t]) => t).sort((a, b) => DENSITY[b] - DENSITY[a]);
+  // Grains par couleur, arrondis de façon à ce que la somme fasse exactement sandCount.
+  let assigned = 0, cumWeight = 0;
+  const counts = types.map((t) => {
+    const w = total > 0 ? SAND_COLOR_WEIGHTS.find(([tt]) => tt === t)[1] : 1;
+    cumWeight += w;
+    const cum = Math.round(sandCount * cumWeight / (total > 0 ? total : types.length));
+    const c = cum - assigned;
+    assigned = cum;
+    return c;
+  });
+  // Remplissage ligne par ligne depuis le fond (côté gravité), de gauche à droite.
+  let n = 0;
+  for (let k = 0; k < types.length; k++) {
+    for (let c = 0; c < counts[k]; c++, n++) {
+      const row = Math.floor(n / GRID_W);
+      const y = gravityDown ? GRID_H - 1 - row : row;
+      grid[idx(n % GRID_W, y)] = types[k];
+    }
+  }
+}
+function enterLayerView() {
+  layerSnapshot = grid.slice();
+  buildLayers();
+}
+function exitLayerView() {
+  if (layerSnapshot && layerSnapshot.length === CELL_COUNT) grid.set(layerSnapshot);
+  layerSnapshot = null;
+  // Les bulles ont pu être réglées pendant la vue en couches : on les ajuste maintenant.
+  const target = bubbleTargetCount();
+  if (target > countBubbles()) spawnBubblesTo(target); else removeBubblesTo(target);
 }
 
 // Poids du sable empilé juste "au-dessus" (côté source, à l'opposé du sens de chute) de (x,y) —
@@ -855,6 +989,7 @@ let imgData = offCtx.createImageData(GRID_W, GRID_H);
 
 // Reconstruit la grille à une nouvelle résolution (largeur en cellules ; la hauteur suit le même ratio).
 function rebuildGrid(newW) {
+  const oldCellCount = CELL_COUNT;
   GRID_W = Math.round(newW);
   GRID_H = Math.round(GRID_W * GRID_ASPECT);
   CELL_COUNT = GRID_W * GRID_H;
@@ -868,44 +1003,264 @@ function rebuildGrid(newW) {
   offCanvas.width = GRID_W;
   offCanvas.height = GRID_H;
   imgData = offCtx.createImageData(GRID_W, GRID_H);
+  // Le nombre de grains suit la résolution (même taux de remplissage), sinon passer en basse
+  // résolution puis revenir laisserait un tableau presque vide.
+  params.sandCount = clampSandCount(params.sandCount * (CELL_COUNT / oldCellCount));
+  syncSandCountInput();
   gravityDown = true;
   jarWrap.classList.remove("flipped");
   scatterInitial();
 }
 
-const waterGrad = mainCtx.createLinearGradient(0, 0, 0, mainCanvas.height);
-waterGrad.addColorStop(0, "#0f3549");
-waterGrad.addColorStop(1, "#081722");
+// Décor d'arrière-plan (ciel, soleil, nuages), redessiné à chaque image derrière le sable — aucune
+// image externe à charger. Le ciel reste toujours à l'endroit à l'écran : on lit l'angle de
+// rotation CSS actuel du cadre (y compris pendant l'animation de "Retourner") et on dessine le
+// décor tourné d'autant en sens inverse, comme vu à travers une fenêtre. Il est dessiné sur une
+// zone plus grande que le canvas pour que les coins restent couverts pendant la rotation.
+const SKY_W = mainCanvas.width, SKY_H = mainCanvas.height;
+const SKY_PAD = Math.hypot(SKY_W, SKY_H) / 2; // marge couvrant le canvas sous n'importe quel angle
+const skyGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
+skyGrad.addColorStop(0, "#2f7fc4");
+skyGrad.addColorStop(0.55, "#8cc6ec");
+skyGrad.addColorStop(1, "#e3f1f8");
+
+// Soleil : traverse le ciel de gauche à droite en arc (haut au milieu, plus bas aux bords), puis
+// repart de la gauche. SUN_PERIOD = durée d'une traversée, en secondes.
+const SUN_R = SKY_W * 0.09;
+const SUN_PERIOD = 120;
+// Nuages : [x de départ, y, échelle, opacité, vitesse en px/s] — vitesses différentes pour un
+// effet de profondeur (les petits, plus lointains, vont moins vite). Chaque nuage est un amas de
+// cercles (bosses, [dx, dy, rayon] en unités de nuage) posé sur une base plate, avec une ombre
+// bleutée décalée dessous pour le relief. Ils sortent à droite et reviennent par la gauche.
+const CLOUDS = [[0.22, 0.12, 1.0, 0.95, 6], [0.55, 0.27, 0.75, 0.9, 4.5], [0.9, 0.36, 0.6, 0.85, 3.5], [0.15, 0.42, 0.55, 0.8, 3]];
+const PUFFS = [[-0.9, 0.15, 0.45], [-0.4, -0.2, 0.62], [0.2, -0.35, 0.75], [0.8, -0.05, 0.55], [1.2, 0.2, 0.38]];
+
+// Angle de rotation actuel du cadre (radians), lu dans la matrice CSS calculée.
+function jarAngle() {
+  const m = getComputedStyle(jarWrap).transform;
+  if (!m || m === "none") return 0;
+  const v = m.slice(m.indexOf("(") + 1, -1).split(",").map(Number);
+  return Math.atan2(v[1], v[0]);
+}
+
+// ---------- Jour / Nuit ----------
+// Le choix Jour/Nuit (cartouche Réglages) ne bascule pas d'un coup : nightMix glisse de 0 (jour)
+// à 1 (nuit) en NIGHT_FADE_S secondes, et le ciel de nuit est dessiné par-dessus celui de jour
+// avec cette opacité — un fondu façon crépuscule. La nuit, la lune suit la même course que le
+// soleil, des étoiles scintillent, les nuages virent au gris-bleu et le sable est assombri
+// (lumière lunaire bleutée, voir NIGHT_LIGHT dans render()).
+const NIGHT_FADE_S = 1.5;
+let nightMix = 0;
+let lastSkyTs = 0;
+const nightGrad = mainCtx.createLinearGradient(0, 0, 0, SKY_H);
+nightGrad.addColorStop(0, "#050b1e");
+nightGrad.addColorStop(0.6, "#13224a");
+nightGrad.addColorStop(1, "#2a3b66");
+// Facteurs de lumière appliqués au sable et aux bulles, par canal (R, G, B), en pleine nuit.
+// Relevés (0,42/0,48/0,68 -> 0,68/0,72/0,86) : les grains étaient trop sombres la nuit.
+const NIGHT_LIGHT = [0.68, 0.72, 0.86];
+// Étoiles : positions fixes (tirées une fois) couvrant toute la zone dessinée, marge de rotation
+// comprise ; [x, y, rayon, vitesse de scintillement, phase].
+const STARS = Array.from({ length: 110 }, () => [
+  -SKY_PAD + Math.random() * (SKY_W + 2 * SKY_PAD),
+  -SKY_PAD + Math.random() * (SKY_H * 0.75 + SKY_PAD),
+  0.5 + Math.random() * 1.1,
+  0.8 + Math.random() * 2.2,
+  Math.random() * Math.PI * 2,
+]);
+// Cratères de la lune : [dx, dy, rayon] en fractions du rayon de la lune.
+const MOON_CRATERS = [[-0.3, -0.2, 0.22], [0.25, 0.1, 0.16], [-0.05, 0.4, 0.13], [0.35, -0.35, 0.1]];
+
+// Position de l'astre (soleil le jour, lune la nuit) sur sa course en arc.
+function celestialPos(t) {
+  const phase = (t % SUN_PERIOD) / SUN_PERIOD;
+  return [-2 * SUN_R + phase * (SKY_W + 4 * SUN_R), SKY_H * 0.08 + SKY_H * 0.25 * (2 * phase - 1) ** 2];
+}
+
+function drawClouds(ctx, t, shadowColor, bodyRgb, alphaScale) {
+  for (const [cx, cy, scale, alpha, speed] of CLOUDS) {
+    const u = SKY_W * 0.12 * scale;
+    const margin = 1.7 * u; // demi-largeur du nuage : il sort entièrement avant de revenir
+    const span = SKY_W + 2 * margin;
+    const x0 = ((cx * SKY_W + margin + speed * t) % span) - margin;
+    const y0 = SKY_H * cy;
+    for (const [color, dy] of [[shadowColor, u * 0.12], ["rgba(" + bodyRgb + "," + alpha * alphaScale + ")", 0]]) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (const [px, py, pr] of PUFFS) {
+        ctx.moveTo(x0 + px * u + pr * u, y0 + py * u + dy);
+        ctx.arc(x0 + px * u, y0 + py * u + dy, pr * u, 0, Math.PI * 2);
+      }
+      ctx.rect(x0 - 0.9 * u, y0 + dy, 2.1 * u, 0.5 * u); // base plate du nuage
+      ctx.fill();
+    }
+  }
+}
+
+function drawDaySky(ctx, t) {
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
+
+  const [sunX, sunY] = celestialPos(t);
+  const halo = ctx.createRadialGradient(sunX, sunY, SUN_R * 0.6, sunX, sunY, SUN_R * 4);
+  halo.addColorStop(0, "rgba(255,245,200,0.75)");
+  halo.addColorStop(1, "rgba(255,245,200,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, SUN_R * 4, 0, Math.PI * 2);
+  ctx.fill();
+  const disc = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, SUN_R);
+  disc.addColorStop(0, "#fffbe6");
+  disc.addColorStop(1, "#ffd95a");
+  ctx.fillStyle = disc;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, SUN_R, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawClouds(ctx, t, "rgba(150,180,210,0.45)", "255,255,255", 1);
+}
+
+function drawNightSky(ctx, t) {
+  ctx.fillStyle = nightGrad;
+  ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
+
+  ctx.fillStyle = "#fff";
+  for (const [sx, sy, sr, speed, ph] of STARS) {
+    ctx.globalAlpha = nightMix * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * speed + ph)));
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = nightMix;
+
+  const [moonX, moonY] = celestialPos(t);
+  const moonR = SUN_R * 0.85;
+  const halo = ctx.createRadialGradient(moonX, moonY, moonR * 0.8, moonX, moonY, moonR * 3.2);
+  halo.addColorStop(0, "rgba(190,210,255,0.35)");
+  halo.addColorStop(1, "rgba(190,210,255,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, moonR * 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  const disc = ctx.createRadialGradient(moonX - moonR * 0.3, moonY - moonR * 0.3, 0, moonX, moonY, moonR);
+  disc.addColorStop(0, "#fbf8ea");
+  disc.addColorStop(1, "#d8d6c8");
+  ctx.fillStyle = disc;
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(160,158,145,0.45)";
+  for (const [dx, dy, r] of MOON_CRATERS) {
+    ctx.beginPath();
+    ctx.arc(moonX + dx * moonR, moonY + dy * moonR, r * moonR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawClouds(ctx, t, "rgba(10,15,35,0.4)", "80,95,130", 0.7);
+}
+
+function drawSky(ctx, t) {
+  // Avance le fondu jour/nuit vers le choix courant (borné si l'onglet était en arrière-plan).
+  const dt = lastSkyTs ? Math.min(0.1, t - lastSkyTs) : 0;
+  lastSkyTs = t;
+  const target = params.night ? 1 : 0;
+  const stepMix = dt / NIGHT_FADE_S;
+  nightMix = target > nightMix ? Math.min(target, nightMix + stepMix) : Math.max(target, nightMix - stepMix);
+
+  ctx.save();
+  ctx.translate(SKY_W / 2, SKY_H / 2);
+  ctx.rotate(-jarAngle());
+  ctx.translate(-SKY_W / 2, -SKY_H / 2);
+  if (nightMix < 1) drawDaySky(ctx, t);
+  if (nightMix > 0) {
+    ctx.globalAlpha = nightMix;
+    drawNightSky(ctx, t);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+// Luminescence de la neige (la nuit) : les grains blancs ne sont pas assombris par la lumière
+// lunaire, ils virent au blanc bleuté éclatant et rayonnent un halo. Le halo est un calque ne
+// contenant que les grains blancs, réduit (GLOW_DOWNSCALE) puis ré-agrandi avec lissage — un flou
+// quasi gratuit, sans ctx.filter (pas partout supporté) — et ajouté en mode "lighter" par-dessus
+// le sable, avec une légère respiration (GLOW_PULSE_SPEED). Calculé uniquement quand il fait nuit.
+const WHITE_GLOW_RGB = [190, 235, 255]; // couleur du halo
+const WHITE_NIGHT_LIGHT = [1.0, 1.04, 1.1]; // éclairage des grains blancs eux-mêmes, en pleine nuit
+const GLOW_DOWNSCALE = 4;
+const GLOW_PULSE_SPEED = 1.3; // rad/s
+const glowCanvas = document.createElement("canvas");
+const glowCtx = glowCanvas.getContext("2d");
+const glowSmallCanvas = document.createElement("canvas");
+const glowSmallCtx = glowSmallCanvas.getContext("2d");
+let glowData = null;
 
 function render() {
+  // Le ciel d'abord : c'est lui qui fait avancer nightMix, utilisé juste après pour l'éclairage.
+  const tSec = performance.now() / 1000;
+  drawSky(mainCtx, tSec);
+  // Éclairage du sable et des bulles : pleine lumière le jour, lumière lunaire bleutée la nuit.
+  const lr = 1 + (NIGHT_LIGHT[0] - 1) * nightMix;
+  const lg = 1 + (NIGHT_LIGHT[1] - 1) * nightMix;
+  const lb = 1 + (NIGHT_LIGHT[2] - 1) * nightMix;
+  const wr = 1 + (WHITE_NIGHT_LIGHT[0] - 1) * nightMix;
+  const wg = 1 + (WHITE_NIGHT_LIGHT[1] - 1) * nightMix;
+  const wb = 1 + (WHITE_NIGHT_LIGHT[2] - 1) * nightMix;
+  const bubbleR = 210 * lr, bubbleG = 235 * lg, bubbleB = 255 * lb;
+  const glowOn = nightMix > 0;
+  if (glowOn && (glowCanvas.width !== GRID_W || glowCanvas.height !== GRID_H)) {
+    glowCanvas.width = GRID_W; glowCanvas.height = GRID_H;
+    glowSmallCanvas.width = Math.max(1, Math.ceil(GRID_W / GLOW_DOWNSCALE));
+    glowSmallCanvas.height = Math.max(1, Math.ceil(GRID_H / GLOW_DOWNSCALE));
+    glowData = glowCtx.createImageData(GRID_W, GRID_H);
+  }
   const data = imgData.data;
+  const gdata = glowOn ? glowData.data : null;
   for (let p = 0; p < CELL_COUNT; p++) {
     const v = grid[p];
     const o = p * 4;
+    if (gdata) {
+      if (v === WHITE) {
+        gdata[o] = WHITE_GLOW_RGB[0]; gdata[o + 1] = WHITE_GLOW_RGB[1]; gdata[o + 2] = WHITE_GLOW_RGB[2]; gdata[o + 3] = 255;
+      } else {
+        gdata[o + 3] = 0;
+      }
+    }
     if (v === EMPTY) {
       data[o + 3] = 0;
     } else if (v === BUBBLE) {
-      data[o] = 210; data[o + 1] = 235; data[o + 2] = 255; data[o + 3] = 165;
+      data[o] = bubbleR; data[o + 1] = bubbleG; data[o + 2] = bubbleB; data[o + 3] = 165;
     } else {
       const c = COLOR_RGB[v];
       const s = shade[p];
       const t = tint[p] * 14; // léger écart chaud/froid par grain, en plus de la luminosité
-      data[o] = Math.max(0, Math.min(255, c[0] * s + t));
-      data[o + 1] = Math.max(0, Math.min(255, c[1] * s));
-      data[o + 2] = Math.max(0, Math.min(255, c[2] * s - t));
+      const isWhite = v === WHITE;
+      data[o] = Math.max(0, Math.min(255, (c[0] * s + t) * (isWhite ? wr : lr)));
+      data[o + 1] = Math.max(0, Math.min(255, c[1] * s * (isWhite ? wg : lg)));
+      data[o + 2] = Math.max(0, Math.min(255, (c[2] * s - t) * (isWhite ? wb : lb)));
       data[o + 3] = 255;
     }
   }
   offCtx.putImageData(imgData, 0, 0);
 
-  mainCtx.fillStyle = waterGrad;
-  mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
   if (params.flowPct > 0 && params.flowShow) {
     updateFlowViz();
     renderFlowViz(mainCtx, mainCanvas.width, mainCanvas.height);
   }
   mainCtx.imageSmoothingEnabled = true;
   mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
+
+  if (glowOn) {
+    glowCtx.putImageData(glowData, 0, 0);
+    glowSmallCtx.imageSmoothingEnabled = true;
+    glowSmallCtx.clearRect(0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
+    glowSmallCtx.drawImage(glowCanvas, 0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
+    mainCtx.save();
+    mainCtx.globalCompositeOperation = "lighter";
+    mainCtx.globalAlpha = nightMix * (0.55 + 0.15 * Math.sin(tSec * GLOW_PULSE_SPEED));
+    mainCtx.drawImage(glowSmallCanvas, 0, 0, mainCanvas.width, mainCanvas.height);
+    mainCtx.restore();
+  }
 }
 
 function stepsPerFrame() {
@@ -933,12 +1288,15 @@ function loop(ts) {
     }
   }
   lastFrameTs = ts;
+  // Paysage figé : ni pas de simulation ni dérive du courant, le tableau reste tel quel (le rendu
+  // continue, pour refléter un changement de bulles ou un nouveau paysage).
+  const frozen = params.frozen;
   // Fait dériver lentement le champ de courant ; borné pour éviter un saut si l'onglet était
   // en arrière-plan (rAF suspendu, donc dtMs potentiellement énorme au retour).
-  updateFlowField(Math.min(dtMs, 100) / 1000);
+  if (!frozen) updateFlowField(Math.min(dtMs, 100) / 1000);
 
   const t0 = performance.now();
-  const n = stepsPerFrame();
+  const n = frozen ? 0 : stepsPerFrame();
   for (let i = 0; i < n; i++) step();
   render();
   const computeMs = performance.now() - t0;
@@ -948,7 +1306,8 @@ function loop(ts) {
   // image (fait à chaque image, pas seulement au rafraîchissement de l'affichage) : sinon on
   // n'échantillonnerait qu'un seul pas de simulation sur ~15 images, ce qui sous-estime largement
   // l'activité réellement visible à l'œil sur toute la fenêtre entre deux rafraîchissements.
-  for (let p = 0; p < CELL_COUNT; p++) if (moved[p]) recentlyMoved[p] = 1;
+  // (Figé : moved[] garde les traces du dernier pas joué, à ne pas recompter à chaque image.)
+  if (!frozen) for (let p = 0; p < CELL_COUNT; p++) if (moved[p]) recentlyMoved[p] = 1;
 
   // Rafraîchit le libellé FPS/calcul 4 fois par seconde environ, pas à chaque image (illisible
   // sinon, et ce sont des moyennes lissées qui n'ont pas besoin d'un affichage plus fréquent).
@@ -1000,9 +1359,13 @@ const bubbleVal = document.getElementById("bubbleVal");
 bubbleSlider.addEventListener("input", () => {
   params.bubblePct = Number(bubbleSlider.value);
   bubbleVal.textContent = params.bubblePct + "%";
-  const target = bubbleTargetCount();
-  const current = countBubbles();
-  if (target > current) spawnBubblesTo(target); else removeBubblesTo(target);
+  // Vue en couches : pas de bulles affichées, elles seront ajustées au décochage (exitLayerView).
+  if (!params.frozen) {
+    const target = bubbleTargetCount();
+    const current = countBubbles();
+    if (target > current) spawnBubblesTo(target); else removeBubblesTo(target);
+  }
+  syncSandCountInput(); // le plafond de grains dépend de la place laissée aux bulles
 });
 
 const viscositySeg = document.getElementById("viscositySeg");
@@ -1015,12 +1378,26 @@ viscositySeg.addEventListener("click", (e) => {
   for (const b of viscositySeg.children) b.classList.toggle("active", b === btn);
 });
 
+// Bouton d'ambiance, à côté de "Retourner le cadre" (toujours visible, y compris en plein écran) :
+// bascule jour/nuit, son libellé annonce l'ambiance vers laquelle il fait passer (comme le bouton
+// plein écran). Le fondu lui-même est géré par drawSky().
+const dayNightBtn = document.getElementById("dayNightBtn");
+dayNightBtn.addEventListener("click", () => {
+  params.night = !params.night;
+  dayNightBtn.textContent = params.night ? "☀️ Jour" : "🌙 Nuit";
+});
+
 const gravitySlider = document.getElementById("gravitySlider");
 const gravityVal = document.getElementById("gravityVal");
 gravitySlider.addEventListener("input", () => {
   const v = Number(gravitySlider.value);
   params.gravityStrength = 0.3 + ((v - 1) / 19) * 1.7;
   gravityVal.textContent = "x" + params.gravityStrength.toFixed(1);
+});
+
+const wrapEdgesCheckbox = document.getElementById("wrapEdgesCheckbox");
+wrapEdgesCheckbox.addEventListener("change", () => {
+  params.wrapEdges = wrapEdgesCheckbox.checked;
 });
 
 const flowSlider = document.getElementById("flowSlider");
@@ -1049,13 +1426,65 @@ for (const { name, type } of DENSITY_SLIDERS) {
     const v = Number(slider.value);
     DENSITY[type] = v;
     val.textContent = v.toFixed(2);
+    if (params.frozen) buildLayers(); // l'ordre des couches suit les densités
   });
 }
+
+// Proportions : chaque curseur règle le poids brut de sa couleur ; les libellés affichent la part
+// réelle (poids / total), donc tous se mettent à jour quand un seul bouge. Le paysage n'est
+// regénéré qu'au relâchement (comme la résolution), pas à chaque cran pendant le glissement.
+function updateProportionLabels() {
+  const total = sandWeightTotal();
+  for (const [type, w] of SAND_COLOR_WEIGHTS) {
+    const { name } = DENSITY_SLIDERS.find((s) => s.type === type);
+    const pct = total > 0 ? (w / total) * 100 : 100 / SAND_COLOR_WEIGHTS.length;
+    document.getElementById("prop" + name + "Val").textContent = Math.round(pct) + "%";
+  }
+}
+for (const { name, type } of DENSITY_SLIDERS) {
+  const slider = document.getElementById("prop" + name);
+  const entry = SAND_COLOR_WEIGHTS.find(([t]) => t === type);
+  slider.addEventListener("input", () => {
+    entry[1] = Number(slider.value);
+    updateProportionLabels();
+    if (params.frozen) buildLayers(); // vue en couches : l'épaisseur suit le curseur en direct
+  });
+  slider.addEventListener("change", () => {
+    gravityDown = true;
+    jarWrap.classList.remove("flipped");
+    scatterInitial();
+  });
+}
+
+const sandCountInput = document.getElementById("sandCountInput");
+const sandCountMax = document.getElementById("sandCountMax");
+function syncSandCountInput() {
+  const max = maxSandCount();
+  sandCountInput.max = max;
+  sandCountInput.value = params.sandCount;
+  sandCountMax.textContent = "max " + max.toLocaleString("fr-FR");
+}
+sandCountInput.addEventListener("change", () => {
+  params.sandCount = clampSandCount(Number(sandCountInput.value));
+  syncSandCountInput(); // réaffiche la valeur réellement retenue si elle a été plafonnée
+  gravityDown = true;
+  jarWrap.classList.remove("flipped");
+  scatterInitial();
+});
+syncSandCountInput();
+updateProportionLabels(); // libellés % calculés depuis SAND_COLOR_WEIGHTS
+
+const frozenCheckbox = document.getElementById("frozenCheckbox");
+frozenCheckbox.addEventListener("change", () => {
+  params.frozen = frozenCheckbox.checked;
+  if (params.frozen) enterLayerView(); else exitLayerView();
+});
 
 const jarWrap = document.getElementById("jarWrap");
 document.getElementById("flipBtn").addEventListener("click", () => {
   gravityDown = !gravityDown;
   jarWrap.classList.toggle("flipped");
+  if (params.frozen) buildLayers(); // les couches se reposent du nouveau côté de la gravité
   // Pas besoin de relâcher quoi que ce soit manuellement : isInSurfaceBand() se recalcule à
   // partir de gravityDown à chaque cellule, donc "le haut" change de côté tout seul.
   // Pas besoin de relancer le courant manuellement : le flot de sable que ça déclenche fait
