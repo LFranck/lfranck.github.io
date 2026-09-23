@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.26.56
+  Version : 0.27.59
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-23
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -106,6 +106,7 @@
   }
   .btn:active { transform:scale(.97); }
   .btn.ghost { background:none; border:1px solid #333; color:#ddd; font-weight:600; }
+  .btn:disabled { opacity:.35; cursor:default; transform:none; }
 
   /* Contrôle segmenté (boutons sélectionnables) utilisé pour la vitesse d'écoulement. */
   /* Grille de 10 colonnes égales : les boutons tiennent toujours sur une seule ligne, en se
@@ -176,6 +177,7 @@
     <h3>Cartouches affichés</h3>
     <label class="row"><input type="checkbox" id="toggleSettings"><span>🎛️ Réglages</span></label>
     <label class="row"><input type="checkbox" id="toggleFlow"><span>🌊 Courant</span></label>
+    <label class="row"><input type="checkbox" id="toggleSky"><span>🌠 Ciel</span></label>
     <label class="row"><input type="checkbox" id="toggleDensity"><span>Densités des sables</span></label>
     <label class="row"><input type="checkbox" id="toggleProportion"><span>Proportions des sables</span></label>
   </div>
@@ -278,6 +280,16 @@
         </div>
       </div>
 
+      <div class="controls cartoucheHidden" id="panelSky">
+        <div class="cartoucheTitle">🌠 Ciel<button type="button" class="infoBtn" data-target="subSky" aria-label="Informations">i</button></div>
+        <span class="sub" id="subSky">Des passages traversent le ciel au hasard : des étoiles filantes la nuit, parfois un avion le jour, et très rarement un ovni, dont le rayon tracteur aspire des grains de sable avant de les relâcher. Ces boutons les font apparaître tout de suite. Les étoiles filantes ne se voient que la nuit et les avions que le jour : le bouton est grisé le reste du temps. Celui de l'ovni l'est pendant sa visite.</span>
+        <div class="actions">
+          <button class="btn ghost" id="meteorBtn" type="button">🌠 Étoile filante</button>
+          <button class="btn ghost" id="planeBtn" type="button">✈️ Avion</button>
+          <button class="btn ghost" id="ufoBtn" type="button">🛸 Ovni</button>
+        </div>
+      </div>
+
       <details class="controls cartoucheHidden" id="densityPanel">
         <summary>Densités des sables (réglage fin)<button type="button" class="infoBtn" data-target="subDensity" aria-label="Informations">i</button></summary>
         <div class="densityRows">
@@ -351,7 +363,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.26.56";
+const APP_VERSION = "0.27.59";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-23";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -368,6 +380,7 @@ document.getElementById("infoClose").addEventListener("click", () => infoDialog.
 const PANEL_TOGGLES = [
   { checkbox: "toggleSettings", panel: "panelSettings" },
   { checkbox: "toggleFlow", panel: "panelFlow" },
+  { checkbox: "toggleSky", panel: "panelSky" },
   { checkbox: "toggleDensity", panel: "densityPanel" },
   { checkbox: "toggleProportion", panel: "proportionPanel" },
 ];
@@ -527,6 +540,9 @@ let tint = new Float32Array(CELL_COUNT);  // teinte chaud/froid par grain, stabl
 // Cases ayant bougé au moins une fois depuis le dernier rafraîchissement de l'affichage
 // "Particules en mouvement" (voir loop()) — remis à zéro à chaque rafraîchissement.
 let recentlyMoved = new Uint8Array(CELL_COUNT);
+// Grains aspirés par le rayon de l'ovni : sortis de la grille le temps de la visite, puis remis
+// dedans au relâchement (voir updateUfoGrains()). Vidé quand la grille est régénérée.
+let ufoGrains = [];
 // Bords gauche/droite liés (params.wrapEdges) : la grille se referme sur elle-même comme un
 // cylindre — un grain qui sort à gauche réapparaît à droite, et inversement. inBounds() accepte
 // alors tout x, et idx() le ramène dans la grille. Les voisins ne sont jamais à plus d'une case
@@ -814,6 +830,7 @@ function removeBubblesTo(target) {
 // prend les premières ; si le nombre demandé dépasse cette zone, le reste déborde dans le haut.
 function scatterInitial() {
   grid.fill(EMPTY);
+  ufoGrains = []; // nouveau paysage : les grains emportés par l'ovni ne reviennent pas
   const sandCount = clampSandCount(params.sandCount);
   const topRows = Math.floor(GRID_H * 0.12);
   const regionSize = (GRID_H - topRows) * GRID_W;
@@ -871,6 +888,7 @@ function buildLayers() {
   wakeAll();
 }
 function enterLayerView() {
+  releaseUfoGrains(); // les grains emportés par l'ovni reviennent d'abord dans le paysage mis de côté
   layerSnapshot = grid.slice();
   buildLayers();
 }
@@ -1175,6 +1193,7 @@ function allocateGrid(shortSide) {
   shade = new Float32Array(CELL_COUNT);
   tint = new Float32Array(CELL_COUNT);
   recentlyMoved = new Uint8Array(CELL_COUNT);
+  ufoGrains = [];
   allocChunks();
   rebuildFlowField();
   rebuildFlowViz();
@@ -1265,6 +1284,21 @@ const NIGHT_LIGHT = [0.68, 0.72, 0.86];
 // Cratères de la lune : [dx, dy, rayon] en fractions du rayon de la lune.
 const MOON_CRATERS = [[-0.3, -0.2, 0.22], [0.25, 0.1, 0.16], [-0.05, 0.4, 0.13], [0.35, -0.35, 0.1]];
 
+// ---------- Passages dans le ciel ----------
+// Étoiles filantes la nuit, un avion de temps en temps le jour, et très rarement un ovni (de jour
+// comme de nuit). Chaque image, un passage a une probabilité dt / intervalle moyen d'apparaître ;
+// il est retiré une fois sorti du ciel ou éteint. Voir updateSkyVisitors().
+const METEOR_EVERY_S = 7;   // intervalle moyen entre deux étoiles filantes
+const PLANE_EVERY_S = 50;   // entre deux avions
+const UFO_EVERY_S = 300;    // entre deux ovnis
+const UFO_DURATION_S = 13;  // durée d'une visite d'ovni
+const UFO_LIGHTS = ["#ff5a5a", "#ffe066", "#6cf0ff", "#ff7af0", "#8dff7a"];
+const UFO_GRAB_PER_S = 500; // grains aspirés par seconde, rayon à pleine puissance
+const UFO_GRAB_MAX = 1500;  // plafond de grains emportés en une visite
+const UFO_LIFT_SPEED = 0.8; // vitesse de montée des grains dans le rayon (en SKY_UNIT par seconde)
+let meteors = [], planes = [], ufo = null;
+let skyAngle = 0; // angle du cadre lu à cette image (jarAngle()), partagé par le ciel et l'ovni
+
 // Position de l'astre (soleil le jour, lune la nuit) sur sa course en arc.
 function celestialPos(t) {
   const phase = (t % SUN_PERIOD) / SUN_PERIOD;
@@ -1312,6 +1346,7 @@ function drawDaySky(ctx, t) {
   ctx.arc(sunX, sunY, SUN_R, 0, Math.PI * 2);
   ctx.fill();
 
+  for (const p of planes) drawPlane(ctx, t, p); // derrière les nuages
   drawClouds(ctx, t, "rgba(150,180,210,0.45)", sky.cloud, sky.cloudAlpha);
   if (sky.haze) drawHeatHaze(ctx, t);
 }
@@ -1372,6 +1407,7 @@ function drawNightSky(ctx, t) {
     ctx.arc(sx, sy, sr, 0, Math.PI * 2);
     ctx.fill();
   }
+  for (const m of meteors) drawMeteor(ctx, t, m);
   ctx.globalAlpha = nightMix;
   if (THEMES[themeIndex].sky.aurora) drawAurora(ctx, t);
 
@@ -1401,6 +1437,330 @@ function drawNightSky(ctx, t) {
   drawClouds(ctx, t, "rgba(10,15,35,0.4)", "80,95,130", 0.7);
 }
 
+// Création d'un passage — appelée au hasard par updateSkyVisitors(), ou à la demande par les
+// boutons du cartouche "🌠 Ciel".
+const randomSide = () => (Math.random() < 0.5 ? 1 : -1);
+function spawnMeteor(t) {
+  const dir = randomSide(), slope = 0.25 + Math.random() * 0.4, speed = SKY_UNIT * (1.1 + Math.random());
+  meteors.push({
+    x: SKY_W * (0.1 + Math.random() * 0.8), y: SKY_H * (0.02 + Math.random() * 0.3),
+    vx: dir * Math.cos(slope) * speed, vy: Math.sin(slope) * speed,
+    t0: t, life: 0.5 + Math.random() * 0.6, len: SKY_UNIT * (0.1 + Math.random() * 0.12),
+  });
+}
+function spawnPlane(t) {
+  const size = SKY_UNIT * (0.022 + Math.random() * 0.014);
+  planes.push({
+    dir: randomSide(), t0: t, y: SKY_H * (0.05 + Math.random() * 0.22), size,
+    speed: SKY_W / (16 + Math.random() * 10), trail: SKY_W * 0.45, margin: size * 1.5,
+  });
+}
+function spawnUfo(t) {
+  ufo = { dir: randomSide(), t0: t, y: SKY_H * (0.12 + Math.random() * 0.18), xc: SKY_W * (0.3 + Math.random() * 0.4), grabAcc: 0 };
+  ufo.pose = ufoPose(t);
+}
+
+// Fait apparaître et disparaître les passages (voir METEOR_EVERY_S et suivants).
+function updateSkyVisitors(t, dt) {
+  if (nightMix > 0.5 && Math.random() < dt / METEOR_EVERY_S) spawnMeteor(t);
+  meteors = meteors.filter((m) => t - m.t0 < m.life);
+  if (nightMix < 0.5 && planes.length === 0 && Math.random() < dt / PLANE_EVERY_S) spawnPlane(t);
+  planes = planes.filter((p) => (t - p.t0) * p.speed < SKY_W + 2 * p.margin + p.trail);
+  if (!ufo && Math.random() < dt / UFO_EVERY_S) spawnUfo(t);
+  if (ufo && t - ufo.t0 > UFO_DURATION_S) ufo = null;
+  if (ufo) ufo.pose = ufoPose(t);
+  updateSkyButtons();
+}
+
+// Boutons du cartouche "🌠 Ciel" : les étoiles filantes ne se voient que la nuit et les avions que
+// le jour, leur bouton est donc grisé le reste du temps ; celui de l'ovni l'est pendant une visite.
+const meteorBtn = document.getElementById("meteorBtn");
+const planeBtn = document.getElementById("planeBtn");
+const ufoBtn = document.getElementById("ufoBtn");
+function updateSkyButtons() {
+  const night = nightMix > 0.5;
+  if (meteorBtn.disabled === night) meteorBtn.disabled = !night;
+  if (planeBtn.disabled !== night) planeBtn.disabled = night;
+  if (ufoBtn.disabled !== !!ufo) ufoBtn.disabled = !!ufo;
+}
+meteorBtn.addEventListener("click", () => spawnMeteor(performance.now() / 1000));
+planeBtn.addEventListener("click", () => spawnPlane(performance.now() / 1000));
+ufoBtn.addEventListener("click", () => { if (!ufo) spawnUfo(performance.now() / 1000); });
+
+// Étoile filante : une tête brillante suivie d'une traînée qui s'efface, le tout apparaissant et
+// s'éteignant en douceur sur sa durée de vie.
+function drawMeteor(ctx, t, m) {
+  const age = t - m.t0;
+  const x = m.x + m.vx * age, y = m.y + m.vy * age;
+  const n = Math.hypot(m.vx, m.vy);
+  const tx = x - (m.vx / n) * m.len, ty = y - (m.vy / n) * m.len;
+  const fade = Math.sin(Math.PI * age / m.life);
+  const grad = ctx.createLinearGradient(x, y, tx, ty);
+  grad.addColorStop(0, "rgba(255,255,255," + 0.95 * fade + ")");
+  grad.addColorStop(0.3, "rgba(200,220,255," + 0.45 * fade + ")");
+  grad.addColorStop(1, "rgba(200,220,255,0)");
+  ctx.save();
+  ctx.globalAlpha = nightMix;
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(tx, ty);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255," + fade + ")";
+  ctx.beginPath();
+  ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Avion : petite silhouette grise qui traverse tout le ciel en laissant une traînée de
+// condensation blanche, avec un feu rouge clignotant au bout de l'aile.
+function drawPlane(ctx, t, p) {
+  const d = (t - p.t0) * p.speed;
+  const x = p.dir > 0 ? -p.margin + d : SKY_W + p.margin - d;
+  const s = p.size;
+  const trail = ctx.createLinearGradient(x, p.y, x - p.dir * p.trail, p.y);
+  trail.addColorStop(0, "rgba(255,255,255,0.7)");
+  trail.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = trail;
+  ctx.fillRect(Math.min(x, x - p.dir * p.trail), p.y - s * 0.08, p.trail, s * 0.16);
+
+  ctx.save();
+  ctx.translate(x, p.y);
+  ctx.scale(p.dir, 1);
+  ctx.fillStyle = "#7d8794";
+  ctx.beginPath(); // ailes (celle du dessus en perspective, plus courte)
+  ctx.moveTo(0.15 * s, 0); ctx.lineTo(-0.35 * s, 0.75 * s); ctx.lineTo(-0.55 * s, 0.75 * s); ctx.lineTo(-0.25 * s, 0);
+  ctx.moveTo(0.1 * s, 0); ctx.lineTo(-0.3 * s, -0.45 * s); ctx.lineTo(-0.45 * s, -0.45 * s); ctx.lineTo(-0.25 * s, 0);
+  ctx.moveTo(-0.8 * s, 0); ctx.lineTo(-1.05 * s, -0.5 * s); ctx.lineTo(-1.15 * s, -0.5 * s); ctx.lineTo(-1.05 * s, 0); // dérive
+  ctx.fill();
+  ctx.fillStyle = "#b9c2cc";
+  ctx.beginPath(); // fuselage
+  ctx.ellipse(-0.1 * s, 0, 1.05 * s, 0.14 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if ((t * 1.5) % 1 < 0.15) {
+    ctx.fillStyle = "#ff3b3b";
+    ctx.beginPath();
+    ctx.arc(-0.5 * s, 0.75 * s, 0.07 * s + 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Ovni rigolo : une soucoupe avec un petit extraterrestre vert sous sa bulle. Elle arrive en
+// dandinant, s'arrête pour se trémousser en braquant un rayon tracteur sur le sable (qui aspire des
+// grains), les garde un moment en tourbillon sous elle, les relâche puis repart en trombe vers le
+// haut. Ses feux changent de couleur en boucle. Étapes, en fraction de UFO_DURATION_S :
+// arrivée jusqu'à 0,3 ; rayon de 0,3 à 0,58 ; grains tenus jusqu'à 0,72 ; relâchement et départ.
+const UFO_BEAM_START = 0.3, UFO_BEAM_END = 0.58, UFO_RELEASE = 0.72;
+const UFO_BEAM_LENGTH = 1.2; // longueur du rayon, en hauteurs de ciel (il va jusqu'au fond)
+
+// Position et attitude de l'ovni à l'instant t (repère du ciel) : centre, inclinaison, puissance du
+// rayon (0 = éteint), âge, avancement de la visite et taille de référence s.
+function ufoPose(t) {
+  const age = t - ufo.t0, p = age / UFO_DURATION_S, s = SKY_UNIT * 0.05;
+  const m = 1.5 * s, x0 = ufo.dir > 0 ? -m : SKY_W + m;
+  let x, y = ufo.y + Math.sin(age * 3) * s * 0.35, tilt, beam = 0;
+  if (p < UFO_BEAM_START) { // arrivée, en ralentissant
+    const k = p / UFO_BEAM_START;
+    x = x0 + (ufo.xc - x0) * (1 - (1 - k) ** 2);
+    tilt = -ufo.dir * 0.18 * (1 - k) + Math.sin(age * 5) * 0.08;
+  } else if (p < UFO_RELEASE) { // pause : trémoussement, rayon tracteur puis grains tenus
+    x = ufo.xc + Math.sin(age * 9) * s * 0.4;
+    y += Math.abs(Math.sin(age * 4)) * -s * 0.3;
+    tilt = Math.sin(age * 7) * 0.3;
+    if (p < UFO_BEAM_END) {
+      const k = (p - UFO_BEAM_START) / (UFO_BEAM_END - UFO_BEAM_START);
+      beam = Math.sin(Math.PI * k) * (0.75 + 0.25 * Math.sin(age * 25));
+    }
+  } else { // départ en trombe
+    const k = (p - UFO_RELEASE) / (1 - UFO_RELEASE);
+    x = ufo.xc + ufo.dir * k * k * (SKY_W + 2 * m);
+    y -= k * k * SKY_H * 0.35;
+    tilt = ufo.dir * 0.35 * Math.min(1, k * 4);
+  }
+  return { x, y, tilt, beam, age, p, s };
+}
+
+// Passage entre le repère du ciel (toujours à l'endroit à l'écran) et la grille (qui tourne avec
+// le cadre) : le ciel est dessiné tourné de -skyAngle autour du centre du canvas.
+function skyToGrid(sx, sy) {
+  const cx = SKY_W / 2, cy = SKY_H / 2, c = Math.cos(skyAngle), sn = Math.sin(skyAngle);
+  const dx = sx - cx, dy = sy - cy;
+  const px = cx + dx * c + dy * sn, py = cy - dx * sn + dy * c;
+  return [Math.floor(px * GRID_W / SKY_W), Math.floor(py * GRID_H / SKY_H)];
+}
+// Index de la case (gx, gy), ou -1 hors de la grille (x ramené dans la grille si bords liés).
+function gridCellAt(gx, gy) {
+  if (gy < 0 || gy >= GRID_H) return -1;
+  if (gx < 0 || gx >= GRID_W) {
+    if (!params.wrapEdges) return -1;
+    gx = ((gx % GRID_W) + GRID_W) % GRID_W;
+  }
+  return gy * GRID_W + gx;
+}
+
+// Aspire un grain : on descend le long d'une ligne du rayon, tirée au hasard dans sa largeur, et on
+// prend le premier grain de sable rencontré (la surface du tas, les bulles sont traversées).
+function grabUfoGrain(pose) {
+  const s = pose.s, top = pose.y + 0.2 * s, h = SKY_H * UFO_BEAM_LENGTH;
+  const u = Math.random() * 2 - 1, stepPx = SKY_W / GRID_W;
+  for (let d = 0; d < h; d += stepPx) {
+    const sx = pose.x + u * (0.4 * s + 1.2 * s * d / h), sy = top + d;
+    const [gx, gy] = skyToGrid(sx, sy);
+    const i = gridCellAt(gx, gy);
+    if (i < 0) continue;
+    const v = grid[i];
+    if (v < SAND_MIN || v > SAND_MAX) continue;
+    grid[i] = EMPTY;
+    wake(i % GRID_W, (i / GRID_W) | 0);
+    ufoGrains.push({
+      x: sx, y: sy, type: v, shade: shade[i], tint: tint[i], held: false,
+      ang: Math.random() * Math.PI * 2, rad: Math.sqrt(Math.random()), spin: 1.5 + Math.random() * 2.5,
+    });
+    return;
+  }
+}
+
+// Case vide la plus proche de (gx, gy), en cherchant par carrés de plus en plus grands ; en dernier
+// recours, la première case vide de la grille (-1 si le tableau est plein).
+function findEmptyNear(gx, gy) {
+  gy = Math.max(0, Math.min(GRID_H - 1, gy));
+  gx = params.wrapEdges ? ((gx % GRID_W) + GRID_W) % GRID_W : Math.max(0, Math.min(GRID_W - 1, gx));
+  for (let r = 0; r <= 12; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const i = gridCellAt(gx + dx, gy + dy);
+        if (i >= 0 && grid[i] === EMPTY) return i;
+      }
+    }
+  }
+  for (let i = 0; i < CELL_COUNT; i++) if (grid[i] === EMPTY) return i;
+  return -1;
+}
+
+// Relâche les grains emportés : chacun est remis dans la grille là où il se trouve (ou à la case
+// vide la plus proche), avec sa couleur et sa nuance d'origine, et la gravité le fait retomber.
+function releaseUfoGrains() {
+  for (const g of ufoGrains) {
+    const [gx, gy] = skyToGrid(g.x, g.y);
+    const i = findEmptyNear(gx, gy);
+    if (i < 0) continue;
+    grid[i] = g.type; shade[i] = g.shade; tint[i] = g.tint;
+    wake(i % GRID_W, (i / GRID_W) | 0);
+  }
+  ufoGrains = [];
+}
+
+// Rayon tracteur : aspire des grains tant qu'il est allumé (pas en vue figée, qui met le sable de
+// côté), les fait monter vers la soucoupe où ils tourbillonnent en amas, puis les relâche.
+function updateUfoGrains(t, dt) {
+  if (!ufo) return;
+  const pose = ufo.pose, s = pose.s;
+  if (pose.beam > 0.3 && !params.frozen) {
+    ufo.grabAcc += dt * UFO_GRAB_PER_S * pose.beam;
+    while (ufo.grabAcc >= 1 && ufoGrains.length < UFO_GRAB_MAX) { ufo.grabAcc--; grabUfoGrain(pose); }
+    ufo.grabAcc = Math.min(ufo.grabAcc, 1);
+  }
+  // L'amas grossit avec le nombre de grains (même densité à partir de 300), et descend d'autant
+  // pour rester sous la soucoupe.
+  const grow = Math.sqrt(Math.max(1, ufoGrains.length / 300));
+  const rx = 1.1 * s * grow, ry = 0.5 * s * grow;
+  const cx = pose.x, cy = pose.y + 0.35 * s + ry, lift = SKY_UNIT * UFO_LIFT_SPEED * dt;
+  for (const g of ufoGrains) {
+    g.ang += g.spin * dt;
+    const tx = cx + Math.cos(g.ang) * g.rad * rx, ty = cy + Math.sin(g.ang) * g.rad * ry;
+    if (g.held) { g.x = tx; g.y = ty; continue; }
+    const dx = tx - g.x, dy = ty - g.y, dist = Math.hypot(dx, dy);
+    if (dist <= lift) { g.held = true; g.x = tx; g.y = ty; continue; }
+    g.x += (dx / dist) * lift + Math.sin(t * 8 + g.ang) * 0.4; // petite ondulation en montant
+    g.y += (dy / dist) * lift;
+  }
+  if (pose.p >= UFO_RELEASE && ufoGrains.length) releaseUfoGrains();
+}
+
+// Grains emportés, dessinés par-dessus le sable dans le repère du ciel, avec l'éclairage du moment
+// (lr, lg, lb : facteurs de lumière de render()).
+function drawUfoGrains(ctx, lr, lg, lb) {
+  if (!ufoGrains.length) return;
+  const size = (SKY_W / GRID_W) * 1.2;
+  ctx.save();
+  ctx.translate(SKY_W / 2, SKY_H / 2);
+  ctx.rotate(-skyAngle);
+  ctx.translate(-SKY_W / 2, -SKY_H / 2);
+  for (const g of ufoGrains) {
+    const c = COLOR_RGB[g.type], k = g.tint * 14;
+    const r = Math.max(0, Math.min(255, (c[0] * g.shade + k) * lr));
+    const gr = Math.max(0, Math.min(255, c[1] * g.shade * lg));
+    const b = Math.max(0, Math.min(255, (c[2] * g.shade - k) * lb));
+    ctx.fillStyle = "rgb(" + (r | 0) + "," + (gr | 0) + "," + (b | 0) + ")";
+    ctx.fillRect(g.x - size / 2, g.y - size / 2, size, size);
+  }
+  ctx.restore();
+}
+
+function drawUfo(ctx) {
+  const { x, y, tilt, beam, age, s } = ufo.pose;
+  ctx.save();
+  ctx.translate(x, y);
+  if (beam > 0) {
+    const h = SKY_H * UFO_BEAM_LENGTH;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "rgba(180,255,140," + 0.45 * beam + ")");
+    g.addColorStop(1, "rgba(180,255,140,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(-0.4 * s, 0.2 * s); ctx.lineTo(0.4 * s, 0.2 * s); ctx.lineTo(1.6 * s, h); ctx.lineTo(-1.6 * s, h);
+    ctx.fill();
+  }
+  ctx.rotate(tilt);
+  // Extraterrestre : tête verte, grands yeux noirs, antennes à boules.
+  ctx.strokeStyle = "#5fd35a"; ctx.lineWidth = Math.max(1, s * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(-0.08 * s, -0.5 * s); ctx.lineTo(-0.18 * s, -0.72 * s);
+  ctx.moveTo(0.08 * s, -0.5 * s); ctx.lineTo(0.18 * s, -0.72 * s);
+  ctx.stroke();
+  ctx.fillStyle = "#6be064";
+  ctx.beginPath();
+  ctx.arc(-0.18 * s, -0.74 * s, 0.06 * s, 0, Math.PI * 2);
+  ctx.arc(0.18 * s, -0.74 * s, 0.06 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, -0.34 * s, 0.2 * s, 0.22 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const blink = (age % 2.3) < 0.12 ? 0.2 : 1; // il cligne des yeux
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.ellipse(-0.08 * s, -0.36 * s, 0.06 * s, 0.09 * s * blink, -0.4, 0, Math.PI * 2);
+  ctx.ellipse(0.08 * s, -0.36 * s, 0.06 * s, 0.09 * s * blink, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // Bulle de verre.
+  ctx.fillStyle = "rgba(170,225,255,0.35)";
+  ctx.strokeStyle = "rgba(230,245,255,0.8)"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, -0.05 * s, 0.45 * s, Math.PI, 0);
+  ctx.fill(); ctx.stroke();
+  // Soucoupe métallique.
+  const body = ctx.createLinearGradient(0, -0.15 * s, 0, 0.3 * s);
+  body.addColorStop(0, "#e4e8ee");
+  body.addColorStop(1, "#7a8390");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0.05 * s, s, 0.26 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Feux qui tournent autour de la soucoupe.
+  for (let i = 0; i < UFO_LIGHTS.length; i++) {
+    ctx.fillStyle = UFO_LIGHTS[(i + Math.floor(age * 6)) % UFO_LIGHTS.length];
+    ctx.beginPath();
+    ctx.arc((i - 2) * 0.38 * s, 0.1 * s - Math.abs(i - 2) * 0.03 * s, 0.07 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawSky(ctx, t) {
   // Avance le fondu jour/nuit vers le choix courant (borné si l'onglet était en arrière-plan).
   const dt = lastSkyTs ? Math.min(0.1, t - lastSkyTs) : 0;
@@ -1409,10 +1769,13 @@ function drawSky(ctx, t) {
   const target = params.night ? 1 : 0;
   const stepMix = dt / NIGHT_FADE_S;
   nightMix = target > nightMix ? Math.min(target, nightMix + stepMix) : Math.max(target, nightMix - stepMix);
+  skyAngle = jarAngle();
+  updateSkyVisitors(t, dt);
+  updateUfoGrains(t, dt);
 
   ctx.save();
   ctx.translate(SKY_W / 2, SKY_H / 2);
-  ctx.rotate(-jarAngle());
+  ctx.rotate(-skyAngle);
   ctx.translate(-SKY_W / 2, -SKY_H / 2);
   if (nightMix < 1) drawDaySky(ctx, t);
   if (nightMix > 0) {
@@ -1420,6 +1783,7 @@ function drawSky(ctx, t) {
     drawNightSky(ctx, t);
     ctx.globalAlpha = 1;
   }
+  if (ufo) drawUfo(ctx); // par-dessus tout, de jour comme de nuit
   ctx.restore();
 }
 
@@ -1492,6 +1856,7 @@ function render() {
   }
   mainCtx.imageSmoothingEnabled = true;
   mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
+  drawUfoGrains(mainCtx, lr, lg, lb);
 
   if (glowOn) {
     glowCtx.putImageData(glowData, 0, 0);
