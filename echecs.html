@@ -5,9 +5,9 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.12.12
+  Version : 0.13.14
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
-  Date    : 2026-09-18
+  Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
   Statut  : En développement — Étape 3 (pilotage vocal en plus du tactile/souris), règles complètes :
             prise en passant, roque, promotion, échec/échec et mat/pat, nulle par répétition/50 coups,
@@ -49,6 +49,13 @@
     cursor:pointer; padding:4px;
   }
   #infoLink:hover, #settingsLink:hover, #undoBtn:hover:not(:disabled), #voiceBtn:hover:not(:disabled) { color:#fff; }
+  /* Lien de soutien Ko-fi (en-tête) : pastille ambrée ; sur petit écran, la tasse seule. */
+  #kofiLink {
+    display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:999px;
+    background:#f5a524; color:#1a1206; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap;
+  }
+  #kofiLink:hover { background:#ffb940; }
+  @media (max-width:560px) { #kofiLink .kofiText { display:none; } }
   #undoBtn:disabled, #voiceBtn:disabled { color:#555; text-decoration:none; cursor:not-allowed; }
   #voiceBtn.listening { color:#ef4444; text-decoration:none; font-weight:700; }
   #voiceFeedback { font-size:12px; color:#999; min-height:14px; margin-bottom:8px; }
@@ -164,6 +171,7 @@
     <button id="voiceBtn" type="button" disabled>🎙️ Voix</button>
     <button id="undoBtn" type="button" disabled>↩️ Annuler</button>
     <button id="settingsLink" type="button">⚙️ Réglages</button>
+    <a id="kofiLink" href="https://ko-fi.com/lfranck" target="_blank" rel="noopener" title="Soutenir mes projets sur Ko-fi" aria-label="M'offrir un café sur Ko-fi">☕<span class="kofiText">M'offrir un café</span></a>
     <button id="infoLink" type="button">ℹ️ Informations</button>
   </div>
 </header>
@@ -249,9 +257,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.12.12";
+const APP_VERSION = "0.13.14";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-18";
+const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 // Position de départ (une lettre par case) : majuscule = pièce blanche, minuscule = pièce noire,
@@ -987,14 +995,20 @@ const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRec
 const sttSupported = !!SpeechRecognitionCtor;
 let listening = false;
 let recognizer = null;
+const VOICE_ALTERNATIVES = 5; // transcriptions demandées par phrase (voir handleVoiceAlternatives)
 
 if (sttSupported) {
   recognizer = new SpeechRecognitionCtor();
   recognizer.lang = "fr-FR";
   recognizer.continuous = true;
   recognizer.interimResults = false;
-  recognizer.maxAlternatives = 1;
-  recognizer.onresult = e => handleVoiceCommand(e.results[e.results.length - 1][0].transcript);
+  // Plusieurs transcriptions possibles par phrase (de la plus à la moins probable) : quand la
+  // première est mal comprise ("roc"), la bonne ("roque") figure souvent parmi les suivantes.
+  recognizer.maxAlternatives = VOICE_ALTERNATIVES;
+  recognizer.onresult = e => {
+    const result = e.results[e.results.length - 1];
+    handleVoiceAlternatives(Array.from(result, alt => alt.transcript));
+  };
   recognizer.onerror = e => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
       listening = false;
@@ -1023,38 +1037,212 @@ function showVoiceFeedback(heard, result) {
   voiceFeedbackEl.textContent = "🎙️ « " + heard + " »" + (result ? " → " + result : "");
 }
 
-const PIECE_NAMES_FR = { "pion": "P", "cavalier": "N", "fou": "B", "tour": "R", "dame": "Q", "roi": "K" };
-const VOICE_SQUARE_RE = /\b([a-h])\s*([1-8])\b/gi;
+// ---------- Compréhension des commandes vocales ----------
+// La reconnaissance vocale transcrit ce qu'elle entend en mots français, pas en notation
+// d'échecs : "d5" peut devenir "dé cinq", "de saint" ou "des 5", "roque" devenir "roc" ou "rock".
+// Deux mécanismes complémentaires :
+// - les CASES (lettre + chiffre) sont reconnues par des tables de mots qui sonnent comme chaque
+//   lettre et chaque chiffre, uniquement en paire (un mot-lettre suivi d'un mot-chiffre) : ces mots
+//   sont trop courts et trop proches ("de" = d ou 2) pour une comparaison de sons ;
+// - les MOTS DE COMMANDE (pièces, roque, annule, nouvelle partie) sont comparés par leur clé
+//   phonétique (voir phoneticKey), qui rend équivalentes les graphies d'un même son : "roque",
+//   "roc", "rock", "roquer" donnent tous "rok".
 
 function normalizeSpeech(s) {
-  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[’'\-.,;:!?«»"()]/g, " ") // "c'est" -> "c est", "e2-e4" -> "e2 e4"
+    .replace(/\s+/g, " ").trim();
 }
 
-// La reconnaissance vocale transcrit souvent le nom d'une lettre isolée comme un mot qui sonne
-// pareil plutôt que comme la lettre elle-même (ex. "d5" entendu "dés 5" ou "de 5", "c4" entendu
-// "ce 4"). On ne corrige que juste avant un chiffre de 1 à 8, pour ne pas toucher au reste de la phrase.
-const LETTER_PHONETICS = [
-  ["b|be|bes|bee", "b"],
-  ["c|ce|ces|sait|sais|ceux", "c"],
-  ["d|de|des|dai|day", "d"],
-  ["e|es|eux", "e"],
-  ["f|ef|effe", "f"],
-  ["g|ge|ges|je|jai", "g"],
-  ["h|hache|ache|aches", "h"],
-];
-function fixLetterPhonetics(text) {
-  return LETTER_PHONETICS.reduce(
-    (acc, [pattern, letter]) => acc.replace(new RegExp("\\b(?:" + pattern + ")\\s+(?=[1-8]\\b)", "g"), letter),
-    text
-  );
+// Mots entendus pour chaque lettre de colonne et chaque chiffre de rangée.
+const LETTER_WORDS = {
+  a: ["a", "ah", "ha", "as"],
+  b: ["b", "be", "bes", "bee", "bai"],
+  c: ["c", "ce", "ces", "se", "ses", "sait", "sais", "ceux", "s"],
+  d: ["d", "de", "des", "dai", "day", "dee"],
+  e: ["e", "es", "eux", "euh"],
+  f: ["f", "ef", "eff", "effe"],
+  g: ["g", "ge", "ges", "gai", "je", "j", "jai"],
+  h: ["h", "hache", "haches", "ache", "aches", "ash", "hash"],
+};
+const DIGIT_WORDS = {
+  1: ["1", "un", "une", "hein", "in"],
+  2: ["2", "deux", "deu", "de", "des"],
+  3: ["3", "trois", "troi"],
+  4: ["4", "quatre", "quatres", "catre", "katre", "cat"],
+  5: ["5", "cinq", "cinque", "saint", "sainte", "sain", "sein", "zinc"],
+  6: ["6", "six", "si", "scie", "ci", "cis", "sis"],
+  7: ["7", "sept", "set", "sette", "cette", "sete"],
+  8: ["8", "huit", "huite", "uit"],
+};
+// Tables inversées : mot -> lettre / chiffre.
+const invertWords = table => {
+  const map = {};
+  for (const [value, words] of Object.entries(table)) for (const w of words) map[w] = value;
+  return map;
+};
+const LETTER_OF = invertWords(LETTER_WORDS);
+const DIGIT_OF = invertWords(DIGIT_WORDS);
+
+// Clé phonétique simplifiée d'un mot français (déjà en minuscules, sans accents) : on ramène à une
+// même écriture les graphies d'un même son, puis on retire ce qui ne s'entend pas (h muet, lettres
+// doublées, e et consonnes finales muettes). Pas un vrai phonétiseur : juste assez pour que les
+// variantes d'un mot de commande se rejoignent sans que deux mots de commande se confondent.
+// Symboles : $ = "ch", @ = an/en, ° = on, 1 = in/ain/un, G = "gu" dur.
+function phoneticKey(word) {
+  let k = word.length > 2 ? word.replace(/[sx]$/, "") : word; // pluriel
+  k = k.replace(/y/g, "i")
+    .replace(/eau|au/g, "o")
+    .replace(/ph/g, "f").replace(/ch/g, "$")
+    .replace(/qu/g, "k").replace(/gu(?=[ei])/g, "G").replace(/ck/g, "k")
+    .replace(/c(?=[ei])/g, "s").replace(/c/g, "k")
+    .replace(/g(?=[ei])/g, "j").replace(/G/g, "g")
+    .replace(/h/g, "").replace(/x/g, "ks")
+    .replace(/(.)\1+/g, "$1") // lettres doublées, avant les nasales : "annule" = "anule", "homme" n'est pas nasal
+    .replace(/(?:ain|ein|in|im|un|um)(?![aeiou])/g, "1")
+    .replace(/(?:an|am|en|em)(?![aeiou])/g, "@")
+    .replace(/(?:on|om)(?![aeiou])/g, "°")
+    .replace(/oi/g, "wa").replace(/ou/g, "u").replace(/ai|ei/g, "e")
+    .replace(/(?:er|ez|et)$/, "e");
+  return k.replace(/e$/, "").replace(/[tdsp]$/, "") || k;
 }
 
-// Interprète une phrase reconnue et déclenche l'action correspondante (coup, roque, annulation,
-// nouvelle partie, ou choix de promotion si un pion est en attente).
-function handleVoiceCommand(rawTranscript) {
-  const text = fixLetterPhonetics(normalizeSpeech(rawTranscript));
+// Deux clés "se ressemblent" si elles sont égales, ou à une lettre près quand elles sont assez
+// longues (4+) : sur une clé courte ("tur" / "tu"), une lettre d'écart change de mot.
+function keysMatch(a, b) {
+  if (a === b) return true;
+  if (a.length < 4 || b.length < 4 || Math.abs(a.length - b.length) > 1) return false;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j); // distance d'édition (Levenshtein)
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length] <= 1;
+}
 
-  if (/nouvelle partie|recommence/.test(text)) {
+// Vocabulaire des commandes, sous forme de clés phonétiques calculées une fois pour toutes.
+const toKeys = words => words.map(phoneticKey);
+const VOICE_WORDS = {
+  castle: toKeys(["roque", "roc", "rock", "rauque"]),
+  queenSide: toKeys(["grand", "grande"]),
+  kingSide: toKeys(["petit", "petite"]),
+  undo: toKeys(["annule", "annuler", "retour"]),
+  restart: toKeys(["recommence", "recommencer"]),
+  newGame: toKeys(["nouvelle", "partie"]), // les deux mots, l'un après l'autre
+};
+// Pièces : noms, pluriels et synonymes courants ("reine" pour la dame).
+const PIECE_WORDS = {
+  P: toKeys(["pion"]),
+  N: toKeys(["cavalier", "cavaliere", "cheval", "chevaux"]),
+  B: toKeys(["fou"]),
+  R: toKeys(["tour"]),
+  Q: toKeys(["dame", "reine"]),
+  K: toKeys(["roi", "roy"]),
+};
+const PIECE_LABELS = { P: "pion", N: "cavalier", B: "fou", R: "tour", Q: "dame", K: "roi" };
+
+// Découpe une phrase en cases jouées (paires lettre + chiffre, ou "e4" collé) et en clés
+// phonétiques des autres mots. Mots entiers seulement : "trois" n'est plus pris pour "roi".
+function analyzeSpeech(raw) {
+  const text = normalizeSpeech(raw)
+    .replace(/\bc est\b/g, "c").replace(/\bj ai\b/g, "g") // "c'est 4" = c4, "j'ai 3" = g3
+    .replace(/([a-h][1-8])(?=[a-h][1-8])/g, "$1 "); // "e2e4" -> "e2 e4"
+  const words = text ? text.split(" ") : [];
+  const squares = [], keys = [];
+  for (let i = 0; i < words.length; i++) {
+    const glued = /^([a-h])([1-8])$/.exec(words[i]);
+    if (glued) { squares.push(toSquare(glued[1], glued[2])); continue; }
+    const letter = LETTER_OF[words[i]], digit = DIGIT_OF[words[i + 1]];
+    if (letter && digit) { squares.push(toSquare(letter, digit)); i++; continue; }
+    keys.push(phoneticKey(words[i]));
+  }
+  return { squares, keys };
+}
+function toSquare(letter, digit) {
+  return { col: FILES.indexOf(letter), row: 8 - Number(digit) };
+}
+const hasWord = (keys, vocab) => keys.some(k => vocab.some(v => keysMatch(k, v)));
+const hasPhrase = (keys, vocab) => keys.some((k, i) => vocab.every((v, j) => keys[i + j] !== undefined && keysMatch(keys[i + j], v)));
+function pieceIn(keys, types) {
+  return types.find(type => hasWord(keys, PIECE_WORDS[type])) || null;
+}
+
+// Traduit une phrase en intention ({ kind, ... }), sans rien jouer ; null si rien n'est compris.
+function parseVoiceCommand(raw) {
+  const { squares, keys } = analyzeSpeech(raw);
+  if (hasPhrase(keys, VOICE_WORDS.newGame) || hasWord(keys, VOICE_WORDS.restart)) return { kind: "newGame" };
+  if (pendingPromotion) {
+    const type = pieceIn(keys, ["Q", "R", "B", "N"]);
+    return type ? { kind: "promote", type } : null;
+  }
+  if (hasWord(keys, VOICE_WORDS.undo)) return { kind: "undo" };
+  if (hasWord(keys, VOICE_WORDS.castle)) {
+    return { kind: "castle", side: hasWord(keys, VOICE_WORDS.queenSide) ? "queen" : "king" };
+  }
+  if (squares.length >= 2) return { kind: "move", from: squares[0], to: squares[squares.length - 1] };
+  if (squares.length === 1) return { kind: "pieceMove", type: pieceIn(keys, ["P", "N", "B", "R", "Q", "K"]), to: squares[0] };
+  return null;
+}
+
+// Coups légaux, pour le camp au trait, d'une pièce du type donné (tous types si null) vers `to`.
+function findPieceMoveCandidates(type, to) {
+  const candidates = [];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = boardState[r][c];
+      if (p && (!type || p.toUpperCase() === type) && pieceColor(p) === turn) {
+        const move = computeLegalMoves(r, c).find(m => m.row === to.row && m.col === to.col);
+        if (move) candidates.push({ from: { row: r, col: c }, move });
+      }
+    }
+  }
+  return candidates;
+}
+
+// Intérêt d'une intention pour départager les transcriptions : 2 = jouable tout de suite,
+// 1 = comprise mais impossible (coup illégal, ambigu, rien à annuler...), 0 = rien de compris.
+function intentScore(intent) {
+  if (!intent) return 0;
+  if (intent.kind === "newGame" || intent.kind === "promote") return 2;
+  if (gameOver) return 1;
+  switch (intent.kind) {
+    case "undo": return undoBtn.disabled ? 1 : 2;
+    case "castle": {
+      const homeRow = turn === "white" ? 7 : 0;
+      return computeLegalMoves(homeRow, 4).some(m => m.castle === intent.side) ? 2 : 1;
+    }
+    case "move": {
+      const piece = boardState[intent.from.row] && boardState[intent.from.row][intent.from.col];
+      if (!piece || pieceColor(piece) !== turn) return 1;
+      return computeLegalMoves(intent.from.row, intent.from.col).some(m => m.row === intent.to.row && m.col === intent.to.col) ? 2 : 1;
+    }
+    case "pieceMove": return findPieceMoveCandidates(intent.type, intent.to).length === 1 ? 2 : 1;
+  }
+  return 1;
+}
+
+// Choisit, parmi les transcriptions proposées (de la plus à la moins probable), celle qui donne
+// l'intention la plus utile — à intérêt égal, la plus probable — puis l'exécute. Par prudence,
+// "nouvelle partie" (qui efface la partie) n'est retenue que si c'est la transcription principale.
+function handleVoiceAlternatives(transcripts) {
+  let best = null;
+  transcripts.forEach((raw, rank) => {
+    const intent = parseVoiceCommand(raw);
+    if (intent && intent.kind === "newGame" && rank > 0) return;
+    const score = intentScore(intent);
+    if (!best || score > best.score) best = { raw, intent, score };
+  });
+  if (!best) return;
+  executeVoiceIntent(best.raw, best.intent);
+}
+
+// Déclenche l'action d'une intention (coup, roque, annulation, nouvelle partie, ou choix de
+// promotion si un pion est en attente) ; rawTranscript = la phrase retenue, affichée en retour.
+function executeVoiceIntent(rawTranscript, intent) {
+  if (intent && intent.kind === "newGame") {
     resetGame();
     speak("Nouvelle partie. Les Blancs commencent.");
     showVoiceFeedback(rawTranscript, "nouvelle partie");
@@ -1062,11 +1250,11 @@ function handleVoiceCommand(rawTranscript) {
   }
 
   if (pendingPromotion) {
-    const wanted = Object.keys(PIECE_NAMES_FR).find(name => (name === "dame" || name === "tour" || name === "fou" || name === "cavalier") && text.includes(name));
-    if (wanted) {
-      resolvePromotion(PIECE_NAMES_FR[wanted]);
-      speak("Promotion en " + wanted + ".");
-      showVoiceFeedback(rawTranscript, "promotion en " + wanted);
+    if (intent && intent.kind === "promote") {
+      const name = PIECE_LABELS[intent.type];
+      resolvePromotion(intent.type);
+      speak("Promotion en " + name + ".");
+      showVoiceFeedback(rawTranscript, "promotion en " + name);
     } else {
       speak("Dites dame, tour, fou ou cavalier pour la promotion.");
       showVoiceFeedback(rawTranscript, "promotion non comprise");
@@ -1080,23 +1268,14 @@ function handleVoiceCommand(rawTranscript) {
     return;
   }
 
-  if (/annule|annuler/.test(text)) {
-    if (!undoBtn.disabled) { undoMove(); speak("Coup annulé."); showVoiceFeedback(rawTranscript, "coup annulé"); }
-    else { speak("Rien à annuler."); showVoiceFeedback(rawTranscript, "rien à annuler"); }
-    return;
-  }
-
-  if (/grand roque/.test(text)) { voiceCastle(rawTranscript, "queen"); return; }
-  if (/petit roque|\broque\b/.test(text)) { voiceCastle(rawTranscript, "king"); return; }
-
-  const squares = [...text.matchAll(VOICE_SQUARE_RE)].map(m => ({ col: FILES.indexOf(m[1]), row: 8 - Number(m[2]) }));
-
-  if (squares.length >= 2) { voiceMove(rawTranscript, squares[0], squares[squares.length - 1]); return; }
-
-  if (squares.length === 1) {
-    const pieceWord = Object.keys(PIECE_NAMES_FR).find(name => text.includes(name));
-    voiceMoveByPiece(rawTranscript, pieceWord ? PIECE_NAMES_FR[pieceWord] : null, squares[0]);
-    return;
+  switch (intent && intent.kind) {
+    case "undo":
+      if (!undoBtn.disabled) { undoMove(); speak("Coup annulé."); showVoiceFeedback(rawTranscript, "coup annulé"); }
+      else { speak("Rien à annuler."); showVoiceFeedback(rawTranscript, "rien à annuler"); }
+      return;
+    case "castle": voiceCastle(rawTranscript, intent.side); return;
+    case "move": voiceMove(rawTranscript, intent.from, intent.to); return;
+    case "pieceMove": voiceMoveByPiece(rawTranscript, intent.type, intent.to); return;
   }
 
   speak("Commande non comprise.");
@@ -1128,16 +1307,7 @@ function voiceMove(rawTranscript, from, to) {
 // Sans nom de pièce (ex. "e4" seul, type=null), cherche parmi toutes les pièces du camp au trait :
 // un seul coup possible → il est joué ; plusieurs → on demande de préciser la pièce.
 function voiceMoveByPiece(rawTranscript, type, to) {
-  const candidates = [];
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const p = boardState[r][c];
-      if (p && (!type || p.toUpperCase() === type) && pieceColor(p) === turn) {
-        const move = computeLegalMoves(r, c).find(m => m.row === to.row && m.col === to.col);
-        if (move) candidates.push({ from: { row: r, col: c }, move });
-      }
-    }
-  }
+  const candidates = findPieceMoveCandidates(type, to);
   if (candidates.length === 1) {
     movePiece(candidates[0].from, candidates[0].move);
     speak(squareName(to.row, to.col));
@@ -1201,7 +1371,8 @@ const HELP_TEXTS = {
     "sur la case d'arrivée. Tu peux aussi glisser-déposer la pièce directement sur sa case d'arrivée.",
   helpVoiceBtn: "Active le micro (bouton 🎙️ Voix) puis dis par exemple « e2 e4 », « cavalier f3 », " +
     "« e4 » (case seule : le coup est joué s'il n'y en a qu'un possible, sinon on te demande de préciser " +
-    "la pièce), « petit roque », « grand roque », « annule » ou « nouvelle partie ».",
+    "la pièce), « petit roque », « grand roque », « annule » (ou « retour ») ou « nouvelle partie ». " +
+    "Les chiffres peuvent être dits en toutes lettres (« f trois »), et « reine » vaut « dame ».",
   helpGameBtn: "Clique sur le statut (« … à jouer », au-dessus du plateau) pour repérer, tour à tour, " +
     "les échecs, les prises, les menaces, puis tes propres pièces en prise.",
 };

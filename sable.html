@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 1.28.70
+  Version : 1.29.70
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -36,6 +36,13 @@
     cursor:pointer; padding:4px;
   }
   #infoLink:hover { color:#fff; }
+  /* Lien de soutien Ko-fi (en-tête) : pastille ambrée ; sur petit écran, la tasse seule. */
+  #kofiLink {
+    display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:999px;
+    background:#f5a524; color:#1a1206; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap;
+  }
+  #kofiLink:hover { background:#ffb940; }
+  @media (max-width:560px) { #kofiLink .kofiText { display:none; } }
   #infoDialog {
     background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
     padding:22px 26px; max-width:min(420px,90vw);
@@ -172,7 +179,10 @@
 <body>
 <header>
   <h1>🏜️ SandSim.exe</h1>
-  <button id="infoLink" type="button">ℹ️ Informations</button>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <a id="kofiLink" href="https://ko-fi.com/lfranck" target="_blank" rel="noopener" title="Soutenir mes projets sur Ko-fi" aria-label="M'offrir un café sur Ko-fi">☕<span class="kofiText">M'offrir un café</span></a>
+    <button id="infoLink" type="button">ℹ️ Informations</button>
+  </div>
 </header>
 
 <dialog id="infoDialog">
@@ -373,7 +383,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.28.70";
+const APP_VERSION = "1.29.70";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
