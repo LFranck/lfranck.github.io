@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 1.30.72
+  Version : 1.31.73
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -286,6 +286,11 @@
           <input type="range" id="flowSlider" min="0" max="100" value="10" step="1">
           <span class="sub" id="subFlow">Tourbillons dans le liquide qui poussent le sable de côté. C'est un plafond : la force réelle suit l'activité du tableau (ci-dessous) — beaucoup de grains et de bulles en mouvement (ex. juste après avoir retourné le cadre) = courant fort ; un tableau qui s'est calmé = courant faible, sans réglage de durée à part.</span>
         </label>
+        <label>
+          <div class="row"><span>Dérive du courant<button type="button" class="infoBtn" data-target="subFlowDrift" aria-label="Informations">i</button></span><span class="value" id="flowDriftVal">x5.0 (4.37 cell./s)</span></div>
+          <input type="range" id="flowDriftSlider" min="0" max="10" value="5" step="0.1">
+          <span class="sub" id="subFlowDrift">Vitesse à laquelle les tourbillons se déplacent (en diagonale, vers le bas et la gauche). x0 : motif immobile, le courant pousse toujours dans les mêmes directions ; x1 : environ 0,9 cellule par seconde. N'influe pas sur la force de la poussée.</span>
+        </label>
         <div>
           <label class="row" style="cursor:pointer;">
             <input type="checkbox" id="flowShowCheckbox">
@@ -385,7 +390,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.30.72";
+const APP_VERSION = "1.31.73";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -735,7 +740,7 @@ function wake(x, y) {
 }
 function keepAwake(x, y) { chunkNext[(y >> CHUNK_SHIFT) * chunkCols + (x >> CHUNK_SHIFT)] = 1; }
 
-const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 40, flowPct: 10, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 40%, courant 10% (plafond), affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
+const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 40, flowPct: 10, flowDrift: 5, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 40%, courant 10% (plafond), dérive du courant x5, affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
 
 // ---------- Bruit de Perlin 2D (pour le champ de courant du fluide) ----------
 // Implémentation classique (table de permutation + interpolation "fade"), suffisante pour
@@ -778,7 +783,7 @@ function perlin2(x, y) {
 // sans avoir à recalculer un bruit 3D coûteux à chaque image.
 const FLOW_CELL = 6;           // taille (en cellules de grille) d'une case du champ de courant
 const FLOW_NOISE_SCALE = 0.12; // "zoom" du bruit : plus petit = tourbillons plus larges (relatif à FLOW_CELL)
-const FLOW_DRIFT_SPEED = 0.015; // vitesse de dérive du motif de courant, par seconde
+const FLOW_DRIFT_SPEED = 0.015; // vitesse de dérive du motif de courant, par seconde (à x1 ; multipliée par params.flowDrift)
 const FLOW_BASE_PROB = 0.003;   // force de la poussée latérale du courant sur le sable
 let flowFW = 1, flowFH = 1;
 let flowVX = new Float32Array(1), flowVY = new Float32Array(1);
@@ -809,8 +814,9 @@ function rebuildFlowField() {
 // Recalcule le champ grossier à partir du bruit (peu coûteux : quelques centaines de points au
 // maximum). dtSeconds fait avancer la dérive ; 0 pour un simple recalcul sans dérive (init/resize).
 function updateFlowField(dtSeconds) {
-  flowDriftX += dtSeconds * FLOW_DRIFT_SPEED;
-  flowDriftY -= dtSeconds * FLOW_DRIFT_SPEED * 0.6; // dérive en diagonale, pas alignée aux axes
+  const drift = dtSeconds * FLOW_DRIFT_SPEED * params.flowDrift; // curseur "Dérive du courant"
+  flowDriftX += drift;
+  flowDriftY -= drift * 0.6; // dérive en diagonale, pas alignée aux axes
   for (let fy = 0; fy < flowFH; fy++) {
     for (let fx = 0; fx < flowFW; fx++) {
       const n = perlin2(fx * FLOW_NOISE_SCALE + flowDriftX, fy * FLOW_NOISE_SCALE + flowDriftY);
@@ -2977,6 +2983,17 @@ flowSlider.addEventListener("input", () => {
   wakeAll(); // le courant donne (ou retire) des possibilités de mouvement latéral
 });
 
+// Dérive du motif de courant : multiplicateur de FLOW_DRIFT_SPEED (voir updateFlowField).
+// Libellé : multiplicateur + vitesse en cellules/s (une unité de bruit = FLOW_CELL / FLOW_NOISE_SCALE
+// cellules ; composante Y = 0,6 fois la composante X).
+const flowDriftSlider = document.getElementById("flowDriftSlider");
+const flowDriftVal = document.getElementById("flowDriftVal");
+flowDriftSlider.addEventListener("input", () => {
+  params.flowDrift = Number(flowDriftSlider.value);
+  const cellsPerSec = params.flowDrift * FLOW_DRIFT_SPEED * (FLOW_CELL / FLOW_NOISE_SCALE) * Math.hypot(1, 0.6);
+  flowDriftVal.textContent = "x" + params.flowDrift.toFixed(1) + " (" + cellsPerSec.toFixed(2) + " cell./s)";
+});
+
 const flowShowCheckbox = document.getElementById("flowShowCheckbox");
 flowShowCheckbox.addEventListener("change", () => {
   params.flowShow = flowShowCheckbox.checked;
@@ -3234,7 +3251,7 @@ function collectSettings() {
   return {
     res: Number(resolutionSlider.value), landscape, theme: themeIndex, dayMode,
     bubbles: params.bubblePct, viscosity: params.viscosity, gravity: Number(gravitySlider.value),
-    flow: params.flowPct, flowShow: params.flowShow, wrap: params.wrapEdges, tilt: params.tilt,
+    flow: params.flowPct, flowDrift: params.flowDrift, flowShow: params.flowShow, wrap: params.wrapEdges, tilt: params.tilt,
     sandCount: params.sandCount, dens, prop, panels,
   };
 }
@@ -3276,6 +3293,7 @@ function loadSettings() {
 
   setRange(gravitySlider, s.gravity);
   setRange(flowSlider, s.flow);
+  setRange(flowDriftSlider, s.flowDrift);
   if (isNum(s.viscosity)) {
     const btn = viscositySeg.querySelector('.segBtn[data-value="' + s.viscosity + '"]');
     if (btn) btn.click();
