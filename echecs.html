@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.14.17
+  Version : 0.14.18
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -259,7 +259,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.14.17";
+const APP_VERSION = "0.14.18";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -1041,6 +1041,8 @@ function showVoiceFeedback(heard, result) {
 }
 
 // ---------- Compréhension des commandes vocales ----------
+// Testé hors navigateur par tests/echecs-voix.test.js, qui extrait ce bloc jusqu'au commentaire
+// "Coups légaux, pour le camp au trait" : garder ces deux commentaires tels quels.
 // La reconnaissance vocale transcrit ce qu'elle entend en mots français, pas en notation
 // d'échecs : "d5" peut devenir "dé cinq", "de saint" ou "des 5", "roque" devenir "roc" ou "rock".
 // Deux mécanismes complémentaires :
