@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 1.2.6
+  Version : 1.4.11
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -62,6 +62,13 @@
   label { display:flex; flex-direction:column; gap:7px; color:#ccc; font-size:14px; }
   input[type=range] { width:100%; }
   .value { font-weight:700; color:#fff; }
+  /* Choix du son d'alerte (sélecteur + bouton de test sur une même ligne) */
+  .alertRow { display:flex; gap:8px; }
+  #alertType {
+    flex:1; min-width:0; background:#292929; color:#fff; border:1px solid #444;
+    border-radius:8px; padding:7px 8px; font-size:14px;
+  }
+  #testAlert { grid-column:auto; padding:7px 12px; font-size:14px; background:#333; color:#fff; white-space:nowrap; }
   button {
     grid-column:1/-1; border:0; border-radius:10px; padding:13px 18px; cursor:pointer;
     background:#fff; color:#111; font-weight:700; font-size:16px;
@@ -92,8 +99,7 @@
   #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
   #infoDialog dt { color:#999; }
   #infoDialog dd { margin:0; }
-  #infoDialog button { grid-column:auto; padding:8px 16px; font-size:14px; }
-</style>
+  #infoDialog button { grid-column:auto; padding:8px 16px; font-size:14px; }</style>
 </head>
 <body>
 <header>
@@ -125,16 +131,27 @@
 
     <div class="controls">
       <label>
-        Seuil orange : <span class="value" id="orangeValue">-18</span> dB
-        <input id="orange" type="range" min="-45" max="-5" value="-18">
+        Seuil orange : <span class="value" id="orangeValue">-45</span> dB
+        <input id="orange" type="range" min="-45" max="-5" value="-45">
       </label>
       <label>
-        Seuil rouge : <span class="value" id="redValue">-10</span> dB
-        <input id="red" type="range" min="-30" max="-2" value="-10">
+        Seuil rouge : <span class="value" id="redValue">-30</span> dB
+        <input id="red" type="range" min="-30" max="-2" value="-30">
       </label>
       <label>
         Lissage (moyenne) : <span class="value" id="avgValue">3.0</span> s
         <input id="avg" type="range" min="0" max="10000" step="100" value="3000">
+      </label>
+      <label>
+        Alerte au rouge :
+        <span class="alertRow">
+          <select id="alertType">
+            <option value="beep">Bip</option>
+            <option value="music">Musique</option>
+            <option value="voice">Voix</option>
+          </select>
+          <button id="testAlert" type="button">▶ Tester</button>
+        </span>
       </label>
       <button id="start">🎙️ Activer le microphone</button>
     </div>
@@ -149,7 +166,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.2.6";
+const APP_VERSION = "1.4.11";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -173,6 +190,39 @@ const avgInput = document.getElementById("avg");
 const orangeValueEl = document.getElementById("orangeValue");
 const redValueEl = document.getElementById("redValue");
 const avgValueEl = document.getElementById("avgValue");
+const alertTypeInput = document.getElementById("alertType");
+
+// Réglages mémorisés dans le navigateur (localStorage, try/catch : peut être bloqué ou indisponible).
+// Restaurés ici, avant que les seuils et le lissage ne soient lus depuis les curseurs juste en dessous.
+const STORAGE_PREFIX = "calmometre.";
+function loadSetting(name) {
+  try { return localStorage.getItem(STORAGE_PREFIX + name); } catch (e) { return null; }
+}
+function saveSetting(name, value) {
+  try { localStorage.setItem(STORAGE_PREFIX + name, String(value)); } catch (e) {}
+}
+
+const savedAlertType = loadSetting("alertType");
+if ([...alertTypeInput.options].some(o => o.value === savedAlertType)) alertTypeInput.value = savedAlertType;
+alertTypeInput.addEventListener("change", () => saveSetting("alertType", alertTypeInput.value));
+
+// Curseurs : une valeur mémorisée n'est reprise que si elle est numérique et dans la plage du curseur.
+[[orangeInput, "orange"], [redInput, "red"], [avgInput, "avg"]].forEach(([input, name]) => {
+  const saved = loadSetting(name);
+  const v = Number(saved);
+  if (saved !== null && Number.isFinite(v) && v >= Number(input.min) && v <= Number(input.max)) input.value = v;
+});
+// Seuils incohérents (orange ≥ rouge) : retour aux valeurs par défaut des deux curseurs.
+if (Number(orangeInput.value) >= Number(redInput.value)) {
+  orangeInput.value = orangeInput.defaultValue;
+  redInput.value = redInput.defaultValue;
+}
+
+// Enregistre les deux seuils ensemble, puisqu'un curseur peut déplacer l'autre (contrainte orange < rouge).
+function saveThresholds() {
+  saveSetting("orange", orangeThreshold);
+  saveSetting("red", redThreshold);
+}
 
 // Seuils et fenêtre de lissage initialisés depuis la valeur réelle des curseurs (et non une constante
 // figée) : certains navigateurs restaurent la position d'un curseur au rechargement de la page,
@@ -196,27 +246,97 @@ function setState(newState) {
   }
   if (newState === "red") {
     message.textContent = "PAUSE — VOIX TROP FORTE";
-    beep();
+    playAlert(nextAlertLevel());
   }
 }
 
-// Bip court (880 Hz, ~200 ms) joué à l'entrée en état rouge.
-function beep() {
-  if (!audioContext) return;
+// Note unique (sinusoïde avec attaque/extinction douces) commençant à `start` (temps audioContext, s).
+function tone(freq, start, dur) {
   const osc = audioContext.createOscillator();
   const gain = audioContext.createGain();
-  osc.frequency.value = 880;
-  gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.18, audioContext.currentTime + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.20);
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(0.18, start + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
   osc.connect(gain).connect(audioContext.destination);
-  osc.start();
-  osc.stop(audioContext.currentTime + 0.21);
+  osc.start(start);
+  osc.stop(start + dur + 0.01);
+}
+
+// Alertes graduées : niveau 1, 2 ou 3 selon la proximité des passages au rouge (voir nextAlertLevel).
+const ALERT_PHRASES = ["Attention", "Houlà, doucement", "Il est temps de faire une pause"];
+// Mélodies descendantes de plus en plus longues (fréquences en Hz ; la dernière note est tenue).
+const ALERT_MELODIES = [
+  [784, 523],                              // sol, do
+  [784, 659, 523, 392],                    // sol, mi, do, sol grave
+  [784, 659, 523, 659, 523, 440, 392],     // sol, mi, do, mi, do, la, sol grave
+];
+
+// 1, 2 ou 3 bips courts (880 Hz, ~200 ms, espacés de 300 ms). Renvoie la durée totale en ms.
+function beeps(level) {
+  const t = audioContext.currentTime;
+  for (let i = 0; i < level; i++) tone(880, t + i * 0.3, 0.20);
+  return (level - 1) * 300 + 210;
+}
+
+// Mélodie du niveau donné : notes de 180 ms toutes les 200 ms, dernière note tenue 400 ms. Renvoie sa durée en ms.
+function melody(level) {
+  const notes = ALERT_MELODIES[level - 1];
+  const t = audioContext.currentTime;
+  notes.forEach((f, i) => tone(f, t + i * 0.2, i === notes.length - 1 ? 0.4 : 0.18));
+  return (notes.length - 1) * 200 + 410;
+}
+
+// Alerte du niveau donné (1 à 3), selon le choix du sélecteur #alertType.
+// Pendant l'alerte, l'analyse est suspendue (alertPlaying) : sinon le micro capterait le son joué
+// par les haut-parleurs (surtout la voix, plus longue) et entretiendrait l'état rouge.
+let alertPlaying = false;
+let alertToken = 0; // identifie l'alerte en cours, pour qu'une alerte terminée ne réactive pas l'analyse pendant la suivante
+function playAlert(level) {
+  const token = ++alertToken;
+  const end = () => { if (token === alertToken) alertPlaying = false; };
+  alertPlaying = true;
+
+  if (alertTypeInput.value === "voice" && "speechSynthesis" in window) {
+    // Seule la langue est imposée (comme dans echecs.html) : le navigateur choisit alors sa voix
+    // française par défaut, plus naturelle que la première voix "fr" de getVoices(), souvent métallique.
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(ALERT_PHRASES[level - 1]);
+    u.lang = "fr-FR";
+    u.onend = u.onerror = end;
+    speechSynthesis.speak(u);
+    setTimeout(end, 5000); // filet de sécurité si le navigateur ne signale jamais la fin de la lecture
+    return;
+  }
+
+  // Bip (ou repli si la synthèse vocale n'est pas disponible) et musique passent par le contexte audio.
+  if (!audioContext) { end(); return; }
+  const ms = alertTypeInput.value === "music" ? melody(level) : beeps(level);
+  setTimeout(end, ms + 150);
+}
+
+// Accentuation : un passage au rouge moins de ESCALATION_WINDOW_MS après le précédent monte d'un niveau
+// (plafonné à 3) ; au-delà, on repart du niveau 1.
+const ESCALATION_WINDOW_MS = 60000;
+let alertLevel = 0;
+let lastAlertTime = 0;
+function nextAlertLevel() {
+  const now = performance.now();
+  alertLevel = lastAlertTime && now - lastAlertTime < ESCALATION_WINDOW_MS ? Math.min(alertLevel + 1, 3) : 1;
+  lastAlertTime = now;
+  return alertLevel;
 }
 
 // Boucle d'analyse (une frame = un appel), relancée via requestAnimationFrame tant que running est vrai.
 function analyse() {
   if (!running) return;
+
+  // Alerte en cours : mesure suspendue (moyenne figée), lastFrameTime tenu à jour pour reprendre sans saut.
+  if (alertPlaying) {
+    lastFrameTime = performance.now();
+    requestAnimationFrame(analyse);
+    return;
+  }
 
   // Calcul du niveau RMS (racine de la moyenne des carrés) sur l'échantillon temporel courant.
   analyser.getFloatTimeDomainData(data);
@@ -243,7 +363,8 @@ function analyse() {
   // Affichage visuel amplifié pour faciliter la lecture.
   const pct = Math.max(0, Math.min(100, (avgDb + 60) / 60 * 100));
   levelEl.style.width = pct + "%";
-  dbEl.textContent = avgDb.toFixed(1) + " dB relatif (moyenne 3 s)";
+  dbEl.textContent = avgDb.toFixed(1) + " dB relatif ("
+    + (AVG_WINDOW_MS ? "moyenne " + (AVG_WINDOW_MS / 1000).toFixed(1) + " s" : "instantané") + ")";
 
   // Hystérésis temporelle : il faut rester au-dessus d'un seuil pendant une durée minimale
   // avant de changer d'état, pour éviter que des pics ponctuels déclenchent une fausse alerte.
@@ -299,6 +420,7 @@ orangeInput.addEventListener("input", e => {
     redInput.value = redThreshold;
     redValueEl.textContent = redThreshold;
   }
+  saveThresholds();
 });
 
 redInput.addEventListener("input", e => {
@@ -309,12 +431,25 @@ redInput.addEventListener("input", e => {
     orangeInput.value = orangeThreshold;
     orangeValueEl.textContent = orangeThreshold;
   }
+  saveThresholds();
 });
 
 // Fenêtre de lissage réglable de 0 (aucun lissage, mesure instantanée) à 10 s.
 avgInput.addEventListener("input", e => {
   AVG_WINDOW_MS = Number(e.target.value);
   avgValueEl.textContent = (AVG_WINDOW_MS / 1000).toFixed(1);
+  saveSetting("avg", AVG_WINDOW_MS);
+});
+
+// Test de l'alerte choisie : crée le contexte audio s'il n'existe pas encore (micro pas démarré),
+// le clic de l'utilisateur autorisant sa lecture. Chaque clic passe au niveau suivant (1 → 2 → 3 → 1),
+// indépendamment de l'accentuation réelle, qui n'est pas modifiée.
+let testLevel = 0;
+document.getElementById("testAlert").addEventListener("click", async () => {
+  if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioContext.state === "suspended") await audioContext.resume();
+  testLevel = testLevel % 3 + 1;
+  playAlert(testLevel);
 });
 
 // Pop-up "Informations" : version, auteur, date, licence (valeurs issues des constantes APP_*).
@@ -324,7 +459,6 @@ document.getElementById("infoAuthor").textContent = APP_AUTHOR;
 document.getElementById("infoDate").textContent = APP_DATE;
 document.getElementById("infoLicense").textContent = APP_LICENSE;
 document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
-document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
-</script>
+document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());</script>
 </body>
 </html>
