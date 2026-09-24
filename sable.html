@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 1.30.70
+  Version : 1.30.72
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -217,7 +217,7 @@
         <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
         <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
         <button class="btn ghost" id="dayNightBtn" type="button" title="Ambiance : Jour (soleil et nuages), Nuit (ciel étoilé, lune, sable éclairé d'une lumière lunaire bleutée) ou Auto (la nuit tombe quand le soleil sort du ciel, le jour revient avec la lune). Un clic passe au mode suivant.">☀️ Jour</button>
-        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux), Fond des océans (basalte, sable, algues, corail, nacre, vus sous l'eau), Sur la lune (régolithe gris et sol orange, sous un ciel noir où brille la Terre). Un clic passe au thème suivant.">🏔️ Montagne</button>
+        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux), Océans (basalte, sable, algues, corail, nacre, vus sous l'eau, de plus en plus sombres en profondeur), Lune (régolithe gris et sol orange, sous un ciel noir où brille la Terre). Un clic passe au thème suivant.">🏔️ Montagne</button>
         <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
         <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
       </div>
@@ -304,7 +304,7 @@
 
       <div class="controls cartoucheHidden" id="panelSky">
         <div class="cartoucheTitle">🌠 Ciel<button type="button" class="infoBtn" data-target="subSky" aria-label="Informations">i</button></div>
-        <span class="sub" id="subSky">Des passages traversent le ciel au hasard : des étoiles filantes la nuit, parfois un avion le jour, et très rarement un ovni, dont le rayon tracteur aspire des grains de sable avant de les relâcher. Ces boutons les font apparaître tout de suite. Les étoiles filantes ne se voient que la nuit et les avions que le jour : le bouton est grisé le reste du temps. Celui de l'ovni l'est pendant sa visite ; l'ovni choisit une altitude au-dessus du sable amoncelé, et ne vient pas si le sable monte trop haut. Au fond des océans : un poisson-lune luminescent à la place de la lune, méduses, poissons et sous-marin ; sur la lune : étoiles en plein jour, satellites et module lunaire, avec la Terre dans le ciel. Sur la planète inconnue, le soleil est enfermé dans une sphère de Dyson en construction, la lune laisse place à une base stellaire extraterrestre, les avions à de petits ovnis et le grand ovni à une capsule Apollo.</span>
+        <span class="sub" id="subSky">Des passages traversent le ciel au hasard : des étoiles filantes la nuit, parfois un avion le jour, et très rarement un ovni, dont le rayon tracteur aspire des grains de sable avant de les relâcher. Ces boutons les font apparaître tout de suite. Les étoiles filantes ne se voient que la nuit et les avions que le jour : le bouton est grisé le reste du temps. Celui de l'ovni l'est pendant sa visite ; l'ovni choisit une altitude au-dessus du sable amoncelé, et ne vient pas si le sable monte trop haut. Dans les océans : un poisson-lune luminescent à la place de la lune, méduses, poissons et sous-marin ; sur la lune : étoiles en plein jour, satellites et module lunaire, avec la Terre dans le ciel. Sur la planète inconnue, le soleil est enfermé dans une sphère de Dyson en construction, la lune laisse place à une base stellaire extraterrestre, les avions à de petits ovnis et le grand ovni à une capsule Apollo.</span>
         <div class="actions">
           <button class="btn ghost" id="meteorBtn" type="button">🌠 Étoile filante</button>
           <button class="btn ghost" id="planeBtn" type="button">✈️ Avion</button>
@@ -385,7 +385,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.30.70";
+const APP_VERSION = "1.30.72";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -558,9 +558,10 @@ const THEMES = [
     },
   },
   {
-    // Fond des océans : basalte, sable fin, algues, corail et nacre. Le "ciel" est l'eau vue d'en
-    // bas : claire vers la surface, sombre en profondeur, sans nuages. Voir world "ocean".
-    label: "🐚 Fond des océans", glowType: WHITE,
+    // Océans : basalte, sable fin, algues, corail et nacre. Le "ciel" est l'eau vue d'en bas :
+    // claire vers la surface, sombre en profondeur, sans nuages. Voir world "ocean" ; depth =
+    // la lumière s'éteint avec la profondeur, sable compris (voir drawDepthShade).
+    label: "🐚 Océans", glowType: WHITE,
     colors: {
       [BROWN]:  ["Basalte",   [42, 46, 56]],
       [MEADOW]: ["Sable fin", [214, 190, 140]],
@@ -573,15 +574,15 @@ const THEMES = [
       night: [[0, "#0b2a44"], [0.6, "#061a30"], [1, "#020a18"]],
       sun: ["#ffffff", "#bff4ff"], halo: "190,245,255", haloAlpha: 0.5,
       cloud: "255,255,255", cloudAlpha: 0,
-      world: "ocean",
+      world: "ocean", depth: true,
     },
   },
   {
-    // Sur la lune : régolithe du gris sombre au gris clair, et le fameux "sol orange" (verre
+    // Lune : régolithe du gris sombre au gris clair, et le fameux "sol orange" (verre
     // volcanique rapporté par Apollo 17) pour le sable le plus léger. Pas d'atmosphère : ciel noir
     // de jour comme de nuit, étoiles toujours visibles, soleil blanc et net, pas de nuages, et la
     // Terre dans le ciel. Voir world "moon".
-    label: "🌕 Sur la lune", glowType: GRAY,
+    label: "🌕 Lune", glowType: GRAY,
     colors: {
       [BROWN]:  ["Basalte lunaire", [58, 58, 62]],
       [MEADOW]: ["Régolithe",       [122, 120, 116]],
@@ -2708,6 +2709,26 @@ const glowSmallCanvas = document.createElement("canvas");
 const glowSmallCtx = glowSmallCanvas.getContext("2d");
 let glowData = null;
 
+// Atténuation de la lumière avec la profondeur (thème Océans) : un voile en mode "multiply", par-
+// dessus le ciel, le sable et les bulles, qui laisse la surface intacte (blanc = aucun effet) et
+// s'assombrit vers le fond. Le rouge est absorbé le premier, puis le vert : en profondeur, tout
+// vire au bleu sombre, comme dans l'eau de mer. Dessiné dans le repère du ciel, toujours à
+// l'endroit à l'écran : la surface reste en haut même quand le cadre est retourné ou incliné.
+const DEPTH_SHADE = [[0, "#ffffff"], [0.2, "#e4f4f8"], [0.45, "#93bdd2"], [0.7, "#45708f"], [1, "#16304a"]];
+function drawDepthShade(ctx) {
+  ctx.save();
+  ctx.scale(SKY_SCALE, SKY_SCALE);
+  ctx.translate(SKY_W / 2, SKY_H / 2);
+  ctx.rotate(-skyAngle);
+  ctx.translate(-SKY_W / 2, -SKY_H / 2);
+  const g = ctx.createLinearGradient(0, 0, 0, SKY_H);
+  for (const [pos, color] of DEPTH_SHADE) g.addColorStop(pos, color);
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = g;
+  ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
+  ctx.restore();
+}
+
 function render() {
   // Le ciel d'abord : c'est lui qui fait avancer nightMix, utilisé juste après pour l'éclairage.
   const tSec = performance.now() / 1000;
@@ -2763,6 +2784,7 @@ function render() {
   mainCtx.imageSmoothingEnabled = true;
   mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
   drawUfoGrains(mainCtx, lr, lg, lb);
+  if (THEMES[themeIndex].sky.depth) drawDepthShade(mainCtx); // avant la luminescence, qui reste vive
 
   if (glowOn) {
     glowCtx.putImageData(glowData, 0, 0);

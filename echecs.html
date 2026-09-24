@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.14.14
+  Version : 0.14.16
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -259,7 +259,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.14.14";
+const APP_VERSION = "0.14.16";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -991,7 +991,8 @@ document.addEventListener("pointercancel", endDrag);
 
 // ---------- Pilotage vocal ----------
 // Reconnaissance vocale (écoute des commandes) et synthèse (confirmation orale courte), toutes deux
-// en français, via les API du navigateur — rien n'est envoyé à un serveur.
+// en français, via les API du navigateur. La page elle-même n'envoie rien, mais la reconnaissance
+// vocale de Chrome et d'Edge transmet l'audio aux serveurs de Google / Microsoft pour le transcrire.
 const synth = window.speechSynthesis;
 const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
 const sttSupported = !!SpeechRecognitionCtor;
@@ -1374,7 +1375,9 @@ const HELP_TEXTS = {
   helpVoiceBtn: "Active le micro (bouton 🎙️ Voix) puis dis par exemple « e2 e4 », « cavalier f3 », " +
     "« e4 » (case seule : le coup est joué s'il n'y en a qu'un possible, sinon on te demande de préciser " +
     "la pièce), « petit roque », « grand roque », « annule » (ou « retour ») ou « nouvelle partie ». " +
-    "Les chiffres peuvent être dits en toutes lettres (« f trois »), et « reine » vaut « dame ».",
+    "Les chiffres peuvent être dits en toutes lettres (« f trois »), et « reine » vaut « dame ». " +
+    "À savoir : sous Chrome et Edge, la reconnaissance vocale du navigateur envoie l'audio aux serveurs " +
+    "de Google ou Microsoft pour le transcrire ; la page, elle, ne l'enregistre pas et ne l'envoie nulle part.",
   helpGameBtn: "Clique sur le statut (« … à jouer », au-dessus du plateau) pour repérer, tour à tour, " +
     "les échecs, les prises, les menaces, puis tes propres pièces en prise.",
 };
