@@ -241,13 +241,13 @@
           <span class="sub" id="subBubbles">Plus de bulles = le sable trouve moins de passages et s'écoule plus lentement.</span>
         </label>
         <div>
-          <div class="row"><span>Vitesse d'écoulement<button type="button" class="infoBtn" data-target="subViscosity" aria-label="Informations">i</button></span><span class="value" id="viscosityVal">3</span></div>
+          <div class="row"><span>Vitesse d'écoulement<button type="button" class="infoBtn" data-target="subViscosity" aria-label="Informations">i</button></span><span class="value" id="viscosityVal">5</span></div>
           <div class="segmented" id="viscositySeg" role="group" aria-label="Vitesse d'écoulement">
             <button type="button" class="segBtn" data-value="1">1</button>
             <button type="button" class="segBtn" data-value="2">2</button>
-            <button type="button" class="segBtn active" data-value="3">3</button>
+            <button type="button" class="segBtn" data-value="3">3</button>
             <button type="button" class="segBtn" data-value="4">4</button>
-            <button type="button" class="segBtn" data-value="5">5</button>
+            <button type="button" class="segBtn active" data-value="5">5</button>
             <button type="button" class="segBtn" data-value="6">6</button>
             <button type="button" class="segBtn" data-value="7">7</button>
             <button type="button" class="segBtn" data-value="8">8</button>
@@ -282,8 +282,8 @@
       <div class="controls cartoucheHidden" id="panelFlow">
         <div class="cartoucheTitle">🌊 Courant</div>
         <label>
-          <div class="row"><span>Courant (force maximale)<button type="button" class="infoBtn" data-target="subFlow" aria-label="Informations">i</button></span><span class="value" id="flowVal">10%</span></div>
-          <input type="range" id="flowSlider" min="0" max="100" value="10" step="1">
+          <div class="row"><span>Courant (force maximale)<button type="button" class="infoBtn" data-target="subFlow" aria-label="Informations">i</button></span><span class="value" id="flowVal">15%</span></div>
+          <input type="range" id="flowSlider" min="0" max="100" value="15" step="1">
           <span class="sub" id="subFlow">Tourbillons dans le liquide qui poussent le sable de côté. C'est un plafond : la force réelle suit l'activité du tableau (ci-dessous) — beaucoup de grains et de bulles en mouvement (ex. juste après avoir retourné le cadre) = courant fort ; un tableau qui s'est calmé = courant faible, sans réglage de durée à part.</span>
         </label>
         <label>
@@ -390,7 +390,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.31.73";
+const APP_VERSION = "1.31.74";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -740,7 +740,7 @@ function wake(x, y) {
 }
 function keepAwake(x, y) { chunkNext[(y >> CHUNK_SHIFT) * chunkCols + (x >> CHUNK_SHIFT)] = 1; }
 
-const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 40, flowPct: 10, flowDrift: 5, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 40%, courant 10% (plafond), dérive du courant x5, affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
+const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 5, bubblePct: 40, flowPct: 15, flowDrift: 5, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 5, bulles 40%, courant 15% (plafond), dérive du courant x5, affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
 
 // ---------- Bruit de Perlin 2D (pour le champ de courant du fluide) ----------
 // Implémentation classique (table de permutation + interpolation "fade"), suffisante pour
