@@ -5,7 +5,7 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 1.28.68
+  Version : 1.28.70
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
   Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
@@ -205,7 +205,7 @@
         <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
         <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
         <button class="btn ghost" id="dayNightBtn" type="button" title="Ambiance : Jour (soleil et nuages), Nuit (ciel étoilé, lune, sable éclairé d'une lumière lunaire bleutée) ou Auto (la nuit tombe quand le soleil sort du ciel, le jour revient avec la lune). Un clic passe au mode suivant.">☀️ Jour</button>
-        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux). Un clic passe au thème suivant.">🏔️ Montagne</button>
+        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux), Fond des océans (basalte, sable, algues, corail, nacre, vus sous l'eau), Sur la lune (régolithe gris et sol orange, sous un ciel noir où brille la Terre). Un clic passe au thème suivant.">🏔️ Montagne</button>
         <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
         <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
       </div>
@@ -292,7 +292,7 @@
 
       <div class="controls cartoucheHidden" id="panelSky">
         <div class="cartoucheTitle">🌠 Ciel<button type="button" class="infoBtn" data-target="subSky" aria-label="Informations">i</button></div>
-        <span class="sub" id="subSky">Des passages traversent le ciel au hasard : des étoiles filantes la nuit, parfois un avion le jour, et très rarement un ovni, dont le rayon tracteur aspire des grains de sable avant de les relâcher. Ces boutons les font apparaître tout de suite. Les étoiles filantes ne se voient que la nuit et les avions que le jour : le bouton est grisé le reste du temps. Celui de l'ovni l'est pendant sa visite ; l'ovni choisit une altitude au-dessus du sable amoncelé, et ne vient pas si le sable monte trop haut. Sur la planète inconnue, le soleil est enfermé dans une sphère de Dyson en construction, la lune laisse place à une base stellaire extraterrestre, les avions à de petits ovnis et le grand ovni à une capsule Apollo.</span>
+        <span class="sub" id="subSky">Des passages traversent le ciel au hasard : des étoiles filantes la nuit, parfois un avion le jour, et très rarement un ovni, dont le rayon tracteur aspire des grains de sable avant de les relâcher. Ces boutons les font apparaître tout de suite. Les étoiles filantes ne se voient que la nuit et les avions que le jour : le bouton est grisé le reste du temps. Celui de l'ovni l'est pendant sa visite ; l'ovni choisit une altitude au-dessus du sable amoncelé, et ne vient pas si le sable monte trop haut. Au fond des océans : un poisson-lune luminescent à la place de la lune, méduses, poissons et sous-marin ; sur la lune : étoiles en plein jour, satellites et module lunaire, avec la Terre dans le ciel. Sur la planète inconnue, le soleil est enfermé dans une sphère de Dyson en construction, la lune laisse place à une base stellaire extraterrestre, les avions à de petits ovnis et le grand ovni à une capsule Apollo.</span>
         <div class="actions">
           <button class="btn ghost" id="meteorBtn" type="button">🌠 Étoile filante</button>
           <button class="btn ghost" id="planeBtn" type="button">✈️ Avion</button>
@@ -373,7 +373,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.28.68";
+const APP_VERSION = "1.28.70";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -463,9 +463,12 @@ const DENSITY = { [BROWN]: 0.75, [FOREST]: 0.1, [MEADOW]: 0.25, [GRAY]: 0.05, [W
 // sky = le ciel du thème : dégradés de jour et de nuit ([position, couleur]), couleurs du soleil
 // (cœur, bord) et de son halo, couleur et opacité des nuages de jour, et effets propres au thème
 // (haze : brume de chaleur le jour ; aurora : aurore boréale la nuit ; planet : planète à anneaux ;
-// alien : ciel d'ailleurs — sphère de Dyson en construction autour du soleil, base stellaire
-// extraterrestre au lieu de la lune, petits ovnis au lieu des avions et capsule Apollo au lieu du
-// grand ovni).
+// world : un autre monde, qui remplace les astres et les passages du ciel (voir SKY_WORLDS) —
+// "alien" : sphère de Dyson autour du soleil, base stellaire extraterrestre au lieu de la lune,
+// petits ovnis au lieu des avions, capsule Apollo au lieu du grand ovni ; "ocean" : rayons de
+// lumière au lieu du soleil, poisson-lune luminescent au lieu de la lune, plancton luminescent au lieu des étoiles,
+// méduses, poissons et sous-marin ; "moon" : ciel noir étoilé, Terre dans le ciel, satellites et
+// module lunaire). Un thème sans cloudAlpha n'a pas de nuages.
 const THEMES = [
   {
     label: "🏔️ Montagne", glowType: WHITE,
@@ -539,7 +542,47 @@ const THEMES = [
       night: [[0, "#0a0418"], [0.6, "#26103f"], [1, "#4a1a50"]],
       sun: ["#f4fffb", "#7dffd8"], halo: "170,255,230", haloAlpha: 0.7,
       cloud: "255,200,235", cloudAlpha: 0.6,
-      planet: true, alien: true,
+      planet: true, world: "alien",
+    },
+  },
+  {
+    // Fond des océans : basalte, sable fin, algues, corail et nacre. Le "ciel" est l'eau vue d'en
+    // bas : claire vers la surface, sombre en profondeur, sans nuages. Voir world "ocean".
+    label: "🐚 Fond des océans", glowType: WHITE,
+    colors: {
+      [BROWN]:  ["Basalte",   [42, 46, 56]],
+      [MEADOW]: ["Sable fin", [214, 190, 140]],
+      [FOREST]: ["Algue",     [46, 120, 90]],
+      [GRAY]:   ["Corail",    [240, 120, 110]],
+      [WHITE]:  ["Nacre",     [236, 240, 235]],
+    },
+    sky: {
+      day: [[0, "#5fd0e6"], [0.45, "#1a6f9a"], [1, "#0b3558"]],
+      night: [[0, "#0b2a44"], [0.6, "#061a30"], [1, "#020a18"]],
+      sun: ["#ffffff", "#bff4ff"], halo: "190,245,255", haloAlpha: 0.5,
+      cloud: "255,255,255", cloudAlpha: 0,
+      world: "ocean",
+    },
+  },
+  {
+    // Sur la lune : régolithe du gris sombre au gris clair, et le fameux "sol orange" (verre
+    // volcanique rapporté par Apollo 17) pour le sable le plus léger. Pas d'atmosphère : ciel noir
+    // de jour comme de nuit, étoiles toujours visibles, soleil blanc et net, pas de nuages, et la
+    // Terre dans le ciel. Voir world "moon".
+    label: "🌕 Sur la lune", glowType: GRAY,
+    colors: {
+      [BROWN]:  ["Basalte lunaire", [58, 58, 62]],
+      [MEADOW]: ["Régolithe",       [122, 120, 116]],
+      [FOREST]: ["Poussière grise", [164, 162, 156]],
+      [GRAY]:   ["Anorthosite",     [214, 212, 206]],
+      [WHITE]:  ["Sol orange",      [196, 120, 60]],
+    },
+    sky: {
+      day: [[0, "#000000"], [1, "#08090d"]],
+      night: [[0, "#000000"], [1, "#030306"]],
+      sun: ["#ffffff", "#fff6e0"], halo: "255,255,240", haloAlpha: 0.35,
+      cloud: "255,255,255", cloudAlpha: 0,
+      world: "moon",
     },
   },
 ];
@@ -1384,27 +1427,35 @@ function drawDaySky(ctx, t) {
   ctx.fillStyle = skyGrad;
   ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
 
+  if (sky.world === "moon") drawStarField(ctx, t, 0.8); // sans atmosphère, étoiles en plein jour
   const [sunX, sunY] = celestialPos(t);
-  const halo = ctx.createRadialGradient(sunX, sunY, SUN_R * 0.6, sunX, sunY, SUN_R * 4);
-  halo.addColorStop(0, "rgba(" + sky.halo + "," + sky.haloAlpha + ")");
-  halo.addColorStop(1, "rgba(" + sky.halo + ",0)");
-  ctx.fillStyle = halo;
-  ctx.beginPath();
-  ctx.arc(sunX, sunY, SUN_R * 4, 0, Math.PI * 2);
-  ctx.fill();
-  const disc = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, SUN_R);
-  disc.addColorStop(0, sky.sun[0]);
-  disc.addColorStop(1, sky.sun[1]);
-  ctx.fillStyle = disc;
-  ctx.beginPath();
-  ctx.arc(sunX, sunY, SUN_R, 0, Math.PI * 2);
-  ctx.fill();
-  if (sky.alien) drawDysonSphere(ctx, t, sunX, sunY, SUN_R);
+  if (sky.world === "ocean") {
+    drawGodRays(ctx, t, sunX); // sous l'eau, le soleil n'est plus qu'une lumière diffuse
+  } else {
+    const halo = ctx.createRadialGradient(sunX, sunY, SUN_R * 0.6, sunX, sunY, SUN_R * 4);
+    halo.addColorStop(0, "rgba(" + sky.halo + "," + sky.haloAlpha + ")");
+    halo.addColorStop(1, "rgba(" + sky.halo + ",0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, SUN_R * 4, 0, Math.PI * 2);
+    ctx.fill();
+    const disc = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, SUN_R);
+    disc.addColorStop(0, sky.sun[0]);
+    disc.addColorStop(1, sky.sun[1]);
+    ctx.fillStyle = disc;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, SUN_R, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (sky.world === "alien") drawDysonSphere(ctx, t, sunX, sunY, SUN_R);
 
   if (sky.planet) drawRingedPlanet(ctx, t, false); // devant le soleil : il passe derrière la planète
-  for (const p of planes) (sky.alien ? drawMiniUfo : drawPlane)(ctx, t, p); // derrière les nuages
-  drawClouds(ctx, t, "rgba(150,180,210,0.45)", sky.cloud, sky.cloudAlpha);
+  if (sky.world === "moon") drawEarth(ctx, t, false);
+  const drawVisitor = skyWorld().drawPlane;
+  for (const p of planes) drawVisitor(ctx, t, p); // derrière les nuages
+  if (sky.cloudAlpha > 0) drawClouds(ctx, t, "rgba(150,180,210,0.45)", sky.cloud, sky.cloudAlpha);
   if (sky.haze) drawHeatHaze(ctx, t);
+  if (sky.world === "ocean") drawRisingBubbles(ctx, t);
 }
 
 // Brume de chaleur (Désert, le jour) : fines bandes chaudes et translucides vers le bas du ciel,
@@ -1672,24 +1723,413 @@ function drawNightSky(ctx, t) {
   ctx.fillStyle = nightGrad;
   ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
 
+  if (sky.world === "ocean") drawPlankton(ctx, t); // sous l'eau, le plancton remplace les étoiles
+  else drawStarField(ctx, t, 1);
+  for (const m of meteors) (m.jelly ? drawJellyfish : drawMeteor)(ctx, t, m);
+  ctx.globalAlpha = nightMix;
+  if (sky.aurora) drawAurora(ctx, t);
+  if (sky.planet) drawRingedPlanet(ctx, t, true);
+  if (sky.world === "moon") drawEarth(ctx, t, true);
+
+  const [moonX, moonY] = celestialPos(t);
+  const moonR = SUN_R * 0.85;
+  if (sky.world === "alien") drawStarbase(ctx, t, moonX, moonY, moonR);
+  else if (sky.world === "ocean") drawMoonfish(ctx, t, moonX, moonY, moonR);
+  else if (sky.world !== "moon") drawMoon(ctx, moonX, moonY, moonR); // sur la lune : pas de lune
+
+  if (sky.cloudAlpha > 0) drawClouds(ctx, t, "rgba(10,15,35,0.4)", "80,95,130", 0.7);
+  if (sky.world === "ocean") drawRisingBubbles(ctx, t);
+}
+
+// Étoiles scintillantes (positions fixes tirées par layoutSky), à l'opacité globale courante ×
+// alpha. La nuit pour tous les thèmes ; aussi en plein jour sur la lune, faute d'atmosphère.
+function drawStarField(ctx, t, alpha) {
+  const base = ctx.globalAlpha;
   ctx.fillStyle = "#fff";
   for (const [sx, sy, sr, speed, ph] of STARS) {
-    ctx.globalAlpha = nightMix * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * speed + ph)));
+    ctx.globalAlpha = base * alpha * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * speed + ph)));
     ctx.beginPath();
     ctx.arc(sx, sy, sr, 0, Math.PI * 2);
     ctx.fill();
   }
-  for (const m of meteors) drawMeteor(ctx, t, m);
-  ctx.globalAlpha = nightMix;
-  if (sky.aurora) drawAurora(ctx, t);
-  if (sky.planet) drawRingedPlanet(ctx, t, true);
+  ctx.globalAlpha = base;
+}
 
-  const [moonX, moonY] = celestialPos(t);
-  const moonR = SUN_R * 0.85;
-  if (sky.alien) drawStarbase(ctx, t, moonX, moonY, moonR);
-  else drawMoon(ctx, moonX, moonY, moonR);
+// ---------- Monde "ocean" ----------
+// Rayons de lumière (le jour) : de larges faisceaux qui descendent de la surface en s'évasant et
+// en s'estompant, et oscillent lentement comme la houle ; leur éclat suit la course du soleil
+// (sunX), plus fort au-dessus de lui. Sous la surface, une bande de reflets ondulants (caustiques).
+function drawGodRays(ctx, t, sunX) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 7; k++) {
+    const x = SKY_W * (k / 6) + Math.sin(t * 0.3 + k * 1.9) * SKY_W * 0.05;
+    const near = Math.max(0, 1 - Math.abs(x - sunX) / (SKY_W * 0.6));
+    const w = SKY_W * (0.03 + 0.02 * Math.sin(t * 0.5 + k)), spread = SKY_W * 0.12, len = SKY_H * 0.9;
+    const g = ctx.createLinearGradient(0, -SKY_PAD * 0.2, 0, len);
+    g.addColorStop(0, "rgba(220,250,255," + (0.12 + 0.2 * near) + ")");
+    g.addColorStop(1, "rgba(220,250,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x - w, -SKY_PAD * 0.2); ctx.lineTo(x + w, -SKY_PAD * 0.2);
+    ctx.lineTo(x + w + spread * 0.5, len); ctx.lineTo(x - w + spread * 0.5, len);
+    ctx.fill();
+  }
+  ctx.strokeStyle = "rgba(230,255,255,0.18)";
+  ctx.lineWidth = 1.5;
+  for (let k = 0; k < 4; k++) {
+    ctx.beginPath();
+    for (let x = -SKY_PAD; x <= SKY_W + SKY_PAD; x += 8) {
+      const y = SKY_H * (0.02 + k * 0.03) + Math.sin(x * 0.05 + t * (1 + k * 0.3) + k) * 3;
+      if (x === -SKY_PAD) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
-  drawClouds(ctx, t, "rgba(10,15,35,0.4)", "80,95,130", 0.7);
+// Bulles qui montent vers la surface, chacune sur sa colonne (qui ondule un peu), de jour comme de
+// nuit ; elles repartent du fond une fois sorties par le haut.
+function drawRisingBubbles(ctx, t) {
+  ctx.strokeStyle = "rgba(220,250,255,0.55)";
+  ctx.lineWidth = 1;
+  for (let k = 0; k < 14; k++) {
+    const h = dysonHash(k, 7), r = 1.2 + h * 2.5, span = SKY_H + 20;
+    const y = SKY_H + 10 - ((t * (14 + h * 18) + h * span) % span);
+    const x = SKY_W * dysonHash(k, 3) + Math.sin(t * 2 + k) * 3;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// Plancton luminescent (la nuit, à la place des étoiles) : mêmes points que le ciel étoilé, en
+// turquoise, qui dérivent doucement au lieu de rester fixes.
+function drawPlankton(ctx, t) {
+  const base = ctx.globalAlpha;
+  ctx.fillStyle = "#7ffcff";
+  for (const [sx, sy, sr, speed, ph] of STARS) {
+    ctx.globalAlpha = base * (0.25 + 0.6 * (0.5 + 0.5 * Math.sin(t * speed * 0.6 + ph)));
+    ctx.beginPath();
+    ctx.arc(sx + Math.sin(t * 0.3 + ph) * 4, sy + Math.cos(t * 0.25 + ph) * 3, sr * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = base;
+}
+
+// Poisson-lune luminescent (à la place de la lune, dont il suit la course de gauche à droite) :
+// corps ovale haut et plat, tronqué à l'arrière par son "clavus" en collerette, longues nageoires
+// dorsale et anale qui battent en alternance (sa seule façon de nager), petite nageoire pectorale,
+// œil et bouche ronde. Il flotte en tanguant doucement, entouré d'un halo, et des taches
+// lumineuses pulsent sur ses flancs. R = rayon de la lune qu'il remplace.
+const MOONFISH_SPOTS = [[0.3, -0.35], [-0.1, -0.45], [-0.4, -0.2], [0.05, 0.05], [-0.35, 0.3], [0.2, 0.4], [0.45, 0.2], [-0.15, 0.5]];
+function drawMoonfish(ctx, t, x, y, R) {
+  ctx.save();
+  ctx.translate(x, y + Math.sin(t * 0.8) * R * 0.12);
+  ctx.rotate(Math.sin(t * 0.5) * 0.1);
+  ctx.globalCompositeOperation = "lighter";
+  const halo = ctx.createRadialGradient(0, 0, R * 0.5, 0, 0, R * 2.8);
+  halo.addColorStop(0, "rgba(150,240,255," + (0.3 + 0.08 * Math.sin(t * 1.5)) + ")");
+  halo.addColorStop(1, "rgba(150,240,255,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 2.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  // Nageoires dorsale et anale : longues lames qui battent en alternance.
+  const flap = Math.sin(t * 2.2) * R * 0.3;
+  ctx.fillStyle = "rgba(120,215,235,0.9)";
+  for (const [dir, sway] of [[-1, flap], [1, -flap]]) {
+    ctx.beginPath();
+    ctx.moveTo(-0.05 * R, dir * 0.62 * R);
+    ctx.quadraticCurveTo(-0.1 * R + sway * 0.5, dir * 1.2 * R, -0.3 * R + sway, dir * 1.65 * R);
+    ctx.quadraticCurveTo(-0.38 * R + sway * 0.5, dir * 1.1 * R, -0.42 * R, dir * 0.52 * R);
+    ctx.fill();
+  }
+  // Clavus : collerette ondulée à l'arrière, un peu plus sombre.
+  ctx.fillStyle = "rgba(70,160,190,0.95)";
+  ctx.beginPath();
+  for (let k = 0; k <= 12; k++) {
+    const a = Math.PI / 2 + k * Math.PI / 12, wave = 1 + 0.12 * Math.sin(k * 2.5 + t * 3);
+    const px = -0.75 * R + Math.cos(a) * 0.28 * R * wave, py = Math.sin(a) * 0.62 * R;
+    if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.fill();
+  // Corps.
+  const body = ctx.createRadialGradient(R * 0.2, -R * 0.2, 0, 0, 0, R * 0.9);
+  body.addColorStop(0, "#effdff");
+  body.addColorStop(0.55, "#9fe3ef");
+  body.addColorStop(1, "#4a9fbe");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 0.85 * R, 0.72 * R, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Nageoire pectorale, qui bat plus vite.
+  ctx.fillStyle = "rgba(90,180,210,0.85)";
+  ctx.beginPath();
+  ctx.ellipse(0.28 * R, 0.08 * R, 0.16 * R, 0.07 * R, 0.5 + Math.sin(t * 5) * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // Œil et bouche.
+  ctx.fillStyle = "#12324a";
+  ctx.beginPath();
+  ctx.arc(0.5 * R, -0.18 * R, 0.09 * R, 0, Math.PI * 2);
+  ctx.moveTo(0.89 * R, 0.06 * R);
+  ctx.arc(0.84 * R, 0.06 * R, 0.05 * R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(0.53 * R, -0.21 * R, 0.03 * R, 0, Math.PI * 2);
+  ctx.fill();
+  // Taches luminescentes qui pulsent chacune à son rythme.
+  ctx.globalCompositeOperation = "lighter";
+  MOONFISH_SPOTS.forEach(([sx, sy], k) => {
+    ctx.fillStyle = "rgba(190,255,245," + (0.35 + 0.35 * Math.sin(t * 2 + k * 1.3)) + ")";
+    ctx.beginPath();
+    ctx.arc(sx * R, sy * R, R * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+// Méduse luminescente (la nuit, à la place des étoiles filantes) : une ombrelle qui se contracte
+// par à-coups et fait monter la méduse, avec des tentacules qui ondulent derrière elle ; elle
+// apparaît et s'éteint en douceur sur sa durée de vie.
+function drawJellyfish(ctx, t, m) {
+  const age = t - m.t0, fade = Math.sin(Math.PI * age / m.life), s = m.size;
+  const beat = 0.5 + 0.5 * Math.sin(age * 2.4); // 1 = ombrelle ouverte, 0 = contractée
+  const x = m.x + Math.sin(age * 0.6) * s * 0.8, y = m.y - age * s * 0.35 - beat * s * 0.15;
+  ctx.save();
+  ctx.globalAlpha = nightMix * fade;
+  ctx.globalCompositeOperation = "lighter";
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, s * 1.6);
+  glow.addColorStop(0, "rgba(" + m.rgb + ",0.35)");
+  glow.addColorStop(1, "rgba(" + m.rgb + ",0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, s * 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(" + m.rgb + ",0.6)";
+  ctx.lineWidth = 1;
+  for (let k = -2; k <= 2; k++) {
+    ctx.beginPath();
+    ctx.moveTo(x + k * s * 0.18, y);
+    for (let d = 1; d <= 6; d++) {
+      ctx.lineTo(x + k * s * 0.18 + Math.sin(age * 3 + d * 0.9 + k) * s * 0.12, y + d * s * 0.22);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(" + m.rgb + ",0.75)";
+  ctx.beginPath();
+  ctx.ellipse(x, y, s * (0.45 + 0.12 * beat), s * (0.42 - 0.08 * beat), 0, Math.PI, 0);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Poisson (le jour, à la place de l'avion) : même trajet, en ondulant, queue qui bat, nageoire,
+// œil, et quelques bulles qui s'échappent derrière lui.
+function drawFish(ctx, t, p) {
+  const x = planeX(t, p), s = p.size * 1.3, age = t - p.t0;
+  const y = p.y + Math.sin(age * 2) * s * 0.4;
+  ctx.strokeStyle = "rgba(220,250,255,0.5)";
+  ctx.lineWidth = 1;
+  for (let k = 1; k <= 3; k++) {
+    ctx.beginPath();
+    ctx.arc(x - p.dir * s * (0.9 + k * 0.5), y - k * s * 0.25 - Math.sin(age * 3 + k) * 2, 0.8 + k * 0.4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(p.dir, 1);
+  const wag = Math.sin(age * 9) * 0.3;
+  ctx.fillStyle = "#ff9a3c";
+  ctx.beginPath(); // queue
+  ctx.moveTo(-0.6 * s, 0);
+  ctx.lineTo(-1.05 * s, -0.35 * s + wag * s * 0.4); ctx.lineTo(-1.05 * s, 0.35 * s + wag * s * 0.4);
+  ctx.fill();
+  const body = ctx.createLinearGradient(0, -0.35 * s, 0, 0.35 * s);
+  body.addColorStop(0, "#ffb347");
+  body.addColorStop(1, "#e0632a");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 0.7 * s, 0.33 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.8)"; // bande blanche, façon poisson-clown
+  ctx.fillRect(-0.1 * s, -0.3 * s, 0.14 * s, 0.6 * s);
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.arc(0.42 * s, -0.08 * s, 0.06 * s + 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Sous-marin jaune (à la place de l'ovni) : même visite ; son "rayon tracteur" est une drague qui
+// aspire le sable sous un projecteur jaune. Kiosque et périscope, hublots éclairés, hélice qui
+// tourne à l'arrière (côté opposé à sa direction d'arrivée) et bulles qui s'en échappent.
+function drawSubmarine(ctx) {
+  const { x, y, tilt, beam, age, s } = ufo.pose;
+  ctx.save();
+  ctx.translate(x, y);
+  drawTractorBeam(ctx, beam, s, "255,240,160");
+  ctx.rotate(tilt * 0.5); // un sous-marin se dandine moins qu'une soucoupe
+  ctx.scale(ufo.dir, 1);
+  ctx.strokeStyle = "rgba(220,250,255,0.55)"; ctx.lineWidth = 1; // bulles de l'hélice
+  for (let k = 0; k < 4; k++) {
+    const f = (age * 1.5 + k / 4) % 1;
+    ctx.beginPath();
+    ctx.arc(-1.15 * s - f * s * 0.6, -f * s * 0.8, 1 + f * 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#6b6f78"; // hélice : deux pales qui tournent (vues de profil, elles s'aplatissent)
+  const blade = Math.cos(age * 20);
+  ctx.fillRect(-1.08 * s, -0.28 * s * Math.abs(blade), 0.08 * s, 0.56 * s * Math.abs(blade) + 1);
+  const body = ctx.createLinearGradient(0, -0.35 * s, 0, 0.35 * s);
+  body.addColorStop(0, "#ffe45c");
+  body.addColorStop(1, "#d9a300");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, s, 0.34 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath(); // kiosque
+  ctx.moveTo(-0.25 * s, -0.28 * s); ctx.lineTo(-0.18 * s, -0.6 * s); ctx.lineTo(0.22 * s, -0.6 * s); ctx.lineTo(0.3 * s, -0.28 * s);
+  ctx.fill();
+  ctx.strokeStyle = "#8a8f98"; ctx.lineWidth = Math.max(1, s * 0.05); // périscope
+  ctx.beginPath(); ctx.moveTo(0, -0.6 * s); ctx.lineTo(0, -0.82 * s); ctx.lineTo(0.14 * s, -0.82 * s); ctx.stroke();
+  for (const hx of [-0.45, -0.05, 0.35]) { // hublots
+    ctx.fillStyle = "#3c4a5c";
+    ctx.beginPath(); ctx.arc(hx * s, 0, 0.11 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,245,180,0.9)";
+    ctx.beginPath(); ctx.arc(hx * s, 0, 0.07 * s, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---------- Monde "moon" ----------
+// La Terre vue de la lune (de jour comme de nuit), fixe dans le ciel : océans bleus, continents
+// qui défilent lentement avec sa rotation, nuages, halo d'atmosphère. Le jour, elle n'est qu'un
+// croissant (ombre sur la majeure partie) ; la nuit, pleine et brillante.
+const EARTH_LANDS = [[-0.2, -0.3, 0.35, 0.22], [0.5, 0.1, 0.3, 0.4], [1.1, -0.2, 0.4, 0.25], [1.6, 0.35, 0.25, 0.2]];
+function drawEarth(ctx, t, night) {
+  const r = SKY_UNIT * 0.075, x = SKY_W * 0.25, y = SKY_H * 0.16;
+  const atmo = ctx.createRadialGradient(x, y, r * 0.9, x, y, r * 1.35);
+  atmo.addColorStop(0, "rgba(120,180,255,0.45)");
+  atmo.addColorStop(1, "rgba(120,180,255,0)");
+  ctx.fillStyle = atmo;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 1.35, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(x, y);
+  const ocean = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r);
+  ocean.addColorStop(0, "#5fa8ff");
+  ocean.addColorStop(1, "#123f8a");
+  ctx.fillStyle = ocean;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  const shift = (t * 0.03) % 2; // rotation : les continents défilent et reviennent
+  ctx.fillStyle = "#4f9a4a";
+  for (const [lx, ly, rx, ry] of EARTH_LANDS) {
+    for (const wrap of [0, -2]) {
+      ctx.beginPath();
+      ctx.ellipse((lx + shift + wrap - 0.5) * r, ly * r, rx * r, ry * r, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.7)"; // nuages en bandes
+  for (const [cy, h, ph] of [[-0.55, 0.1, 0], [0.05, 0.08, 2], [0.5, 0.12, 4]]) {
+    ctx.fillRect(-r, (cy + 0.05 * Math.sin(t * 0.2 + ph)) * r, 2 * r, h * r);
+  }
+  if (!night) { // phase : ne reste éclairé qu'un croissant, côté soleil (à droite)
+    const shadow = ctx.createRadialGradient(-r * 0.45, 0, 0, -r * 0.45, 0, r * 1.15);
+    shadow.addColorStop(0, "rgba(0,0,0,0.88)");
+    shadow.addColorStop(0.8, "rgba(0,0,0,0.88)");
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shadow;
+    ctx.fillRect(-r, -r, 2 * r, 2 * r);
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// Satellite (le jour, à la place de l'avion) : pas de traînée dans le vide ; un corps doré avec
+// deux ailes de panneaux solaires, une antenne parabolique et un feu qui clignote, qui tourne
+// lentement sur lui-même en traversant le ciel.
+function drawSatellite(ctx, t, p) {
+  const x = planeX(t, p), s = p.size, age = t - p.t0;
+  ctx.save();
+  ctx.translate(x, p.y);
+  ctx.rotate(age * 0.3 * p.dir);
+  ctx.fillStyle = "#2b4a8a"; ctx.strokeStyle = "#8fb0ff"; ctx.lineWidth = 0.6;
+  for (const side of [-1, 1]) { // panneaux solaires quadrillés
+    const px = side > 0 ? 0.35 * s : -1.25 * s;
+    ctx.fillRect(px, -0.2 * s, 0.9 * s, 0.4 * s);
+    ctx.strokeRect(px, -0.2 * s, 0.9 * s, 0.4 * s);
+    ctx.beginPath();
+    for (let k = 1; k < 3; k++) { ctx.moveTo(px + k * 0.3 * s, -0.2 * s); ctx.lineTo(px + k * 0.3 * s, 0.2 * s); }
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#d9a441"; // corps en feuille d'or
+  ctx.fillRect(-0.35 * s, -0.3 * s, 0.7 * s, 0.6 * s);
+  ctx.strokeStyle = "#c9ced8"; ctx.lineWidth = Math.max(1, s * 0.06); // antenne parabolique
+  ctx.beginPath();
+  ctx.moveTo(0, -0.3 * s); ctx.lineTo(0, -0.55 * s);
+  ctx.moveTo(-0.25 * s, -0.7 * s); ctx.quadraticCurveTo(0, -0.45 * s, 0.25 * s, -0.7 * s);
+  ctx.stroke();
+  if ((t * 1.2) % 1 < 0.15) {
+    ctx.fillStyle = "#ff3b3b";
+    ctx.beginPath(); ctx.arc(0, 0.35 * s, 0.07 * s + 0.8, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Module lunaire (à la place de l'ovni) : même visite et même rayon tracteur. Étage de descente
+// en feuille d'or sur quatre pieds écartés, étage de remontée gris et anguleux (hublots
+// triangulaires, antenne) ; au départ, une flamme sort sous l'étage de remontée.
+function drawLunarModule(ctx) {
+  const { x, y, tilt, beam, age, p, s } = ufo.pose;
+  ctx.save();
+  ctx.translate(x, y);
+  drawTractorBeam(ctx, beam, s);
+  ctx.rotate(tilt * 0.6);
+  if (p >= UFO_RELEASE) drawThrusterFlame(ctx, age, s, 0.25 * s);
+  ctx.strokeStyle = "#b9bec6"; ctx.lineWidth = Math.max(1, s * 0.05); // pieds et patins
+  ctx.beginPath();
+  for (const side of [-1, 1]) {
+    ctx.moveTo(side * 0.35 * s, 0.1 * s); ctx.lineTo(side * 0.72 * s, 0.45 * s);
+    ctx.moveTo(side * 0.12 * s, 0.2 * s); ctx.lineTo(side * 0.35 * s, 0.45 * s);
+  }
+  ctx.stroke();
+  ctx.fillStyle = "#b9bec6";
+  for (const fx of [-0.72, -0.35, 0.35, 0.72]) ctx.fillRect((fx - 0.08) * s, 0.43 * s, 0.16 * s, 0.05 * s);
+  const gold = ctx.createLinearGradient(-0.45 * s, 0, 0.45 * s, 0);
+  gold.addColorStop(0, "#9c6b1e");
+  gold.addColorStop(0.45, "#f2c55c");
+  gold.addColorStop(1, "#8a5c18");
+  ctx.fillStyle = gold; // étage de descente (octogone vu de profil)
+  ctx.beginPath();
+  ctx.moveTo(-0.45 * s, -0.05 * s); ctx.lineTo(0.45 * s, -0.05 * s); ctx.lineTo(0.5 * s, 0.05 * s);
+  ctx.lineTo(0.45 * s, 0.22 * s); ctx.lineTo(-0.45 * s, 0.22 * s); ctx.lineTo(-0.5 * s, 0.05 * s);
+  ctx.fill();
+  ctx.fillStyle = "#c5cad2"; // étage de remontée
+  ctx.beginPath();
+  ctx.moveTo(-0.38 * s, -0.05 * s); ctx.lineTo(-0.42 * s, -0.35 * s); ctx.lineTo(-0.2 * s, -0.6 * s);
+  ctx.lineTo(0.25 * s, -0.6 * s); ctx.lineTo(0.42 * s, -0.38 * s); ctx.lineTo(0.38 * s, -0.05 * s);
+  ctx.fill();
+  ctx.fillStyle = "#1c2430"; // hublots triangulaires
+  ctx.beginPath();
+  ctx.moveTo(-0.3 * s, -0.3 * s); ctx.lineTo(-0.12 * s, -0.48 * s); ctx.lineTo(-0.12 * s, -0.3 * s);
+  ctx.moveTo(0.3 * s, -0.3 * s); ctx.lineTo(0.12 * s, -0.48 * s); ctx.lineTo(0.12 * s, -0.3 * s);
+  ctx.fill();
+  ctx.fillStyle = "#8a9099"; // blocs de propulseurs
+  ctx.fillRect(-0.52 * s, -0.4 * s, 0.1 * s, 0.1 * s);
+  ctx.fillRect(0.42 * s, -0.4 * s, 0.1 * s, 0.1 * s);
+  ctx.strokeStyle = "#c5cad2"; ctx.lineWidth = Math.max(1, s * 0.04); // antenne
+  ctx.beginPath(); ctx.moveTo(0.1 * s, -0.6 * s); ctx.lineTo(0.2 * s, -0.85 * s); ctx.stroke();
+  ctx.fillStyle = "#e8ebef";
+  ctx.beginPath(); ctx.arc(0.2 * s, -0.88 * s, 0.07 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 function drawMoon(ctx, moonX, moonY, moonR) {
@@ -1718,7 +2158,18 @@ function drawMoon(ctx, moonX, moonY, moonR) {
 // Création d'un passage — appelée au hasard par updateSkyVisitors(), ou à la demande par les
 // boutons du cartouche "🌠 Ciel".
 const randomSide = () => (Math.random() < 0.5 ? 1 : -1);
+// Sous l'eau, une méduse remplace l'étoile filante : elle vit bien plus longtemps (et monte
+// lentement), d'où des paramètres à part ; drawNightSky() la reconnaît à m.jelly.
+const JELLY_COLORS = ["255,120,220", "120,230,255", "190,150,255"];
 function spawnMeteor(t) {
+  if (THEMES[themeIndex].sky.world === "ocean") {
+    meteors.push({
+      jelly: true, t0: t, life: 9 + Math.random() * 5, size: SKY_UNIT * (0.03 + Math.random() * 0.025),
+      x: SKY_W * (0.1 + Math.random() * 0.8), y: SKY_H * (0.25 + Math.random() * 0.25),
+      rgb: JELLY_COLORS[Math.floor(Math.random() * JELLY_COLORS.length)],
+    });
+    return;
+  }
   const dir = randomSide(), slope = 0.25 + Math.random() * 0.4, speed = SKY_UNIT * (1.1 + Math.random());
   meteors.push({
     x: SKY_W * (0.1 + Math.random() * 0.8), y: SKY_H * (0.02 + Math.random() * 0.3),
@@ -1807,7 +2258,19 @@ ufoBtn.addEventListener("click", () => {
   ufoBtnNoRoomTimer = setTimeout(() => { ufoBtn.textContent = ufoBtnLabel(); }, 1500);
 });
 function ufoBtnLabel() {
-  return THEMES[themeIndex].sky.alien ? "🧑‍🚀 Capsule Apollo" : "🛸 Ovni";
+  return skyWorld().labels[2];
+}
+
+// Mondes (sky.world du thème) : ce qui remplace l'avion et l'ovni, et le libellé des trois boutons
+// du cartouche Ciel (étoile filante, avion, ovni). "earth" = le monde par défaut.
+const SKY_WORLDS = {
+  earth: { drawPlane, drawUfo, labels: ["🌠 Étoile filante", "✈️ Avion", "🛸 Ovni"] },
+  alien: { drawPlane: drawMiniUfo, drawUfo: drawApollo, labels: ["🌠 Étoile filante", "🛸 Ovni", "🧑‍🚀 Capsule Apollo"] },
+  ocean: { drawPlane: drawFish, drawUfo: drawSubmarine, labels: ["🪼 Méduse", "🐟 Poisson", "⚓ Sous-marin"] },
+  moon: { drawPlane: drawSatellite, drawUfo: drawLunarModule, labels: ["🌠 Étoile filante", "🛰️ Satellite", "🚀 Module lunaire"] },
+};
+function skyWorld() {
+  return SKY_WORLDS[THEMES[themeIndex].sky.world] || SKY_WORLDS.earth;
 }
 
 // Étoile filante : une tête brillante suivie d'une traînée qui s'efface, le tout apparaissant et
@@ -2063,13 +2526,14 @@ function drawUfoGrains(ctx, lr, lg, lb) {
   ctx.restore();
 }
 
-// Rayon tracteur, commun à l'ovni et à la capsule Apollo : un cône de lumière verte sous l'engin.
-function drawTractorBeam(ctx, beam, s) {
+// Rayon tracteur, commun à tous les engins qui remplacent l'ovni : un cône de lumière sous l'engin
+// (vert par défaut, rgb pour une autre couleur).
+function drawTractorBeam(ctx, beam, s, rgb = "180,255,140") {
   if (beam > 0) {
     const h = SKY_H * UFO_BEAM_LENGTH;
     const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "rgba(180,255,140," + 0.45 * beam + ")");
-    g.addColorStop(1, "rgba(180,255,140,0)");
+    g.addColorStop(0, "rgba(" + rgb + "," + 0.45 * beam + ")");
+    g.addColorStop(1, "rgba(" + rgb + ",0)");
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(-0.4 * s, 0.2 * s); ctx.lineTo(0.4 * s, 0.2 * s); ctx.lineTo(1.6 * s, h); ctx.lineTo(-1.6 * s, h);
@@ -2127,6 +2591,20 @@ function drawUfo(ctx) {
   ctx.restore();
 }
 
+// Flamme de départ qui vacille, sous la tuyère (y0 = hauteur de sa base), pour la capsule Apollo et
+// le module lunaire.
+function drawThrusterFlame(ctx, age, s, y0) {
+  const len = s * (0.6 + 0.25 * Math.sin(age * 40));
+  const flame = ctx.createLinearGradient(0, y0, 0, y0 + len);
+  flame.addColorStop(0, "rgba(255,245,200,0.95)");
+  flame.addColorStop(0.4, "rgba(255,160,60,0.8)");
+  flame.addColorStop(1, "rgba(255,80,30,0)");
+  ctx.fillStyle = flame;
+  ctx.beginPath();
+  ctx.moveTo(-0.2 * s, y0); ctx.lineTo(0.2 * s, y0); ctx.lineTo(0, y0 + len);
+  ctx.fill();
+}
+
 // Capsule Apollo (thème alien, à la place de l'ovni) : même visite et même rayon tracteur, qui
 // sort de la tuyère. Module de commande conique (hublot, sonde d'amarrage au sommet), module de
 // service cylindrique (bandes de radiateurs, blocs de propulseurs sur les côtés) et tuyère ; une
@@ -2137,17 +2615,7 @@ function drawApollo(ctx) {
   ctx.translate(x, y);
   drawTractorBeam(ctx, beam, s);
   ctx.rotate(tilt);
-  if (p >= UFO_RELEASE) { // flamme de départ, qui vacille
-    const len = s * (0.6 + 0.25 * Math.sin(age * 40));
-    const flame = ctx.createLinearGradient(0, 0.3 * s, 0, 0.3 * s + len);
-    flame.addColorStop(0, "rgba(255,245,200,0.95)");
-    flame.addColorStop(0.4, "rgba(255,160,60,0.8)");
-    flame.addColorStop(1, "rgba(255,80,30,0)");
-    ctx.fillStyle = flame;
-    ctx.beginPath();
-    ctx.moveTo(-0.2 * s, 0.3 * s); ctx.lineTo(0.2 * s, 0.3 * s); ctx.lineTo(0, 0.3 * s + len);
-    ctx.fill();
-  }
+  if (p >= UFO_RELEASE) drawThrusterFlame(ctx, age, s, 0.3 * s);
   // Tuyère.
   ctx.fillStyle = "#4a4f58";
   ctx.beginPath();
@@ -2209,7 +2677,7 @@ function drawSky(ctx, t) {
     drawNightSky(ctx, t);
     ctx.globalAlpha = 1;
   }
-  if (ufo) (THEMES[themeIndex].sky.alien ? drawApollo : drawUfo)(ctx); // par-dessus tout, de jour comme de nuit
+  if (ufo) skyWorld().drawUfo(ctx); // par-dessus tout, de jour comme de nuit
   ctx.restore();
 }
 
@@ -2559,9 +3027,9 @@ function applyTheme() {
   }
   themeBtn.textContent = theme.label;
   buildSkyGradients(); // chaque thème a son propre ciel
-  // Ciel d'ailleurs : les boutons du cartouche Ciel nomment les engins qui les remplacent.
-  planeBtn.textContent = theme.sky.alien ? "🛸 Ovni" : "✈️ Avion";
-  ufoBtn.textContent = ufoBtnLabel();
+  // Autres mondes : les boutons du cartouche Ciel nomment ce qui remplace étoiles filantes, avions
+  // et ovni.
+  [meteorBtn.textContent, planeBtn.textContent, ufoBtn.textContent] = skyWorld().labels;
 }
 themeBtn.addEventListener("click", () => {
   themeIndex = (themeIndex + 1) % THEMES.length;
