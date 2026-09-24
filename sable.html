@@ -5,9 +5,9 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 1.27.59
+  Version : 1.28.68
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
-  Date    : 2026-09-23
+  Date    : 2026-09-24
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
   Statut  : Version stable (V1).
   © 2026 Franck Legrand. Tous droits réservés.
@@ -124,6 +124,16 @@
     padding:16px 18px; display:flex; flex-direction:column; gap:16px;
   }
   .cartoucheTitle { font-weight:700; font-size:14px; color:#fff; }
+  /* Croix de fermeture en haut à droite de chaque cartouche (ajoutée par le script) : décoche la
+     case correspondante de la fenêtre Informations. Le titre laisse la place à la croix. */
+  .controls { position:relative; }
+  .cartoucheTitle, #densityPanel summary, #proportionPanel summary { padding-right:22px; }
+  .closeBtn {
+    position:absolute; top:10px; right:10px; width:22px; height:22px; padding:0;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:none; color:#888; border:0; border-radius:6px; font-size:18px; line-height:1; cursor:pointer;
+  }
+  .closeBtn:hover { background:#333; color:#fff; }
   label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:13.5px; }
   /* display:flex explicite : sur un <div> (pas un <label>, déjà en flex), sans lui le libellé et sa
      valeur restaient collés en ligne, le justify-content ci-dessous n'avait aucun effet. */
@@ -188,14 +198,14 @@
   <div class="panel">
     <div class="stage">
       <div class="jarWrap" id="jarWrap">
-        <canvas id="sandCanvas" width="330" height="480"></canvas>
+        <canvas id="sandCanvas" width="660" height="960"></canvas>
       </div>
       <p class="hint">Le sable coloré tombe dans l'eau et se fraie lentement un passage à travers les bulles d'air, formant des dunes. Retournez le cadre pour tout faire recommencer de l'autre côté.</p>
       <div class="actions">
         <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
         <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
         <button class="btn ghost" id="dayNightBtn" type="button" title="Ambiance : Jour (soleil et nuages), Nuit (ciel étoilé, lune, sable éclairé d'une lumière lunaire bleutée) ou Auto (la nuit tombe quand le soleil sort du ciel, le jour revient avec la lune). Un clic passe au mode suivant.">☀️ Jour</button>
-        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris). Un clic passe au thème suivant.">🏔️ Montagne</button>
+        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux). Un clic passe au thème suivant.">🏔️ Montagne</button>
         <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
         <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
       </div>
@@ -210,12 +220,12 @@
         </div>
         <label>
           <div class="row"><span>Résolution du tableau<button type="button" class="infoBtn" data-target="subResolution" aria-label="Informations">i</button></span><span class="value" id="resolutionVal">245 × 356</span></div>
-          <input type="range" id="resolutionSlider" min="50" max="330" value="245" step="5">
-          <span class="sub" id="subResolution">Nombre de grains simulés sur le petit côté du tableau (la largeur en vertical, la hauteur en horizontal ; jusqu'à 330 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent ; le tableau recommence à zéro au relâchement.</span>
+          <input type="range" id="resolutionSlider" min="50" max="660" value="245" step="5">
+          <span class="sub" id="subResolution">Nombre de grains simulés sur le petit côté du tableau (la largeur en vertical, la hauteur en horizontal ; jusqu'à 660 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent — le calcul croît avec le carré de la valeur : 660 demande environ 7 fois plus que 245 ; le tableau recommence à zéro au relâchement.</span>
         </label>
         <label>
-          <div class="row"><span>Bulles d'air<button type="button" class="infoBtn" data-target="subBubbles" aria-label="Informations">i</button></span><span class="value" id="bubbleVal">38%</span></div>
-          <input type="range" id="bubbleSlider" min="0" max="100" value="38" step="1">
+          <div class="row"><span>Bulles d'air<button type="button" class="infoBtn" data-target="subBubbles" aria-label="Informations">i</button></span><span class="value" id="bubbleVal">40%</span></div>
+          <input type="range" id="bubbleSlider" min="0" max="100" value="40" step="1">
           <span class="sub" id="subBubbles">Plus de bulles = le sable trouve moins de passages et s'écoule plus lentement.</span>
         </label>
         <div>
@@ -282,7 +292,7 @@
 
       <div class="controls cartoucheHidden" id="panelSky">
         <div class="cartoucheTitle">🌠 Ciel<button type="button" class="infoBtn" data-target="subSky" aria-label="Informations">i</button></div>
-        <span class="sub" id="subSky">Des passages traversent le ciel au hasard : des étoiles filantes la nuit, parfois un avion le jour, et très rarement un ovni, dont le rayon tracteur aspire des grains de sable avant de les relâcher. Ces boutons les font apparaître tout de suite. Les étoiles filantes ne se voient que la nuit et les avions que le jour : le bouton est grisé le reste du temps. Celui de l'ovni l'est pendant sa visite.</span>
+        <span class="sub" id="subSky">Des passages traversent le ciel au hasard : des étoiles filantes la nuit, parfois un avion le jour, et très rarement un ovni, dont le rayon tracteur aspire des grains de sable avant de les relâcher. Ces boutons les font apparaître tout de suite. Les étoiles filantes ne se voient que la nuit et les avions que le jour : le bouton est grisé le reste du temps. Celui de l'ovni l'est pendant sa visite ; l'ovni choisit une altitude au-dessus du sable amoncelé, et ne vient pas si le sable monte trop haut. Sur la planète inconnue, le soleil est enfermé dans une sphère de Dyson en construction, la lune laisse place à une base stellaire extraterrestre, les avions à de petits ovnis et le grand ovni à une capsule Apollo.</span>
         <div class="actions">
           <button class="btn ghost" id="meteorBtn" type="button">🌠 Étoile filante</button>
           <button class="btn ghost" id="planeBtn" type="button">✈️ Avion</button>
@@ -363,9 +373,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.27.59";
+const APP_VERSION = "1.28.68";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-23";
+const APP_DATE = "2026-09-24";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 const infoDialog = document.getElementById("infoDialog");
@@ -390,6 +400,20 @@ for (const { checkbox, panel } of PANEL_TOGGLES) {
   cb.addEventListener("change", () => {
     el.classList.toggle("cartoucheHidden", !cb.checked);
   });
+  // Croix de fermeture : placée dans le titre (ou le <summary> des cartouches repliables, seul
+  // enfant visible d'un <details> fermé). preventDefault : ne replie pas le <details> au passage.
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "closeBtn";
+  close.textContent = "×";
+  close.title = "Fermer (réaffichable depuis ℹ️ Informations)";
+  close.setAttribute("aria-label", "Fermer le cartouche");
+  close.addEventListener("click", (e) => {
+    e.preventDefault();
+    cb.checked = false;
+    cb.dispatchEvent(new Event("change"));
+  });
+  el.firstElementChild.appendChild(close);
 }
 
 // Boutons "i" qui révèlent l'explication (.sub) associée, cachée par défaut. Délégué sur tout le
@@ -415,7 +439,13 @@ const SAND_MIN = 1, SAND_MAX = 5;
 // en portrait (vertical, par défaut) ou en paysage (horizontal). Le curseur de résolution règle
 // le PETIT côté, pour garder le même nombre de cellules (donc le même coût) dans les deux formats.
 const FORMAT_RATIO = 160 / 110; // grand côté / petit côté, conservé quelle que soit la résolution
-const CANVAS_SHORT = 330, CANVAS_LONG = 480; // taille native du canvas (petit côté × grand côté)
+// Taille native du canvas (petit côté × grand côté) : elle borne la résolution utile de la grille
+// (au-delà d'un grain par pixel, le détail supplémentaire serait invisible). Doublée (330 × 480 à
+// l'origine) pour permettre une résolution plus fine. Le ciel, lui, reste dessiné en unités
+// d'origine (SKY_W × SKY_H = 330 × 480), agrandies ×SKY_SCALE au dessin : ses traits fins, étoiles
+// et étincelles gardent la même taille à l'écran, simplement plus nets.
+const SKY_SCALE = 2;
+const CANVAS_SHORT = 330 * SKY_SCALE, CANVAS_LONG = 480 * SKY_SCALE;
 let landscape = false;
 function gridDims(shortSide) {
   const s = Math.round(shortSide), l = Math.round(shortSide * FORMAT_RATIO);
@@ -432,7 +462,10 @@ const DENSITY = { [BROWN]: 0.75, [FOREST]: 0.1, [MEADOW]: 0.25, [GRAY]: 0.05, [W
 // glowType = le sable qui devient luminescent la nuit (le plus clair du thème).
 // sky = le ciel du thème : dégradés de jour et de nuit ([position, couleur]), couleurs du soleil
 // (cœur, bord) et de son halo, couleur et opacité des nuages de jour, et effets propres au thème
-// (haze : brume de chaleur le jour ; aurora : aurore boréale la nuit).
+// (haze : brume de chaleur le jour ; aurora : aurore boréale la nuit ; planet : planète à anneaux ;
+// alien : ciel d'ailleurs — sphère de Dyson en construction autour du soleil, base stellaire
+// extraterrestre au lieu de la lune, petits ovnis au lieu des avions et capsule Apollo au lieu du
+// grand ovni).
 const THEMES = [
   {
     label: "🏔️ Montagne", glowType: WHITE,
@@ -486,6 +519,27 @@ const THEMES = [
       sun: ["#ffffff", "#fff1c4"], halo: "235,245,255", haloAlpha: 0.6,
       cloud: "255,255,255", cloudAlpha: 1,
       aurora: true,
+    },
+  },
+  {
+    // Autre planète : sables aux couleurs extraterrestres (violet, magenta, turquoise, vert acide
+    // luminescent la nuit, rose pâle). Ciel sarcelle virant au rose, étoile cyan, nuages rosés et
+    // une géante gazeuse à anneaux, visible de jour comme de nuit.
+    // Nom volontairement illisible (lettres rares et diacritiques combinants) : une planète inconnue.
+    label: "🪐 Ʒ̸ɐ'ǂ̷ɤ̴ʞ", glowType: GRAY,
+    colors: {
+      [BROWN]:  ["Violet profond", [72, 28, 110]],
+      [MEADOW]: ["Magenta",        [204, 62, 160]],
+      [FOREST]: ["Turquoise",      [38, 178, 170]],
+      [GRAY]:   ["Vert acide",     [170, 230, 70]],
+      [WHITE]:  ["Rose pâle",      [250, 210, 240]],
+    },
+    sky: {
+      day: [[0, "#1f6f78"], [0.55, "#6fc2b0"], [1, "#f3c6d8"]],
+      night: [[0, "#0a0418"], [0.6, "#26103f"], [1, "#4a1a50"]],
+      sun: ["#f4fffb", "#7dffd8"], halo: "170,255,230", haloAlpha: 0.7,
+      cloud: "255,200,235", cloudAlpha: 0.6,
+      planet: true, alien: true,
     },
   },
 ];
@@ -625,7 +679,7 @@ function wake(x, y) {
 }
 function keepAwake(x, y) { chunkNext[(y >> CHUNK_SHIFT) * chunkCols + (x >> CHUNK_SHIFT)] = 1; }
 
-const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 38, flowPct: 10, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 38%, courant 10% (plafond), affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
+const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 40, flowPct: 10, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 40%, courant 10% (plafond), affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
 
 // ---------- Bruit de Perlin 2D (pour le champ de courant du fluide) ----------
 // Implémentation classique (table de permutation + interpolation "fade"), suffisante pour
@@ -1222,7 +1276,7 @@ function rebuildGrid(shortSide) {
 // layoutSky() quand le format change (vertical/horizontal).
 let SKY_W, SKY_H, SKY_PAD, SKY_UNIT, skyGrad, nightGrad, SUN_R, STARS;
 function layoutSky() {
-  SKY_W = mainCanvas.width; SKY_H = mainCanvas.height;
+  SKY_W = mainCanvas.width / SKY_SCALE; SKY_H = mainCanvas.height / SKY_SCALE;
   SKY_PAD = Math.hypot(SKY_W, SKY_H) / 2; // marge couvrant le canvas sous n'importe quel angle
   SKY_UNIT = Math.min(SKY_W, SKY_H); // taille de référence (soleil, nuages), identique dans les deux formats
   buildSkyGradients();
@@ -1345,8 +1399,10 @@ function drawDaySky(ctx, t) {
   ctx.beginPath();
   ctx.arc(sunX, sunY, SUN_R, 0, Math.PI * 2);
   ctx.fill();
+  if (sky.alien) drawDysonSphere(ctx, t, sunX, sunY, SUN_R);
 
-  for (const p of planes) drawPlane(ctx, t, p); // derrière les nuages
+  if (sky.planet) drawRingedPlanet(ctx, t, false); // devant le soleil : il passe derrière la planète
+  for (const p of planes) (sky.alien ? drawMiniUfo : drawPlane)(ctx, t, p); // derrière les nuages
   drawClouds(ctx, t, "rgba(150,180,210,0.45)", sky.cloud, sky.cloudAlpha);
   if (sky.haze) drawHeatHaze(ctx, t);
 }
@@ -1396,7 +1452,223 @@ function drawAurora(ctx, t) {
   ctx.restore();
 }
 
+// Planète à anneaux (Autre planète, de jour comme de nuit) : géante gazeuse à bandes, posée haut à
+// droite et qui oscille à peine. L'anneau incliné est tracé en deux moitiés : celle de derrière
+// avant le disque, celle de devant après, pour que la planète paraisse le traverser. Le jour, elle
+// est violette et pleinement éclairée ; la nuit (night = true, dessinée par-dessus avec l'opacité
+// du fondu jour/nuit), elle vire au bleu-vert et une ombre ne laisse qu'un croissant éclairé, au
+// bord estompé comme une vraie ligne jour/nuit.
+const PLANET_LOOKS = {
+  day: { ring: "rgba(230,200,255,0.55)", body: ["#f4b6ff", "#9b4fd6", "#3e1a6e"], band: "rgba(255,230,255,0.14)" },
+  night: { ring: "rgba(150,255,225,0.45)", body: ["#b6fff0", "#2fa6a0", "#0b3a4a"], band: "rgba(200,255,240,0.12)" },
+};
+function drawRingedPlanet(ctx, t, night) {
+  const look = night ? PLANET_LOOKS.night : PLANET_LOOKS.day;
+  const r = SKY_UNIT * 0.11;
+  ctx.save();
+  ctx.translate(SKY_W * 0.74, SKY_H * 0.2 + Math.sin(t * 0.2) * 2);
+  ctx.rotate(-0.4);
+  ctx.lineWidth = r * 0.22;
+  ctx.strokeStyle = look.ring;
+  const ringHalf = (a0, a1) => {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 2, r * 0.5, 0, a0, a1);
+    ctx.stroke();
+  };
+  ringHalf(Math.PI, Math.PI * 2);
+  const body = ctx.createRadialGradient(-r * 0.35, -r * 0.35, 0, 0, 0, r);
+  body.addColorStop(0, look.body[0]);
+  body.addColorStop(0.55, look.body[1]);
+  body.addColorStop(1, look.body[2]);
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.clip(); // bandes (et ombre) limitées au disque, parallèles à l'anneau
+  ctx.fillStyle = look.band;
+  for (const [y, h] of [[-0.6, 0.14], [-0.2, 0.2], [0.25, 0.12], [0.55, 0.16]]) ctx.fillRect(-r, y * r, 2 * r, h * r);
+  if (night) {
+    // Ombre : disque sombre décalé vers la droite, qui ne laisse éclairé qu'un croissant à gauche.
+    const sx = r * 0.4, sy = r * 0.1; // plus le décalage est petit, plus le croissant est fin
+    const shadow = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 1.15);
+    shadow.addColorStop(0, "rgba(6,3,18,0.9)");
+    shadow.addColorStop(0.8, "rgba(6,3,18,0.9)");
+    shadow.addColorStop(1, "rgba(6,3,18,0)");
+    ctx.fillStyle = shadow;
+    ctx.fillRect(-r, -r, 2 * r, 2 * r);
+  }
+  ctx.restore();
+  ringHalf(0, Math.PI);
+  ctx.restore();
+}
+
+// Base stellaire extraterrestre (thème alien, à la place de la lune) : rien d'humain. Un cristal
+// d'énergie qui pivote sur lui-même et pulse au centre, trois anneaux de glyphes lumineux inclinés
+// qui tournent chacun dans son sens (tirets qui défilent), six éclats cristallins en orbite qui
+// tournoient, et de temps en temps un arc électrique du cœur vers l'un d'eux. Le tout en mode
+// "lighter" pour que la lumière s'additionne au ciel. R = rayon de la lune qu'elle remplace.
+const STARBASE_RINGS = [
+  // [demi-axe x, demi-axe y (en R), vitesse de rotation, couleur RVB, décalage d'angle]
+  [1.05, 0.3, 0.4, "120,255,240", 0],
+  [0.85, 0.52, -0.3, "255,110,220", 1.1],
+  [1.2, 0.17, 0.55, "180,255,120", 2.3],
+];
+function drawStarbase(ctx, t, x, y, R) {
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
+  const halo = ctx.createRadialGradient(x, y, R * 0.3, x, y, R * 3);
+  halo.addColorStop(0, "rgba(220,140,255," + (0.3 + 0.15 * pulse) + ")");
+  halo.addColorStop(1, "rgba(120,255,240,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(x, y, R * 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalCompositeOperation = "lighter";
+  // Anneaux de glyphes.
+  ctx.lineWidth = Math.max(1, R * 0.07);
+  ctx.setLineDash([R * 0.25, R * 0.12, R * 0.05, R * 0.12]);
+  for (const [rx, ry, speed, rgb, a0] of STARBASE_RINGS) {
+    ctx.save();
+    ctx.rotate(a0 + t * speed * 0.3);
+    ctx.lineDashOffset = -t * R * speed * 2;
+    ctx.strokeStyle = "rgba(" + rgb + ",0.8)";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx * R, ry * R, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.setLineDash([]);
+  // Éclats en orbite, chacun tournoyant sur lui-même.
+  const shards = [];
+  for (let k = 0; k < 6; k++) {
+    const a = t * 0.5 + k * Math.PI / 3;
+    const sx = Math.cos(a) * R * 1.45, sy = Math.sin(a) * R * 0.55 + Math.sin(t * 1.7 + k) * R * 0.12;
+    shards.push([sx, sy]);
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(t * (1 + k * 0.3));
+    ctx.fillStyle = "rgba(190,250,255,0.75)";
+    ctx.beginPath();
+    ctx.moveTo(0, -R * 0.16); ctx.lineTo(R * 0.07, R * 0.08); ctx.lineTo(-R * 0.07, R * 0.08);
+    ctx.fill();
+    ctx.restore();
+  }
+  // Arc électrique, par à-coups : du cœur vers un éclat, en zigzag redessiné à chaque image.
+  if ((t * 1.3) % 1 < 0.22) {
+    const [ex, ey] = shards[Math.floor(t * 1.3) % shards.length];
+    ctx.strokeStyle = "rgba(220,255,255,0.9)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let s = 1; s <= 5; s++) {
+      const f = s / 5, j = s < 5 ? (Math.random() - 0.5) * R * 0.3 : 0;
+      ctx.lineTo(ex * f - ey / R * j, ey * f + ex / R * j * 0.5);
+    }
+    ctx.stroke();
+  }
+  // Cœur : cristal (losange) qui pivote — sa largeur varie comme s'il tournait en 3D — et lueur.
+  const w = R * (0.1 + 0.28 * Math.abs(Math.cos(t * 0.8)));
+  const core = ctx.createLinearGradient(-w, -R * 0.55, w, R * 0.55);
+  core.addColorStop(0, "#7a2cff");
+  core.addColorStop(0.5, "#ff7ae0");
+  core.addColorStop(1, "#40fff0");
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.moveTo(0, -R * 0.55); ctx.lineTo(w, 0); ctx.lineTo(0, R * 0.55); ctx.lineTo(-w, 0);
+  ctx.fill();
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.35);
+  glow.addColorStop(0, "rgba(255,255,255," + (0.6 + 0.4 * pulse) + ")");
+  glow.addColorStop(1, "rgba(255,200,255,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Sphère de Dyson en construction (thème alien, autour du soleil) : une coque vue de face, un peu
+// plus grande que le soleil, qui tourne lentement. Découpée en cases (bandes de latitude ×
+// longitude), projetées sur le disque ; seules les cases de la face visible sont tracées. Environ la
+// moitié est posée (panneaux sombres qui masquent le soleil, liseré doré) ; quelques-unes sont en
+// cours de pose (plus claires et translucides, avec une étincelle de soudure) ; le reste laisse passer la
+// lumière à travers l'échafaudage (méridiens et parallèles). Des drones de chantier tournent autour.
+const DYSON_LATS = 7, DYSON_LONS = 18;
+function dysonHash(i, j) {
+  const h = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+}
+function drawDysonSphere(ctx, t, x, y, sunR) {
+  const R = sunR * 1.3, spin = t * 0.04;
+  const dLat = Math.PI / (DYSON_LATS + 1), dLon = 2 * Math.PI / DYSON_LONS;
+  const proj = (lat, lon) => [R * Math.cos(lat) * Math.sin(lon), -R * Math.sin(lat)];
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(0.25);
+  // Panneaux posés ou en cours de pose.
+  for (let i = 0; i < DYSON_LATS; i++) {
+    const lat = -Math.PI / 2 + dLat * (i + 1);
+    for (let j = 0; j < DYSON_LONS; j++) {
+      const lon = j * dLon + spin;
+      if (Math.cos(lon + dLon / 2) < 0.1) continue; // face cachée
+      const h = dysonHash(i, j);
+      if (h >= 0.58) continue; // pas encore posé
+      const building = h >= 0.5;
+      const a = proj(lat - dLat / 2, lon), b = proj(lat - dLat / 2, lon + dLon);
+      const c = proj(lat + dLat / 2, lon + dLon), d = proj(lat + dLat / 2, lon);
+      ctx.fillStyle = building ? "rgba(90,70,110,0.7)" : "rgba(38,28,52,0.93)";
+      ctx.strokeStyle = "rgba(255,205,120,0.55)";
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      if (building && (t * 7 + h * 50) % 1 < 0.35) { // étincelle de soudure
+        ctx.fillStyle = "#fffbe0";
+        ctx.beginPath();
+        ctx.arc(b[0], b[1], 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  // Échafaudage : parallèles (segments droits vus de face) et méridiens (demi-ellipses).
+  ctx.strokeStyle = "rgba(210,170,100,0.6)";
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  for (let i = 0; i <= DYSON_LATS; i++) {
+    const lat = -Math.PI / 2 + dLat * (i + 0.5), half = R * Math.cos(lat), py = -R * Math.sin(lat);
+    ctx.moveTo(-half, py); ctx.lineTo(half, py);
+  }
+  ctx.stroke();
+  for (let j = 0; j < DYSON_LONS; j++) {
+    const lon = j * dLon + spin;
+    if (Math.cos(lon) < 0) continue;
+    const s = Math.sin(lon);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, Math.abs(s) * R + 0.01, R, 0, -Math.PI / 2, Math.PI / 2, s < 0);
+    ctx.stroke();
+  }
+  // Anneau équatorial, déjà terminé, plus épais.
+  ctx.strokeStyle = "rgba(255,210,130,0.8)";
+  ctx.lineWidth = Math.max(1.5, R * 0.07);
+  ctx.beginPath();
+  ctx.moveTo(-R, 0); ctx.lineTo(R, 0);
+  ctx.stroke();
+  // Drones de chantier, sur une orbite inclinée autour de la sphère.
+  for (let k = 0; k < 3; k++) {
+    const a = t * 0.7 + k * 2.1;
+    const dx = Math.cos(a) * R * 1.3, dy = Math.sin(a) * R * 0.35;
+    ctx.fillStyle = Math.sin(a) > 0 ? "#fff1c0" : "rgba(255,241,192,0.5)"; // plus pâle derrière
+    ctx.beginPath();
+    ctx.arc(dx, dy, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawNightSky(ctx, t) {
+  const sky = THEMES[themeIndex].sky;
   ctx.fillStyle = nightGrad;
   ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
 
@@ -1409,10 +1681,18 @@ function drawNightSky(ctx, t) {
   }
   for (const m of meteors) drawMeteor(ctx, t, m);
   ctx.globalAlpha = nightMix;
-  if (THEMES[themeIndex].sky.aurora) drawAurora(ctx, t);
+  if (sky.aurora) drawAurora(ctx, t);
+  if (sky.planet) drawRingedPlanet(ctx, t, true);
 
   const [moonX, moonY] = celestialPos(t);
   const moonR = SUN_R * 0.85;
+  if (sky.alien) drawStarbase(ctx, t, moonX, moonY, moonR);
+  else drawMoon(ctx, moonX, moonY, moonR);
+
+  drawClouds(ctx, t, "rgba(10,15,35,0.4)", "80,95,130", 0.7);
+}
+
+function drawMoon(ctx, moonX, moonY, moonR) {
   const halo = ctx.createRadialGradient(moonX, moonY, moonR * 0.8, moonX, moonY, moonR * 3.2);
   halo.addColorStop(0, "rgba(190,210,255,0.35)");
   halo.addColorStop(1, "rgba(190,210,255,0)");
@@ -1433,8 +1713,6 @@ function drawNightSky(ctx, t) {
     ctx.arc(moonX + dx * moonR, moonY + dy * moonR, r * moonR, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  drawClouds(ctx, t, "rgba(10,15,35,0.4)", "80,95,130", 0.7);
 }
 
 // Création d'un passage — appelée au hasard par updateSkyVisitors(), ou à la demande par les
@@ -1455,9 +1733,43 @@ function spawnPlane(t) {
     speed: SKY_W / (16 + Math.random() * 10), trail: SKY_W * 0.45, margin: size * 1.5,
   });
 }
+// Altitude de vol de l'ovni (ou de la capsule) : le ciel est dessiné derrière le sable, donc un
+// engin qui volerait à hauteur d'un tas passerait derrière lui. On teste la bande horizontale que
+// l'engin balaie (sur toute la largeur : il traverse le ciel, avec sa marge de dandinement) et on
+// la déclare bloquée dès qu'elle contient plus de UFO_PATH_TOLERANCE grains immobiles — les grains
+// qui tombent ne comptent pas, ils ne font que passer. Parmi les altitudes libres, on en tire une
+// au hasard dans la plage habituelle ; à défaut, on prend la plus basse des altitudes libres
+// au-dessus ; -1 si le sable monte trop haut partout.
+const UFO_PATH_TOLERANCE = 6;
+function ufoPathBlocked(y) {
+  const s = SKY_UNIT * 0.05, step = SKY_W / GRID_W;
+  let hits = 0;
+  for (let sy = y - 1.3 * s; sy <= y + 0.7 * s; sy += step) {
+    for (let sx = 0; sx < SKY_W; sx += step) {
+      const [gx, gy] = skyToGrid(sx, sy);
+      const i = gridCellAt(gx, gy);
+      if (i < 0) continue;
+      const v = grid[i];
+      if (v >= SAND_MIN && v <= SAND_MAX && !moved[i] && ++hits > UFO_PATH_TOLERANCE) return true;
+    }
+  }
+  return false;
+}
+function pickUfoAltitude() {
+  const s = SKY_UNIT * 0.05, yLow = SKY_H * 0.3, yHigh = SKY_H * 0.12, yTop = 1.3 * s;
+  const clear = [];
+  for (let y = yLow; y >= yTop; y -= s * 0.5) if (!ufoPathBlocked(y)) clear.push(y); // de bas en haut
+  if (!clear.length) return -1;
+  const usual = clear.filter((y) => y >= yHigh);
+  return usual.length ? usual[Math.floor(Math.random() * usual.length)] : clear[0];
+}
+// Renvoie false (sans rien lancer) si aucune altitude n'est libre.
 function spawnUfo(t) {
-  ufo = { dir: randomSide(), t0: t, y: SKY_H * (0.12 + Math.random() * 0.18), xc: SKY_W * (0.3 + Math.random() * 0.4), grabAcc: 0 };
+  const y = pickUfoAltitude();
+  if (y < 0) return false;
+  ufo = { dir: randomSide(), t0: t, y, xc: SKY_W * (0.3 + Math.random() * 0.4), grabAcc: 0 };
   ufo.pose = ufoPose(t);
+  return true;
 }
 
 // Fait apparaître et disparaître les passages (voir METEOR_EVERY_S et suivants).
@@ -1485,7 +1797,18 @@ function updateSkyButtons() {
 }
 meteorBtn.addEventListener("click", () => spawnMeteor(performance.now() / 1000));
 planeBtn.addEventListener("click", () => spawnPlane(performance.now() / 1000));
-ufoBtn.addEventListener("click", () => { if (!ufo) spawnUfo(performance.now() / 1000); });
+// Pas de place dans le ciel (sable trop haut) : le bouton le signale un instant au lieu de ne rien
+// faire en silence, puis reprend son libellé.
+let ufoBtnNoRoomTimer = 0;
+ufoBtn.addEventListener("click", () => {
+  if (ufo || spawnUfo(performance.now() / 1000)) return;
+  ufoBtn.textContent = "🚫 Trop de sable";
+  clearTimeout(ufoBtnNoRoomTimer);
+  ufoBtnNoRoomTimer = setTimeout(() => { ufoBtn.textContent = ufoBtnLabel(); }, 1500);
+});
+function ufoBtnLabel() {
+  return THEMES[themeIndex].sky.alien ? "🧑‍🚀 Capsule Apollo" : "🛸 Ovni";
+}
 
 // Étoile filante : une tête brillante suivie d'une traînée qui s'efface, le tout apparaissant et
 // s'éteignant en douceur sur sa durée de vie.
@@ -1517,9 +1840,12 @@ function drawMeteor(ctx, t, m) {
 
 // Avion : petite silhouette grise qui traverse tout le ciel en laissant une traînée de
 // condensation blanche, avec un feu rouge clignotant au bout de l'aile.
-function drawPlane(ctx, t, p) {
+function planeX(t, p) {
   const d = (t - p.t0) * p.speed;
-  const x = p.dir > 0 ? -p.margin + d : SKY_W + p.margin - d;
+  return p.dir > 0 ? -p.margin + d : SKY_W + p.margin - d;
+}
+function drawPlane(ctx, t, p) {
+  const x = planeX(t, p);
   const s = p.size;
   const trail = ctx.createLinearGradient(x, p.y, x - p.dir * p.trail, p.y);
   trail.addColorStop(0, "rgba(255,255,255,0.7)");
@@ -1544,6 +1870,40 @@ function drawPlane(ctx, t, p) {
     ctx.fillStyle = "#ff3b3b";
     ctx.beginPath();
     ctx.arc(-0.5 * s, 0.75 * s, 0.07 * s + 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Petit ovni (thème alien, à la place de l'avion) : même trajet, mais il ondule en vol, penche un
+// peu vers l'avant et laisse une traînée turquoise ; ses feux changent de couleur en boucle.
+function drawMiniUfo(ctx, t, p) {
+  const x = planeX(t, p), s = p.size, age = t - p.t0;
+  const y = p.y + Math.sin(age * 3) * s * 0.35;
+  const trail = ctx.createLinearGradient(x, y, x - p.dir * p.trail * 0.6, y);
+  trail.addColorStop(0, "rgba(150,255,220,0.45)");
+  trail.addColorStop(1, "rgba(150,255,220,0)");
+  ctx.fillStyle = trail;
+  ctx.fillRect(Math.min(x, x - p.dir * p.trail * 0.6), y - s * 0.06, p.trail * 0.6, s * 0.12);
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(p.dir * 0.12 + Math.sin(age * 5) * 0.05);
+  ctx.fillStyle = "rgba(170,255,230,0.6)"; // bulle
+  ctx.beginPath();
+  ctx.arc(0, -0.08 * s, 0.32 * s, Math.PI, 0);
+  ctx.fill();
+  const body = ctx.createLinearGradient(0, -0.15 * s, 0, 0.2 * s);
+  body.addColorStop(0, "#e4e8ee");
+  body.addColorStop(1, "#6f7886");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 0.75 * s, 0.2 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = UFO_LIGHTS[(i + Math.floor(age * 5)) % UFO_LIGHTS.length];
+    ctx.beginPath();
+    ctx.arc((i - 1) * 0.38 * s, 0.05 * s, 0.07 * s + 0.4, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
@@ -1688,6 +2048,7 @@ function drawUfoGrains(ctx, lr, lg, lb) {
   if (!ufoGrains.length) return;
   const size = (SKY_W / GRID_W) * 1.2;
   ctx.save();
+  ctx.scale(SKY_SCALE, SKY_SCALE);
   ctx.translate(SKY_W / 2, SKY_H / 2);
   ctx.rotate(-skyAngle);
   ctx.translate(-SKY_W / 2, -SKY_H / 2);
@@ -1702,10 +2063,8 @@ function drawUfoGrains(ctx, lr, lg, lb) {
   ctx.restore();
 }
 
-function drawUfo(ctx) {
-  const { x, y, tilt, beam, age, s } = ufo.pose;
-  ctx.save();
-  ctx.translate(x, y);
+// Rayon tracteur, commun à l'ovni et à la capsule Apollo : un cône de lumière verte sous l'engin.
+function drawTractorBeam(ctx, beam, s) {
   if (beam > 0) {
     const h = SKY_H * UFO_BEAM_LENGTH;
     const g = ctx.createLinearGradient(0, 0, 0, h);
@@ -1716,6 +2075,13 @@ function drawUfo(ctx) {
     ctx.moveTo(-0.4 * s, 0.2 * s); ctx.lineTo(0.4 * s, 0.2 * s); ctx.lineTo(1.6 * s, h); ctx.lineTo(-1.6 * s, h);
     ctx.fill();
   }
+}
+
+function drawUfo(ctx) {
+  const { x, y, tilt, beam, age, s } = ufo.pose;
+  ctx.save();
+  ctx.translate(x, y);
+  drawTractorBeam(ctx, beam, s);
   ctx.rotate(tilt);
   // Extraterrestre : tête verte, grands yeux noirs, antennes à boules.
   ctx.strokeStyle = "#5fd35a"; ctx.lineWidth = Math.max(1, s * 0.05);
@@ -1761,6 +2127,65 @@ function drawUfo(ctx) {
   ctx.restore();
 }
 
+// Capsule Apollo (thème alien, à la place de l'ovni) : même visite et même rayon tracteur, qui
+// sort de la tuyère. Module de commande conique (hublot, sonde d'amarrage au sommet), module de
+// service cylindrique (bandes de radiateurs, blocs de propulseurs sur les côtés) et tuyère ; une
+// flamme sort de la tuyère au départ.
+function drawApollo(ctx) {
+  const { x, y, tilt, beam, age, p, s } = ufo.pose;
+  ctx.save();
+  ctx.translate(x, y);
+  drawTractorBeam(ctx, beam, s);
+  ctx.rotate(tilt);
+  if (p >= UFO_RELEASE) { // flamme de départ, qui vacille
+    const len = s * (0.6 + 0.25 * Math.sin(age * 40));
+    const flame = ctx.createLinearGradient(0, 0.3 * s, 0, 0.3 * s + len);
+    flame.addColorStop(0, "rgba(255,245,200,0.95)");
+    flame.addColorStop(0.4, "rgba(255,160,60,0.8)");
+    flame.addColorStop(1, "rgba(255,80,30,0)");
+    ctx.fillStyle = flame;
+    ctx.beginPath();
+    ctx.moveTo(-0.2 * s, 0.3 * s); ctx.lineTo(0.2 * s, 0.3 * s); ctx.lineTo(0, 0.3 * s + len);
+    ctx.fill();
+  }
+  // Tuyère.
+  ctx.fillStyle = "#4a4f58";
+  ctx.beginPath();
+  ctx.moveTo(-0.12 * s, 0.12 * s); ctx.lineTo(0.12 * s, 0.12 * s); ctx.lineTo(0.24 * s, 0.32 * s); ctx.lineTo(-0.24 * s, 0.32 * s);
+  ctx.fill();
+  // Module de service.
+  const sm = ctx.createLinearGradient(-0.5 * s, 0, 0.5 * s, 0);
+  sm.addColorStop(0, "#8c96a3");
+  sm.addColorStop(0.4, "#eef1f5");
+  sm.addColorStop(1, "#7d8793");
+  ctx.fillStyle = sm;
+  ctx.fillRect(-0.48 * s, -0.22 * s, 0.96 * s, 0.34 * s);
+  ctx.fillStyle = "rgba(60,66,76,0.35)"; // bandes de radiateurs
+  for (const bx of [-0.3, -0.1, 0.1, 0.3]) ctx.fillRect((bx - 0.03) * s, -0.2 * s, 0.06 * s, 0.3 * s);
+  ctx.fillStyle = "#b9c0ca"; // blocs de propulseurs
+  ctx.fillRect(-0.58 * s, -0.12 * s, 0.1 * s, 0.12 * s);
+  ctx.fillRect(0.48 * s, -0.12 * s, 0.1 * s, 0.12 * s);
+  // Module de commande : cône tronqué, bouclier thermique en bas.
+  const cm = ctx.createLinearGradient(-0.5 * s, 0, 0.5 * s, 0);
+  cm.addColorStop(0, "#9aa3ae");
+  cm.addColorStop(0.4, "#f6f8fb");
+  cm.addColorStop(1, "#8a939f");
+  ctx.fillStyle = cm;
+  ctx.beginPath();
+  ctx.moveTo(-0.5 * s, -0.22 * s); ctx.lineTo(0.5 * s, -0.22 * s);
+  ctx.lineTo(0.1 * s, -0.8 * s); ctx.lineTo(-0.1 * s, -0.8 * s);
+  ctx.fill();
+  ctx.fillStyle = "#6b5a44";
+  ctx.fillRect(-0.52 * s, -0.26 * s, 1.04 * s, 0.05 * s);
+  ctx.strokeStyle = "#9aa3ae"; ctx.lineWidth = Math.max(1, s * 0.04); // sonde d'amarrage
+  ctx.beginPath(); ctx.moveTo(0, -0.8 * s); ctx.lineTo(0, -0.95 * s); ctx.stroke();
+  ctx.fillStyle = "#1c2430"; // hublot
+  ctx.beginPath();
+  ctx.moveTo(-0.14 * s, -0.42 * s); ctx.lineTo(0.02 * s, -0.42 * s); ctx.lineTo(0.0 * s, -0.54 * s); ctx.lineTo(-0.09 * s, -0.54 * s);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawSky(ctx, t) {
   // Avance le fondu jour/nuit vers le choix courant (borné si l'onglet était en arrière-plan).
   const dt = lastSkyTs ? Math.min(0.1, t - lastSkyTs) : 0;
@@ -1774,6 +2199,7 @@ function drawSky(ctx, t) {
   updateUfoGrains(t, dt);
 
   ctx.save();
+  ctx.scale(SKY_SCALE, SKY_SCALE);
   ctx.translate(SKY_W / 2, SKY_H / 2);
   ctx.rotate(-skyAngle);
   ctx.translate(-SKY_W / 2, -SKY_H / 2);
@@ -1783,7 +2209,7 @@ function drawSky(ctx, t) {
     drawNightSky(ctx, t);
     ctx.globalAlpha = 1;
   }
-  if (ufo) drawUfo(ctx); // par-dessus tout, de jour comme de nuit
+  if (ufo) (THEMES[themeIndex].sky.alien ? drawApollo : drawUfo)(ctx); // par-dessus tout, de jour comme de nuit
   ctx.restore();
 }
 
@@ -2116,7 +2542,7 @@ syncSandCountInput();
 updateProportionLabels(); // libellés % calculés depuis SAND_COLOR_WEIGHTS
 
 // Bouton Thème (à côté de "Retourner le cadre") : passe au thème suivant (Montagne -> Désert ->
-// Arctique -> Montagne) et affiche le thème actif. Recolore le sable en direct, sans régénérer le
+// Arctique -> Autre planète -> Montagne) et affiche le thème actif. Recolore le sable en direct, sans régénérer le
 // paysage, et met à jour pastilles et noms des cartouches Densités et Proportions.
 const themeBtn = document.getElementById("themeBtn");
 function applyTheme() {
@@ -2133,6 +2559,9 @@ function applyTheme() {
   }
   themeBtn.textContent = theme.label;
   buildSkyGradients(); // chaque thème a son propre ciel
+  // Ciel d'ailleurs : les boutons du cartouche Ciel nomment les engins qui les remplacent.
+  planeBtn.textContent = theme.sky.alien ? "🛸 Ovni" : "✈️ Avion";
+  ufoBtn.textContent = ufoBtnLabel();
 }
 themeBtn.addEventListener("click", () => {
   themeIndex = (themeIndex + 1) % THEMES.length;
