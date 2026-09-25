@@ -420,7 +420,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.33.81";
+const APP_VERSION = "1.33.82";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-25";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -685,7 +685,11 @@ const BUBBLE_VISCOSITY_DRAG = 0.25; // résistance max (viscosité = 10), 0 à v
 const COALESCENCE_RELIEF = 0.34;    // fraction de résistance en moins par bulle voisine
 
 let grid = new Uint8Array(CELL_COUNT);
+// moved[i] === moveStamp : la case i a reçu une particule pendant le pas en cours (elle ne bouge
+// plus avant le pas suivant). Numéro de pas plutôt qu'un simple drapeau : pas besoin d'effacer tout
+// le tableau à chaque pas (moved.fill), seulement tous les 255 pas quand le numéro reboucle.
 let moved = new Uint8Array(CELL_COUNT);
+let moveStamp = 1;
 let shade = new Float32Array(CELL_COUNT); // luminosité par grain, stable entre deux images
 let tint = new Float32Array(CELL_COUNT);  // teinte chaud/froid par grain, stable entre deux images
 // shade/tint modifiés depuis le dernier envoi à la carte graphique (rendu WebGL, voir glRenderSand) :
@@ -710,7 +714,7 @@ const inBounds = (x, y) => (params.wrapEdges || (x >= 0 && x < GRID_W)) && y >= 
 // décalage s'accumule) ; bords non liés : x inchangé, c'est inBounds() qui le refusera.
 const wx = (x) => (params.wrapEdges ? (x < 0 ? x + GRID_W : x >= GRID_W ? x - GRID_W : x) : x);
 const isEmptyAt = (x, y) => inBounds(x, y) && grid[idx(x, y)] === EMPTY;
-const isFreeAt = (x, y) => { if (!inBounds(x, y)) return false; const i = idx(x, y); return !moved[i] && grid[i] === EMPTY; };
+const isFreeAt = (x, y) => { if (!inBounds(x, y)) return false; const i = idx(x, y); return moved[i] !== moveStamp && grid[i] === EMPTY; };
 
 // ---------- Direction de la gravité ----------
 // La gravité peut pointer dans n'importe quelle direction (case "Incliner le tableau") : c'est un
@@ -766,13 +770,23 @@ function allocChunks() {
   chunkNext = new Uint8Array(chunkCols * chunkRows).fill(1);
 }
 allocChunks();
-function wakeAll() { chunkNow.fill(1); chunkNext.fill(1); }
+// Suivi des changements de la grille pour le rendu et l'activité, sans la parcourir : toute case
+// modifiée passe par wake() (déplacements, pression, ovni), toute modification d'ensemble par
+// wakeAll() (nouveau paysage, bulles, gravité, densités…). dirtyMinY..dirtyMaxY = lignes à
+// renvoyer à la carte graphique (dirtyAll : toutes) ; particleTotal = nombre de particules, à
+// recompter si -1 (les déplacements le conservent).
+let dirtyMinY = 0, dirtyMaxY = -1, dirtyAll = true;
+let particleTotal = -1;
+function clearDirtyRows() { dirtyMinY = GRID_H; dirtyMaxY = -1; dirtyAll = false; }
+function wakeAll() { chunkNow.fill(1); chunkNext.fill(1); dirtyAll = true; particleTotal = -1; }
 // La case (x,y) vient de changer : réveille son bloc, et les blocs voisins seulement si elle est à
 // moins de wakeMargin cases de leur bord — seuls les grains aussi proches testent cette case pour
 // bouger. Au milieu d'un bloc, un seul bloc réveillé (au lieu des 9 alentour). Bords liés : le bloc
 // de l'autre bout de la ligne est un voisin (x >= GRID_W - M couvre le dernier bloc incomplet).
 function wake(x, y) {
   if (x < 0) x += GRID_W; else if (x >= GRID_W) x -= GRID_W;
+  if (y < dirtyMinY) dirtyMinY = y;
+  if (y > dirtyMaxY) dirtyMaxY = y;
   const S = 1 << CHUNK_SHIFT, M = wakeMargin;
   const cx = x >> CHUNK_SHIFT, cy = y >> CHUNK_SHIFT;
   const lx = x & (S - 1), ly = y & (S - 1);
@@ -806,7 +820,7 @@ function wakeEmptied(x, y) {
 }
 // Déplace le grain v de la case i vers la case voisine ti, et réveille autour des deux cases.
 function moveGrain(i, ti, v) {
-  grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1;
+  grid[ti] = v; grid[i] = EMPTY; moved[ti] = moveStamp;
   windowMoves++;
   wakeIdx(ti);
   const y = (i / GRID_W) | 0;
@@ -1172,7 +1186,7 @@ function tryPressureShift(x, y) {
   for (let k = 0; k < depth; k++) { landX = wx(landX + gDX); landY += gDY; }
   if (!inBounds(landX, landY)) return false;
   const landI = idx(landX, landY);
-  if (moved[landI] || grid[landI] !== EMPTY) return false; // pas de place : le forçage échoue
+  if (moved[landI] === moveStamp || grid[landI] !== EMPTY) return false; // pas de place : le forçage échoue
 
   // Fait glisser tout le bloc (colonne de sable + poche de bulles) d'une case, en partant de la
   // place libre et en remontant jusqu'au sommet de la colonne de sable, qui se retrouve vide.
@@ -1184,7 +1198,7 @@ function tryPressureShift(x, y) {
     const sv = grid[idx(srcX, srcY)];
     if (sv !== BUBBLE && (sv < SAND_MIN || sv > SAND_MAX)) break;
     const dstI = idx(dstX, dstY);
-    grid[dstI] = sv; moved[dstI] = 1;
+    grid[dstI] = sv; moved[dstI] = moveStamp;
     wake(dstX, dstY);
     dstX = srcX; dstY = srcY;
     srcX = wx(srcX - gDX); srcY -= gDY; steps++;
@@ -1205,7 +1219,7 @@ function tryDisplaceSideways(x, y) {
   if (!aFree && !bFree) return false;
   const useA = aFree && bFree ? Math.random() < 0.5 : aFree;
   const ti = useA ? idx(x + sAX, y + sAY) : idx(x + sBX, y + sBY);
-  grid[ti] = grid[i]; moved[ti] = 1;
+  grid[ti] = grid[i]; moved[ti] = moveStamp;
   grid[i] = EMPTY; // aussitôt remplie par le grain lourd (l'appelant la réveille)
   windowMoves++;
   wakeIdx(ti);
@@ -1227,7 +1241,7 @@ function tryMoveSand(x, y) {
       const fx = x + (flow.vx > 0 ? 1 : -1);
       if (inBounds(fx, y)) {
         const fi = idx(fx, y);
-        if (!moved[fi] && grid[fi] === EMPTY) { moveGrain(i, fi, v); return; }
+        if (moved[fi] !== moveStamp && grid[fi] === EMPTY) { moveGrain(i, fi, v); return; }
       }
     }
   }
@@ -1237,7 +1251,7 @@ function tryMoveSand(x, y) {
   const nx = x + gDX, ny = y + gDY;
   if (inBounds(nx, ny)) {
     const ni = idx(nx, ny);
-    if (!moved[ni]) {
+    if (moved[ni] !== moveStamp) {
       const n = grid[ni];
       if (n === EMPTY) { moveGrain(i, ni, v); return; }
       if (n === BUBBLE) {
@@ -1365,21 +1379,21 @@ function tryMoveBubble(x, y) {
 
 function processCell(x, y) {
   const i = idx(x, y);
-  if (moved[i]) return;
+  if (moved[i] === moveStamp) return;
   const v = grid[i];
   if (v === EMPTY) return;
   if (v === BUBBLE) tryMoveBubble(x, y); else tryMoveSand(x, y);
   // A bougé (case vidée, ou remplie par un bloc poussé par la pression) : les blocs alentour ont
   // déjà été réveillés au moment du déplacement (moveGrain, tryPressureShift). Sinon, garde son
   // propre bloc éveillé s'il avait une case où aller (il n'a juste pas été tiré au sort ce pas-ci).
-  if (moved[i] || grid[i] !== v) return;
+  if (moved[i] === moveStamp || grid[i] !== v) return;
   if (v === BUBBLE ? bubbleCanMove(x, y) : sandCanMove(x, y, v)) keepAwake(x, y);
 }
 
 // Un pas de simulation : lignes parcourues alternativement dans un sens puis dans l'autre (pour ne
 // pas favoriser un côté), bloc par bloc, en sautant les blocs endormis.
 function step() {
-  moved.fill(0);
+  if (moveStamp === 255) { moved.fill(0); moveStamp = 1; } else moveStamp++;
   setStepGravity();
   const prev = chunkNow; chunkNow = chunkNext; chunkNext = prev; chunkNext.fill(0);
   // Gravité entre deux directions (cadre incliné) : la direction change d'un pas à l'autre, donc
@@ -1424,6 +1438,7 @@ function allocateGrid(shortSide) {
   shadeDirty = true;
   ufoGrains = [];
   allocChunks();
+  dirtyAll = true; particleTotal = -1;
   rebuildFlowField();
   rebuildFlowViz();
   offCanvas.width = GRID_W;
@@ -2333,7 +2348,7 @@ function ufoPathBlocked(y) {
       const i = gridCellAt(gx, gy);
       if (i < 0) continue;
       const v = grid[i];
-      if (v >= SAND_MIN && v <= SAND_MAX && !moved[i] && ++hits > UFO_PATH_TOLERANCE) return true;
+      if (v >= SAND_MIN && v <= SAND_MAX && moved[i] !== moveStamp && ++hits > UFO_PATH_TOLERANCE) return true;
     }
   }
   return false;
@@ -2571,6 +2586,7 @@ function grabUfoGrain(pose) {
     if (v < SAND_MIN || v > SAND_MAX) continue;
     grid[i] = EMPTY;
     wakeEmptied(i % GRID_W, (i / GRID_W) | 0);
+    particleTotal = -1; // grain sorti de la grille
     ufoGrains.push({
       x: sx, y: sy, type: v, shade: shade[i], tint: tint[i], held: false,
       ang: Math.random() * Math.PI * 2, rad: Math.sqrt(Math.random()), spin: 1.5 + Math.random() * 2.5,
@@ -2606,6 +2622,7 @@ function releaseUfoGrains() {
     if (i < 0) continue;
     grid[i] = g.type; shade[i] = g.shade; tint[i] = g.tint; shadeDirty = true;
     wake(i % GRID_W, (i / GRID_W) | 0);
+    particleTotal = -1; // grain remis dans la grille
   }
   ufoGrains = [];
 }
@@ -2958,10 +2975,19 @@ function glRenderSand(lr, lg, lb, wr, wg, wb) {
     gl.bindTexture(gl.TEXTURE_2D, G.shadeTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, GRID_W, GRID_H, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, null);
     shadeDirty = true;
+    dirtyAll = true;
   }
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, G.gridTex);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID_W, GRID_H, gl.LUMINANCE, gl.UNSIGNED_BYTE, grid);
+  // Seules les lignes modifiées depuis la dernière image sont renvoyées (voir wake/wakeAll).
+  if (dirtyAll) {
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID_W, GRID_H, gl.LUMINANCE, gl.UNSIGNED_BYTE, grid);
+  } else if (dirtyMaxY >= dirtyMinY) {
+    const rows = dirtyMaxY - dirtyMinY + 1;
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, dirtyMinY, GRID_W, rows, gl.LUMINANCE, gl.UNSIGNED_BYTE,
+      grid.subarray(dirtyMinY * GRID_W, (dirtyMaxY + 1) * GRID_W));
+  }
+  clearDirtyRows();
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, G.shadeTex);
   if (shadeDirty) {
@@ -3162,8 +3188,12 @@ function loop(ts) {
     perfVal.textContent = Math.round(fpsSmoothed) + " fps · " + pct + "% calcul";
     // Particules (sable + bulles) en mouvement, en moyenne par pas depuis le dernier rafraîchissement
     // (~250 ms), sur le total présent dans la grille — puis on repart à zéro pour la fenêtre suivante.
-    let total = 0;
-    for (let p = 0; p < CELL_COUNT; p++) if (grid[p] !== EMPTY) total++;
+    // Total recompté seulement quand la grille a changé autrement que par des déplacements (particleTotal = -1).
+    if (particleTotal < 0) {
+      particleTotal = 0;
+      for (let p = 0; p < CELL_COUNT; p++) if (grid[p] !== EMPTY) particleTotal++;
+    }
+    const total = particleTotal;
     const moving = windowSteps > 0 ? Math.round(windowMoves / windowSteps) : 0;
     windowMoves = 0; windowSteps = 0;
     activityVal.textContent = moving.toLocaleString("fr-FR") + " / " + total.toLocaleString("fr-FR");
