@@ -4,29 +4,83 @@ Ceci un espace pour partager mes projets.
 ☕ Ces applis sont gratuites et sans publicité : si elles vous rendent service ou vous amusent, vous pouvez [m'offrir un café sur Ko-fi](https://ko-fi.com/lfranck). Merci !
 
 🍪 Les visites sont comptées avec Google Analytics, uniquement si vous l'acceptez dans le bandeau affiché à la première visite (le bouton 🍪, en bas à gauche, permet de changer d'avis).
-    
+
+ℹ️ Chaque appli a ses propres aides, accessibles depuis les boutons « i » : n'hésitez pas à explorer et à essayer les réglages.
+
 # Liste des projets disponibles
 
 ## [Calmomètre](calmometre.html)
 
 *Version 1.4.11*
 
-**Calmomètre** est un indicateur sonore en temps réel qui aide à garder une conversation apaisée. Il écoute le niveau de la voix via le microphone et affiche un voyant à trois couleurs — vert, orange, rouge — qui prévient dès que le ton commence à monter, avec une alerte au passage au rouge : au choix un bip, une courte mélodie ou une voix. L'alerte s'accentue quand les dépassements se rapprochent (un, deux puis trois bips ; une mélodie de plus en plus longue ; « Attention », « Houlà, doucement », puis « Il est temps de faire une pause »), et un bouton permet de l'essayer. Les seuils, le lissage et le type d'alerte sont réglables et mémorisés d'une visite à l'autre, et tout se passe dans le navigateur : aucun enregistrement, aucun son envoyé ailleurs.
+[![Calmomètre](assets/calmometre.png)](calmometre.html)
+
+### But de l'appli
+
+Aider à garder une conversation apaisée : **Calmomètre** écoute le niveau de la voix et prévient dès que le ton commence à monter.
+
+### Fonctionnalités
+
+- Voyant à trois couleurs (vert, orange, rouge) qui suit le niveau sonore en temps réel.
+- Alerte au passage au rouge, au choix : bip, courte mélodie ou voix.
+- Alerte graduée, qui s'accentue quand les dépassements se rapprochent.
+- Seuils, lissage et type d'alerte réglables, mémorisés d'une visite à l'autre.
+- Tout se passe dans le navigateur : aucun enregistrement, aucun son envoyé ailleurs.
 
 ## [Panic App](panicapp.html)
 
 *Version 0.4.1*
 
-**Panic App** est une page web qui déclenche une session vocale guidée en cas de panique ou de forte anxiété. D'un simple bouton PANIC, une voix pose de courtes questions (calcul, mémoire, observation, logique…), écoute les réponses au micro et adapte progressivement la difficulté, pour détourner l'attention vers des tâches simples plutôt que de la crise. Pensée pour fonctionner sans regarder l'écran, elle repose sur les capacités vocales du navigateur (synthèse et reconnaissance vocale). Sous Chrome et Edge, la reconnaissance vocale envoie l'audio aux serveurs de Google ou Microsoft pour le transcrire ; la page, elle, ne l'enregistre pas.
+[![Panic App](assets/panic.png)](panicapp.html)
+
+### But de l'appli
+
+Aider à traverser une crise de panique ou de forte anxiété, en détournant l'attention vers des tâches simples plutôt que vers la crise.
+
+### Fonctionnalités
+
+- Un simple bouton PANIC lance une session vocale guidée.
+- Une voix pose de courtes questions (calcul, mémoire, observation, logique…) et écoute les réponses au micro.
+- La difficulté s'adapte progressivement aux réponses.
+- Pensée pour fonctionner sans regarder l'écran.
+- Repose sur la synthèse et la reconnaissance vocales du navigateur. Sous Chrome et Edge, la reconnaissance vocale envoie l'audio aux serveurs de Google ou Microsoft pour le transcrire ; la page, elle, ne l'enregistre pas.
 
 ## [SandSim.exe](sable.html)
 
 *Version 1.31.75*
 
-**SandSim.exe** reproduit dans le navigateur ces cadres de "sable animé" : plusieurs sables colorés (marron, vert forêt, vert prairie, gris, blanc), de densités différentes, tombent dans un liquide transparent et se fraient lentement un passage à travers une couche de bulles d'air pour former des dunes et des paysages, avec un angle de repos naturel. Le poids du sable accumulé peut forcer le passage à travers les bulles, et un grain lourd repousse de côté un grain plus léger. Le tout se détache sur un ciel animé, où le soleil traverse le ciel et les nuages dérivent, avec un mode Nuit (ciel étoilé, lune, sable éclairé d'une lumière bleutée) qui s'installe en fondu, et un mode Auto où la nuit tombe quand le soleil sort du ciel. Des étoiles filantes passent la nuit, un avion de temps en temps le jour, et très rarement un ovni rigolo dont le rayon tracteur aspire des grains de sable avant de les relâcher (un cartouche Ciel permet de les faire apparaître à la demande ; l'ovni choisit une altitude au-dessus du sable amoncelé pour ne jamais passer derrière un tas). Un bouton permet de retourner le cadre à 180° pour faire retomber le sable accumulé de l'autre côté (le ciel, lui, reste à l'endroit), un autre de passer le tableau du format vertical au format horizontal, un bouton Thème change les couleurs du sable et le ciel qui va avec (Montagne ; Désert de l'orange au jaune, avec brume de chaleur ; Arctique du bleu au blanc et au gris, avec aurore boréale la nuit ; et une planète inconnue au nom illisible, aux sables violet, magenta, turquoise, vert acide et rose, sous un ciel sarcelle où flotte une géante gazeuse à anneaux qui vire au bleu-vert la nuit, réduite à un croissant par son ombre ; là-bas, le soleil est enfermé dans une sphère de Dyson en construction, la lune laisse place à une base stellaire extraterrestre aux anneaux de glyphes lumineux, les avions à de petits ovnis, et le grand ovni à une capsule Apollo ; Océans, avec basalte, sable fin, algues, corail et nacre vus sous l'eau, de plus en plus sombres à mesure qu'on descend, où des rayons de lumière descendent de la surface et des bulles remontent, où la nuit un poisson-lune luminescent remplace la lune et du plancton les étoiles, avec des méduses, des poissons-clowns et un sous-marin jaune à la drague ; et Lune, avec son régolithe gris et son sol orange sous un ciel noir étoilé même en plein jour, la Terre en croissant le jour et pleine la nuit, des satellites et un module lunaire), et la page peut passer en plein écran. Une option permet aussi d'incliner librement le tableau en faisant tourner le cadre à la souris ou au doigt, ou en penchant son téléphone : la gravité suit l'inclinaison. Des réglages ajustent la résolution de la grille de simulation (jusqu'à 660 × 960 grains), la quantité de bulles, la viscosité du liquide, la force de gravité, un courant tourbillonnant (bruit de Perlin animé) qui pousse le sable de côté et dont on règle la force comme la vitesse de dérive des tourbillons, et peuvent lier les bords gauche et droite pour que le sable passe de l'un à l'autre. Les zones de sable au repos ne sont plus recalculées, ce qui allège fortement la simulation, et tous les réglages sont mémorisés d'une visite à l'autre. Le nombre total de grains et la proportion de chaque couleur se règlent aussi, avec une vue figée qui range le sable en couches de couleurs pour visualiser ces proportions d'un coup d'œil, ainsi que la densité de chaque sable individuellement (panneau de réglage fin). Les cartouches de réglages s'affichent ou se masquent depuis la fenêtre Informations, et chacun se ferme aussi d'un clic sur sa croix.
+[![SandSim.exe](assets/sable.png)](sable.html)
+
+### But de l'appli
+
+Reproduire dans le navigateur ces cadres de « sable animé » où des sables colorés tombent lentement dans un liquide pour dessiner des dunes et des paysages — à regarder pour se détendre, hypnotique.
+
+### Fonctionnalités
+
+- Simulation de sables colorés de densités différentes, qui traversent une couche de bulles d'air et s'empilent avec un angle de repos naturel.
+- Ciel animé : soleil, nuages, avions, étoiles filantes, et un ovni rigolo qui aspire du sable de temps en temps.
+- Modes Jour, Nuit et Auto (la nuit tombe quand le soleil sort du ciel).
+- Plusieurs thèmes, chacun avec ses sables et son ciel : Montagne, Désert, Arctique, Océans, Lune… et une mystérieuse planète inconnue.
+- Retournement du cadre à 180°, passage du format vertical au format horizontal, plein écran.
+- Inclinaison libre du tableau à la souris, au doigt ou en penchant son téléphone : la gravité suit.
+- Réglages de la simulation : résolution, bulles, viscosité, gravité, courant tourbillonnant, bords reliés…
+- Réglage du nombre de grains, de la proportion et de la densité de chaque couleur.
+- Réglages mémorisés d'une visite à l'autre.
 
 ## [Échecs](echecs.html)
 
 *Version 0.14.18*
 
-**Échecs** (prototype en cours de développement) est un jeu d'échecs jouable au doigt, à la souris ou à la voix, directement dans le navigateur. Il implémente les règles complètes de déplacement — prise en passant, roque, promotion, détection de l'échec, de l'échec et mat, du pat et des nulles (répétition, 50 coups) — la notation des coups joués, les pièces capturées affichées, une nouvelle partie et l'annulation de coup. Le pilotage vocal (commandes comme « e2 e4 », « cavalier f3 », « petit roque », « annule », « nouvelle partie ») repose sur la reconnaissance et la synthèse vocales du navigateur, et tolère les approximations de la transcription : les cases peuvent être dites en toutes lettres (« f trois », « de deux de quatre »), les mots qui sonnent pareil sont reconnus (« roc » ou « rock » pour « roque »), tout comme quelques synonymes (« reine » pour la dame, « cheval » pour le cavalier, « retour » pour annuler), et parmi les transcriptions proposées par le navigateur c'est celle qui donne un coup jouable qui est retenue. Sous Chrome et Edge, la reconnaissance vocale envoie l'audio aux serveurs de Google ou Microsoft pour le transcrire ; la page, elle, ne l'enregistre pas. Un clic sur le statut (« … à jouer ») fait défiler la méthode d'entraînement "échecs / prises / menaces / pièces en prise", en surlignant sur le plateau les coups (ou pièces en danger) de la catégorie active.
+[![Échecs](assets/echecs.png)](echecs.html)
+
+### But de l'appli
+
+Suivre un livre de stratégie d'échecs sans échiquier sous la main : on dicte les coups lus dans le livre, et le plateau s'affiche à l'écran. Plus besoin de reconstituer la position de tête, et les mains restent libres pour tenir le livre. Rien n'empêche aussi de jouer une partie au doigt ou à la souris. *(Prototype en cours de développement.)*
+
+### Fonctionnalités
+
+- Pilotage vocal (« e2 e4 », « cavalier f3 », « petit roque », « annule »…), tolérant aux approximations de la transcription. Sous Chrome et Edge, la reconnaissance vocale envoie l'audio aux serveurs de Google ou Microsoft pour le transcrire ; la page, elle, ne l'enregistre pas.
+- Règles complètes : prise en passant, roque, promotion, échec, mat, pat et nulles (répétition, 50 coups).
+- Notation des coups joués et affichage des pièces capturées.
+- Nouvelle partie et annulation de coup.
+- Méthode d'entraînement « échecs / prises / menaces / pièces en prise », qui surligne sur le plateau les coups ou pièces concernés.
