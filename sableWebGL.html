@@ -18,7 +18,7 @@
 <script src="consent.js" data-ga-id="G-FNEPDDHNMK" defer></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SandSim.exe — Paysages de sable coloré</title>
+<title>SandSim.exe (WebGL) — Paysages de sable coloré</title>
 <style>
   * { box-sizing:border-box; }
   body {
@@ -87,13 +87,31 @@
     transition:transform 1.1s cubic-bezier(.65,.05,.36,1);
     transform:rotate(0deg);
   }
-  /* En plein écran, le bocal (300px max normalement) profite de tout l'espace disponible. */
-  .stage:fullscreen { width:100vw; height:100vh; justify-content:center; background:#0a0a0a; }
-  .stage:fullscreen .jarWrap { width:auto; height:min(80vh,880px); max-width:90vw; }
+  /* Vrai plein écran : seule l'animation reste, sur tout l'écran (le canvas et la grille prennent
+     la résolution de l'écran, voir applyFullscreenLayout()). Échap ou double-clic pour quitter. */
+  .stage:fullscreen { width:100vw; height:100vh; gap:0; justify-content:center; background:#000; }
+  .stage:fullscreen .jarWrap, .stage:fullscreen .jarWrap.landscape {
+    width:100vw; height:100vh; max-width:none; aspect-ratio:auto; border-radius:0; box-shadow:none;
+  }
+  .stage:fullscreen .jarWrap::before, .stage:fullscreen .hint, .stage:fullscreen #formatBtn { display:none; }
+  /* En plein écran, les boutons deviennent une petite barre flottante en bas de l'écran, qui
+     n'apparaît qu'au mouvement de la souris (ou au toucher) et s'efface d'elle-même ; le curseur
+     est masqué avec elle. Voir showFullscreenControls(). */
+  .stage:fullscreen { position:relative; }
+  .stage:fullscreen:not(.showControls), .stage:fullscreen:not(.showControls) .jarWrap { cursor:none; }
+  .stage:fullscreen .actions {
+    position:absolute; left:50%; bottom:24px; transform:translateX(-50%); z-index:10;
+    max-width:calc(100vw - 32px); padding:10px 12px; border-radius:16px;
+    background:rgba(18,18,18,.78); backdrop-filter:blur(6px); box-shadow:0 8px 30px rgba(0,0,0,.5);
+    opacity:0; pointer-events:none; transition:opacity .4s;
+  }
+  .stage:fullscreen.showControls .actions { opacity:1; pointer-events:auto; }
+  .shortcutHint { display:none; width:100%; text-align:center; color:#aaa; font-size:12px; }
+  .stage:fullscreen .shortcutHint { display:block; }
+  kbd { display:inline-block; min-width:1.4em; padding:0 4px; border:1px solid #555; border-radius:4px; background:#2a2a2a; color:#eee; font:600 11px/1.5 inherit; text-align:center; }
   /* Format horizontal (bouton "Horizontal") : même rapport, en paysage. En plein écran, la largeur
      est calculée pour tenir à la fois dans 90% de la largeur et 80% de la hauteur, sans déformer. */
   .jarWrap.landscape { width:min(440px,90vw); aspect-ratio:160/110; }
-  .stage:fullscreen .jarWrap.landscape { height:auto; max-width:none; width:min(90vw, calc(80vh * 160 / 110), 1280px); }
   /* Case "Incliner le tableau" : le cadre s'attrape pour le faire tourner (touch-action:none pour
      qu'un glisser au doigt tourne le cadre au lieu de faire défiler la page). Pendant le glisser,
      pas de transition : le cadre suit le pointeur sans retard. */
@@ -196,6 +214,8 @@
     <dt>Licence</dt><dd id="infoLicense"></dd>
   </dl>
   <div id="panelToggles">
+    <h3>Raccourcis clavier</h3>
+    <p style="margin:0 0 14px; font-size:13.5px; color:#ccc; line-height:1.7;"><kbd>F</kbd> plein écran · <kbd>R</kbd> retourner le cadre · <kbd>N</kbd> nouveau paysage · <kbd>J</kbd> jour / nuit / auto · <kbd>T</kbd> thème. En plein écran, bougez la souris (ou touchez l'écran) pour afficher les boutons ; <kbd>Échap</kbd> ou double-clic pour quitter.</p>
     <h3>Cartouches affichés</h3>
     <label class="row"><input type="checkbox" id="toggleSettings"><span>🎛️ Réglages</span></label>
     <label class="row"><input type="checkbox" id="toggleFlow"><span>🌊 Courant</span></label>
@@ -210,7 +230,7 @@
   <div class="panel">
     <div class="stage">
       <div class="jarWrap" id="jarWrap">
-        <canvas id="sandCanvas" width="660" height="960"></canvas>
+        <canvas id="sandCanvas" width="1320" height="1920"></canvas>
       </div>
       <p class="hint">Le sable coloré tombe dans l'eau et se fraie lentement un passage à travers les bulles d'air, formant des dunes. Retournez le cadre pour tout faire recommencer de l'autre côté.</p>
       <div class="actions">
@@ -219,7 +239,8 @@
         <button class="btn ghost" id="dayNightBtn" type="button" title="Ambiance : Jour (soleil et nuages), Nuit (ciel étoilé, lune, sable éclairé d'une lumière lunaire bleutée) ou Auto (la nuit tombe quand le soleil sort du ciel, le jour revient avec la lune). Un clic passe au mode suivant.">☀️ Jour</button>
         <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux), Océans (basalte, sable, algues, corail, nacre, vus sous l'eau, de plus en plus sombres en profondeur), Lune (régolithe gris et sol orange, sous un ciel noir où brille la Terre). Un clic passe au thème suivant.">🏔️ Montagne</button>
         <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
-        <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
+        <button class="btn ghost" id="fullscreenBtn" type="button" title="Affiche seulement l'animation, sur tout l'écran et à sa résolution (nouveau paysage). Raccourci : F. Échap ou double-clic pour quitter.">⛶ Plein écran</button>
+        <div class="shortcutHint"><kbd>R</kbd> retourner · <kbd>N</kbd> nouveau paysage · <kbd>J</kbd> jour / nuit · <kbd>T</kbd> thème · <kbd>F</kbd> ou <kbd>Échap</kbd> quitter</div>
       </div>
     </div>
 
@@ -241,8 +262,8 @@
         </div>
         <label>
           <div class="row"><span>Résolution du tableau<button type="button" class="infoBtn" data-target="subResolution" aria-label="Informations">i</button></span><span class="value" id="resolutionVal">245 × 356</span></div>
-          <input type="range" id="resolutionSlider" min="50" max="660" value="245" step="5">
-          <span class="sub" id="subResolution">Nombre de grains simulés sur le petit côté du tableau (la largeur en vertical, la hauteur en horizontal ; jusqu'à 660 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent — le calcul croît avec le carré de la valeur : 660 demande environ 7 fois plus que 245 ; le tableau recommence à zéro au relâchement.</span>
+          <input type="range" id="resolutionSlider" min="50" max="1320" value="245" step="5">
+          <span class="sub" id="subResolution">Nombre de grains simulés sur le petit côté du tableau (la largeur en vertical, la hauteur en horizontal ; jusqu'à 1320 = résolution native du canvas, un grain par pixel). Plus haut = plus de détail mais plus lent — le calcul croît avec le carré de la valeur : 660 demande environ 7 fois plus que 245, et 1320 environ 29 fois plus ; le tableau recommence à zéro au relâchement.</span>
         </label>
         <label>
           <div class="row"><span>Bulles d'air<button type="button" class="infoBtn" data-target="subBubbles" aria-label="Informations">i</button></span><span class="value" id="bubbleVal">40%</span></div>
@@ -359,7 +380,7 @@
           <label>
             <div class="row"><span>Nombre total de grains<button type="button" class="infoBtn" data-target="subSandCount" aria-label="Informations">i</button></span><span class="value" id="sandCountMax">max —</span></div>
             <input type="number" id="sandCountInput" min="0" step="100" class="numberInput">
-            <span class="sub" id="subSandCount">Nombre de grains de sable dans le tableau, toutes couleurs confondues (réparties selon les curseurs ci-dessous). Plafonné pour laisser la place aux bulles ; suit la résolution quand elle change. Un nouveau paysage est généré à la validation.</span>
+            <span class="sub" id="subSandCount">Nombre de grains de sable dans le tableau, toutes couleurs confondues (réparties selon les curseurs ci-dessous). Plafonné pour laisser la place aux bulles, et à 300 000 grains au plus pour garder la simulation fluide (le plafond joue à partir d'une résolution d'environ 720) ; suit la résolution quand elle change. Un nouveau paysage est généré à la validation.</span>
           </label>
           <div>
             <label class="row" style="cursor:pointer;">
@@ -399,7 +420,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.32.77";
+const APP_VERSION = "1.33.81";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-25";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -466,14 +487,20 @@ const SAND_MIN = 1, SAND_MAX = 5;
 // le PETIT côté, pour garder le même nombre de cellules (donc le même coût) dans les deux formats.
 const FORMAT_RATIO = 160 / 110; // grand côté / petit côté, conservé quelle que soit la résolution
 // Taille native du canvas (petit côté × grand côté) : elle borne la résolution utile de la grille
-// (au-delà d'un grain par pixel, le détail supplémentaire serait invisible). Doublée (330 × 480 à
-// l'origine) pour permettre une résolution plus fine. Le ciel, lui, reste dessiné en unités
-// d'origine (SKY_W × SKY_H = 330 × 480), agrandies ×SKY_SCALE au dessin : ses traits fins, étoiles
-// et étincelles gardent la même taille à l'écran, simplement plus nets.
-const SKY_SCALE = 2;
-const CANVAS_SHORT = 330 * SKY_SCALE, CANVAS_LONG = 480 * SKY_SCALE;
+// (au-delà d'un grain par pixel, le détail supplémentaire serait invisible). Quadruplée (330 × 480
+// à l'origine, doublée dans sable.html) pour permettre une résolution plus fine, à l'échelle d'un
+// grand écran (1320 × 1920). Le ciel, lui, reste dessiné en unités d'origine (SKY_W × SKY_H =
+// 330 × 480), agrandies ×SKY_SCALE au dessin : ses traits fins, étoiles et étincelles gardent la
+// même taille à l'écran, simplement plus nets. SKY_SCALE est recalculé par layoutSky() à partir de
+// la taille du canvas (petit côté = 330 unités de ciel), pour suivre aussi le plein écran.
+let SKY_SCALE = 4;
+const CANVAS_SHORT = 1320, CANVAS_LONG = 1920;
 let landscape = false;
+// Plein écran : dimensions de la grille imposées par l'écran ([largeur, hauteur], un grain par
+// pixel CSS), à la place du curseur de résolution et du format ; null hors plein écran.
+let fullscreenGrid = null;
 function gridDims(shortSide) {
+  if (fullscreenGrid) return fullscreenGrid;
   const s = Math.round(shortSide), l = Math.round(shortSide * FORMAT_RATIO);
   return landscape ? [l, s] : [s, l];
 }
@@ -661,6 +688,9 @@ let grid = new Uint8Array(CELL_COUNT);
 let moved = new Uint8Array(CELL_COUNT);
 let shade = new Float32Array(CELL_COUNT); // luminosité par grain, stable entre deux images
 let tint = new Float32Array(CELL_COUNT);  // teinte chaud/froid par grain, stable entre deux images
+// shade/tint modifiés depuis le dernier envoi à la carte graphique (rendu WebGL, voir glRenderSand) :
+// ils changent rarement (nouveau paysage, grains relâchés par l'ovni), inutile de les renvoyer à chaque image.
+let shadeDirty = true;
 // Activité : nombre de déplacements de particules (sable + bulles) et nombre de pas joués depuis
 // le dernier rafraîchissement de l'affichage "Grains en mouv." (voir loop()). Chaque particule
 // bouge au plus une fois par pas (moved[]) : déplacements / pas = particules en mouvement par pas,
@@ -973,10 +1003,16 @@ rebuildFlowField();
 rebuildFlowViz();
 
 // Nombre total de grains : 35 000 par défaut (à la résolution de départ, 245 × 356) ; plafonné
-// pour laisser la place aux bulles.
+// pour laisser la place aux bulles, et à MAX_SAND_GRAINS quelle que soit la résolution (pour garder
+// la simulation fluide : avec ~40 % de remplissage, le plafond joue au-delà d'environ 720 de résolution).
+const MAX_SAND_GRAINS = 300000;
 params.sandCount = 35000;
+// Taux de remplissage voulu (grains / cases), qui fait suivre le nombre de grains à la résolution
+// (voir rebuildGrid). Mis à jour seulement quand l'utilisateur choisit un nombre de grains : un
+// nombre réduit par le plafond ne doit pas vider le tableau quand on redescend en résolution.
+let sandFill = params.sandCount / CELL_COUNT;
 function maxSandCount() {
-  return Math.max(0, CELL_COUNT - bubbleTargetCount());
+  return Math.max(0, Math.min(MAX_SAND_GRAINS, CELL_COUNT - bubbleTargetCount()));
 }
 function clampSandCount(n) {
   return Math.max(0, Math.min(maxSandCount(), Math.round(n) || 0));
@@ -1038,6 +1074,7 @@ function scatterInitial() {
     shade[p] = 0.82 + Math.random() * 0.36;
     tint[p] = Math.random() * 2 - 1;
   }
+  shadeDirty = true;
   for (let t = 0; t < 400; t++) step();
   windowMoves = 0; // la mise en place à blanc ne compte pas dans l'activité affichée
   // Paysage figé : le nouveau paysage est mis de côté (restauré au décochage) et remplacé à
@@ -1384,6 +1421,7 @@ function allocateGrid(shortSide) {
   moved = new Uint8Array(CELL_COUNT);
   shade = new Float32Array(CELL_COUNT);
   tint = new Float32Array(CELL_COUNT);
+  shadeDirty = true;
   ufoGrains = [];
   allocChunks();
   rebuildFlowField();
@@ -1394,11 +1432,10 @@ function allocateGrid(shortSide) {
 }
 // Change de résolution (ou de format) et repart sur un nouveau paysage.
 function rebuildGrid(shortSide) {
-  const oldCellCount = CELL_COUNT;
   allocateGrid(shortSide);
-  // Le nombre de grains suit la résolution (même taux de remplissage), sinon passer en basse
-  // résolution puis revenir laisserait un tableau presque vide.
-  params.sandCount = clampSandCount(params.sandCount * (CELL_COUNT / oldCellCount));
+  // Le nombre de grains suit la résolution (même taux de remplissage, sandFill), sinon passer en
+  // basse résolution puis revenir laisserait un tableau presque vide. Plafonné à MAX_SAND_GRAINS.
+  params.sandCount = clampSandCount(sandFill * CELL_COUNT);
   syncSandCountInput();
   resetFrame();
   scatterInitial();
@@ -1413,6 +1450,7 @@ function rebuildGrid(shortSide) {
 // layoutSky() quand le format change (vertical/horizontal).
 let SKY_W, SKY_H, SKY_PAD, SKY_UNIT, skyGrad, nightGrad, SUN_R, STARS;
 function layoutSky() {
+  SKY_SCALE = Math.min(mainCanvas.width, mainCanvas.height) / 330;
   SKY_W = mainCanvas.width / SKY_SCALE; SKY_H = mainCanvas.height / SKY_SCALE;
   SKY_PAD = Math.hypot(SKY_W, SKY_H) / 2; // marge couvrant le canvas sous n'importe quel angle
   SKY_UNIT = Math.min(SKY_W, SKY_H); // taille de référence (soleil, nuages), identique dans les deux formats
@@ -2566,7 +2604,7 @@ function releaseUfoGrains() {
     const [gx, gy] = skyToGrid(g.x, g.y);
     const i = findEmptyNear(gx, gy);
     if (i < 0) continue;
-    grid[i] = g.type; shade[i] = g.shade; tint[i] = g.tint;
+    grid[i] = g.type; shade[i] = g.shade; tint[i] = g.tint; shadeDirty = true;
     wake(i % GRID_W, (i / GRID_W) | 0);
   }
   ufoGrains = [];
@@ -2790,6 +2828,184 @@ const glowSmallCanvas = document.createElement("canvas");
 const glowSmallCtx = glowSmallCanvas.getContext("2d");
 let glowData = null;
 
+// ---------- Rendu du sable par WebGL ----------
+// La carte graphique fait le travail de la boucle par pixel du rendu CPU : la grille (1 octet par
+// case) et les nuances des grains (shade/tint, 2 octets par case, renvoyées seulement quand elles
+// changent) lui sont envoyées comme textures, et un shader calcule la couleur de chaque case —
+// couleur du thème, nuance, teinte chaud/froid, éclairage de nuit, luminescence. Le halo de nuit
+// est un second passage, en 1/GLOW_DOWNSCALE de résolution, qui fait la moyenne des cases
+// luminescentes de chaque carré de GLOW_DOWNSCALE × GLOW_DOWNSCALE. Le résultat est dessiné dans un
+// canvas WebGL hors écran, à la taille de la grille, puis recopié sur le canvas principal avec
+// drawImage — le reste du dessin (ciel, ovni, profondeur…) ne change pas.
+// WebGL indisponible : glSand reste null et render() garde le rendu CPU d'origine.
+const glCanvas = document.createElement("canvas");
+const gl = glCanvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
+let glSand = null;
+
+const GL_VS = `
+attribute vec2 aPos;
+varying vec2 vUV;
+void main() {
+  vUV = vec2(aPos.x * 0.5 + 0.5, 0.5 - aPos.y * 0.5); // (0,0) = haut gauche = case (0,0) de la grille
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+const GL_PRECISION = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+`;
+// Mêmes calculs que le rendu CPU (couleurs en 0-255, sortie en alpha prémultiplié).
+const GL_FS_SAND = GL_PRECISION + `
+uniform sampler2D uGrid, uShade;
+uniform vec3 uC1, uC2, uC3, uC4, uC5, uBubble;
+uniform vec3 uLight, uWhiteLight;
+uniform float uGlowType;
+varying vec2 vUV;
+void main() {
+  float v = floor(texture2D(uGrid, vUV).r * 255.0 + 0.5);
+  if (v < 0.5) { gl_FragColor = vec4(0.0); return; }
+  if (v > 5.5) {
+    const float a = 165.0 / 255.0;
+    gl_FragColor = vec4(min(uBubble * uLight / 255.0, 1.0) * a, a);
+    return;
+  }
+  vec3 c = v < 1.5 ? uC1 : v < 2.5 ? uC2 : v < 3.5 ? uC3 : v < 4.5 ? uC4 : uC5;
+  vec4 st = texture2D(uShade, vUV);
+  float s = 0.82 + st.r * 0.36;        // shade : 0,82 à 1,18
+  float t = (st.a * 2.0 - 1.0) * 14.0; // tint : -1 à 1, x14
+  vec3 L = abs(v - uGlowType) < 0.5 ? uWhiteLight : uLight;
+  vec3 rgb = vec3((c.r * s + t) * L.r, c.g * s * L.g, (c.b * s - t) * L.b) / 255.0;
+  gl_FragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
+}`;
+const GL_FS_GLOW = GL_PRECISION + `
+uniform sampler2D uGrid;
+uniform vec2 uGridSize, uGlowSize;
+uniform float uGlowType;
+uniform vec3 uGlowColor;
+varying vec2 vUV;
+void main() {
+  vec2 base = floor(vUV * uGlowSize) * ${GLOW_DOWNSCALE}.0;
+  float n = 0.0;
+  for (int j = 0; j < ${GLOW_DOWNSCALE}; j++) {
+    for (int i = 0; i < ${GLOW_DOWNSCALE}; i++) {
+      float v = floor(texture2D(uGrid, (base + vec2(float(i), float(j)) + 0.5) / uGridSize).r * 255.0 + 0.5);
+      n += abs(v - uGlowType) < 0.5 ? 1.0 : 0.0;
+    }
+  }
+  float a = n / ${GLOW_DOWNSCALE * GLOW_DOWNSCALE}.0;
+  gl_FragColor = vec4(uGlowColor / 255.0 * a, a);
+}`;
+
+function glCompile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function glProgram(fsSrc, uniformNames) {
+  const p = gl.createProgram();
+  gl.attachShader(p, glCompile(gl.VERTEX_SHADER, GL_VS));
+  gl.attachShader(p, glCompile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.bindAttribLocation(p, 0, "aPos");
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  for (const name of uniformNames) u[name] = gl.getUniformLocation(p, name);
+  return { p, u };
+}
+function glTexture() {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function initGlSand() {
+  if (!gl) return null;
+  try {
+    const sand = glProgram(GL_FS_SAND, ["uGrid", "uShade", "uC1", "uC2", "uC3", "uC4", "uC5", "uBubble", "uLight", "uWhiteLight", "uGlowType"]);
+    const glow = glProgram(GL_FS_GLOW, ["uGrid", "uGridSize", "uGlowSize", "uGlowType", "uGlowColor"]);
+    const quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); // lignes de GRID_W octets, pas forcément multiple de 4
+    gl.disable(gl.BLEND);
+    return { sand, glow, gridTex: glTexture(), shadeTex: glTexture(), w: 0, h: 0, shadeBytes: null };
+  } catch (e) {
+    console.warn("WebGL indisponible, rendu CPU :", e);
+    return null;
+  }
+}
+glSand = initGlSand();
+
+// Envoie la grille (et les nuances si elles ont changé) à la carte graphique, puis dessine le sable
+// dans glCanvas (zone GRID_W × GRID_H en haut à gauche).
+function glRenderSand(lr, lg, lb, wr, wg, wb) {
+  const G = glSand;
+  if (G.w !== GRID_W || G.h !== GRID_H) {
+    G.w = GRID_W; G.h = GRID_H;
+    glCanvas.width = GRID_W; glCanvas.height = GRID_H;
+    G.shadeBytes = new Uint8Array(CELL_COUNT * 2);
+    gl.bindTexture(gl.TEXTURE_2D, G.gridTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, GRID_W, GRID_H, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, G.shadeTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, GRID_W, GRID_H, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, null);
+    shadeDirty = true;
+  }
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, G.gridTex);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID_W, GRID_H, gl.LUMINANCE, gl.UNSIGNED_BYTE, grid);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, G.shadeTex);
+  if (shadeDirty) {
+    const b = G.shadeBytes;
+    for (let p = 0; p < CELL_COUNT; p++) {
+      b[2 * p] = Math.round(((shade[p] - 0.82) / 0.36) * 255);
+      b[2 * p + 1] = Math.round(((tint[p] + 1) / 2) * 255);
+    }
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID_W, GRID_H, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, b);
+    shadeDirty = false;
+  }
+  const { p, u } = G.sand;
+  gl.useProgram(p);
+  gl.uniform1i(u.uGrid, 0);
+  gl.uniform1i(u.uShade, 1);
+  gl.uniform3fv(u.uC1, COLOR_RGB[1]); gl.uniform3fv(u.uC2, COLOR_RGB[2]); gl.uniform3fv(u.uC3, COLOR_RGB[3]);
+  gl.uniform3fv(u.uC4, COLOR_RGB[4]); gl.uniform3fv(u.uC5, COLOR_RGB[5]);
+  gl.uniform3f(u.uBubble, 210, 235, 255);
+  gl.uniform3f(u.uLight, lr, lg, lb);
+  gl.uniform3f(u.uWhiteLight, wr, wg, wb);
+  gl.uniform1f(u.uGlowType, glowType);
+  gl.viewport(0, 0, GRID_W, GRID_H);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// Halo de nuit : dessiné dans glCanvas (à appeler après avoir recopié le sable, qu'il remplace),
+// dans la zone gw × gh en haut à gauche, renvoyée pour le drawImage.
+function glRenderGlow() {
+  const gw = Math.max(1, Math.ceil(GRID_W / GLOW_DOWNSCALE));
+  const gh = Math.max(1, Math.ceil(GRID_H / GLOW_DOWNSCALE));
+  const { p, u } = glSand.glow;
+  gl.useProgram(p);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, glSand.gridTex); // déjà à jour (glRenderSand, même image)
+  gl.uniform1i(u.uGrid, 0);
+  gl.uniform2f(u.uGridSize, GRID_W, GRID_H);
+  gl.uniform2f(u.uGlowSize, gw, gh);
+  gl.uniform1f(u.uGlowType, glowType);
+  gl.uniform3fv(u.uGlowColor, WHITE_GLOW_RGB);
+  gl.viewport(0, GRID_H - gh, gw, gh); // repère WebGL : origine en bas -> zone du haut du canvas
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  return [gw, gh];
+}
+
 // Atténuation de la lumière avec la profondeur (thème Océans) : un voile en mode "multiply", par-
 // dessus le ciel, le sable et les bulles, qui laisse la surface intacte (blanc = aucun effet) et
 // s'assombrit vers le fond. Le rouge est absorbé le premier, puis le vert : en profondeur, tout
@@ -2823,6 +3039,43 @@ function render() {
   const wb = 1 + (WHITE_NIGHT_LIGHT[2] - 1) * nightMix;
   const bubbleR = 210 * lr, bubbleG = 235 * lg, bubbleB = 255 * lb;
   const glowOn = nightMix > 0;
+  if (glSand) {
+    glRenderSand(lr, lg, lb, wr, wg, wb);
+  } else {
+    renderSandCPU(glowOn, lr, lg, lb, wr, wg, wb, bubbleR, bubbleG, bubbleB);
+  }
+
+  if (params.flowPct > 0 && params.flowShow) {
+    updateFlowViz();
+    renderFlowViz(mainCtx, mainCanvas.width, mainCanvas.height);
+  }
+  mainCtx.imageSmoothingEnabled = true;
+  mainCtx.drawImage(glSand ? glCanvas : offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
+  drawUfoGrains(mainCtx, lr, lg, lb);
+  if (THEMES[themeIndex].sky.depth) drawDepthShade(mainCtx); // avant la luminescence, qui reste vive
+
+  if (glowOn) {
+    mainCtx.save();
+    mainCtx.globalCompositeOperation = "lighter";
+    mainCtx.globalAlpha = nightMix * (0.55 + 0.15 * Math.sin(tSec * GLOW_PULSE_SPEED));
+    if (glSand) {
+      const [gw, gh] = glRenderGlow();
+      mainCtx.drawImage(glCanvas, 0, 0, gw, gh, 0, 0, mainCanvas.width, mainCanvas.height);
+    } else {
+      glowCtx.putImageData(glowData, 0, 0);
+      glowSmallCtx.imageSmoothingEnabled = true;
+      glowSmallCtx.clearRect(0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
+      glowSmallCtx.drawImage(glowCanvas, 0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
+      mainCtx.drawImage(glowSmallCanvas, 0, 0, mainCanvas.width, mainCanvas.height);
+    }
+    mainCtx.restore();
+  }
+  if (chunkShow) drawAwakeChunks(mainCtx, mainCanvas.width, mainCanvas.height);
+}
+
+// Rendu CPU d'origine (WebGL indisponible) : couleur de chaque case calculée en JavaScript dans
+// imgData (et le calque du halo dans glowData), puis envoyée dans offCanvas.
+function renderSandCPU(glowOn, lr, lg, lb, wr, wg, wb, bubbleR, bubbleG, bubbleB) {
   if (glowOn && (glowCanvas.width !== GRID_W || glowCanvas.height !== GRID_H)) {
     glowCanvas.width = GRID_W; glowCanvas.height = GRID_H;
     glowSmallCanvas.width = Math.max(1, Math.ceil(GRID_W / GLOW_DOWNSCALE));
@@ -2857,28 +3110,6 @@ function render() {
     }
   }
   offCtx.putImageData(imgData, 0, 0);
-
-  if (params.flowPct > 0 && params.flowShow) {
-    updateFlowViz();
-    renderFlowViz(mainCtx, mainCanvas.width, mainCanvas.height);
-  }
-  mainCtx.imageSmoothingEnabled = true;
-  mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
-  drawUfoGrains(mainCtx, lr, lg, lb);
-  if (THEMES[themeIndex].sky.depth) drawDepthShade(mainCtx); // avant la luminescence, qui reste vive
-
-  if (glowOn) {
-    glowCtx.putImageData(glowData, 0, 0);
-    glowSmallCtx.imageSmoothingEnabled = true;
-    glowSmallCtx.clearRect(0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
-    glowSmallCtx.drawImage(glowCanvas, 0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
-    mainCtx.save();
-    mainCtx.globalCompositeOperation = "lighter";
-    mainCtx.globalAlpha = nightMix * (0.55 + 0.15 * Math.sin(tSec * GLOW_PULSE_SPEED));
-    mainCtx.drawImage(glowSmallCanvas, 0, 0, mainCanvas.width, mainCanvas.height);
-    mainCtx.restore();
-  }
-  if (chunkShow) drawAwakeChunks(mainCtx, mainCanvas.width, mainCanvas.height);
 }
 
 function stepsPerFrame() {
@@ -3129,6 +3360,7 @@ function syncSandCountInput() {
 }
 sandCountInput.addEventListener("change", () => {
   params.sandCount = clampSandCount(Number(sandCountInput.value));
+  sandFill = params.sandCount / CELL_COUNT;
   syncSandCountInput(); // réaffiche la valeur réellement retenue si elle a été plafonnée
   resetFrame();
   scatterInitial();
@@ -3296,15 +3528,85 @@ function setTilt(on, fromUser) {
 }
 tiltCheckbox.addEventListener("change", () => setTilt(tiltCheckbox.checked, true));
 
+// Vrai plein écran : seule l'animation reste affichée (voir le CSS de .stage:fullscreen), et le
+// tableau prend la résolution et les proportions de l'écran — canvas à la résolution physique
+// (pixels réels, écrans haute densité compris), grille à un grain par pixel CSS (le nombre de
+// grains reste plafonné à MAX_SAND_GRAINS). Un nouveau paysage est généré à l'entrée et à la
+// sortie, et à chaque changement de taille de l'écran (rotation d'un téléphone…) : le sable ne
+// peut pas être redimensionné. Sortie : Échap (géré par le navigateur) ou double-clic.
 const stageEl = document.querySelector(".stage");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 fullscreenBtn.addEventListener("click", () => {
   if (document.fullscreenElement) document.exitFullscreen();
   else stageEl.requestFullscreen().catch(() => {});
 });
+function applyFullscreenLayout() {
+  const w = window.innerWidth, h = window.innerHeight, dpr = window.devicePixelRatio || 1;
+  const gridW = Math.max(50, Math.round(w)), gridH = Math.max(50, Math.round(h));
+  const canvasW = Math.round(w * dpr), canvasH = Math.round(h * dpr);
+  if (fullscreenGrid && fullscreenGrid[0] === gridW && fullscreenGrid[1] === gridH &&
+      mainCanvas.width === canvasW && mainCanvas.height === canvasH) return;
+  fullscreenGrid = [gridW, gridH];
+  mainCanvas.width = canvasW; mainCanvas.height = canvasH;
+  layoutSky();
+  rebuildGrid(Number(resolutionSlider.value));
+  updateResolutionLabel();
+}
+function leaveFullscreenLayout() {
+  if (!fullscreenGrid) return;
+  fullscreenGrid = null;
+  setLandscape(landscape); // remet le canvas et le ciel au format du cadre
+  rebuildGrid(Number(resolutionSlider.value));
+  updateResolutionLabel();
+}
 document.addEventListener("fullscreenchange", () => {
   const on = document.fullscreenElement === stageEl;
   fullscreenBtn.textContent = on ? "⛶ Quitter le plein écran" : "⛶ Plein écran";
+  // Une image plus tard : la mise en page plein écran est alors appliquée (innerWidth/innerHeight à jour).
+  if (on) { requestAnimationFrame(applyFullscreenLayout); showFullscreenControls(); }
+  else { leaveFullscreenLayout(); hideFullscreenControls(); }
+});
+
+// Barre de boutons flottante du plein écran : affichée au mouvement de la souris ou au toucher,
+// effacée après FS_CONTROLS_HIDE_MS sans mouvement — sauf tant que le pointeur est dessus.
+const FS_CONTROLS_HIDE_MS = 2500;
+let fsControlsTimer = 0;
+function hideFullscreenControls() {
+  clearTimeout(fsControlsTimer);
+  stageEl.classList.remove("showControls");
+}
+function showFullscreenControls(e) {
+  if (document.fullscreenElement !== stageEl) return;
+  stageEl.classList.add("showControls");
+  clearTimeout(fsControlsTimer);
+  if (e && e.target.closest && e.target.closest(".actions")) return; // pointeur sur la barre : reste affichée
+  fsControlsTimer = setTimeout(hideFullscreenControls, FS_CONTROLS_HIDE_MS);
+}
+stageEl.addEventListener("pointermove", showFullscreenControls);
+stageEl.addEventListener("pointerdown", showFullscreenControls);
+
+// Raccourcis clavier (plein écran ou non) : déclenchent les boutons correspondants, pour garder
+// une seule logique (et la sauvegarde des réglages, qui écoute les clics). Ignorés pendant la
+// saisie dans un champ, et avec Ctrl/Alt/Cmd (raccourcis du navigateur).
+const SHORTCUTS = { f: "fullscreenBtn", r: "flipBtn", n: "newBtn", j: "dayNightBtn", t: "themeBtn" };
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+  const el = e.target;
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+  if (infoDialog.open) return;
+  const id = SHORTCUTS[e.key.toLowerCase()];
+  if (!id) return;
+  e.preventDefault();
+  document.getElementById(id).click();
+});
+let fullscreenResizeTimer = 0;
+window.addEventListener("resize", () => {
+  if (document.fullscreenElement !== stageEl) return;
+  clearTimeout(fullscreenResizeTimer);
+  fullscreenResizeTimer = setTimeout(applyFullscreenLayout, 300);
+});
+jarWrap.addEventListener("dblclick", () => {
+  if (document.fullscreenElement === stageEl) document.exitFullscreen();
 });
 
 // ---------- Réglages mémorisés ----------
@@ -3328,7 +3630,7 @@ function collectSettings() {
     res: Number(resolutionSlider.value), landscape, theme: themeIndex, dayMode,
     bubbles: params.bubblePct, viscosity: params.viscosity, gravity: Number(gravitySlider.value),
     flow: params.flowPct, flowDrift: params.flowDrift, flowShow: params.flowShow, wrap: params.wrapEdges, tilt: params.tilt,
-    sandCount: params.sandCount, dens, prop, panels,
+    sandCount: params.sandCount, sandFill, dens, prop, panels,
   };
 }
 function scheduleSave() {
@@ -3387,6 +3689,7 @@ function loadSettings() {
   }
   setRange(bubbleSlider, s.bubbles); // après la grille : le plafond de grains en dépend
   if (isNum(s.sandCount)) params.sandCount = clampSandCount(s.sandCount);
+  sandFill = isNum(s.sandFill) && s.sandFill >= 0 && s.sandFill <= 1 ? s.sandFill : params.sandCount / CELL_COUNT;
   syncSandCountInput();
   if (s.tilt === true) setTilt(true, false);
 }

@@ -9,11 +9,18 @@ Ceci un espace pour partager mes projets.
 
 # Liste des projets disponibles
 
+<table>
+  <tr>
+    <td align="center" valign="top"><a href="calmometre.html"><img src="assets/calmometre.png" alt="Calmomètre" width="180"></a><br><a href="calmometre.html">Calmomètre</a></td>
+    <td align="center" valign="top"><a href="panicapp.html"><img src="assets/panic.png" alt="Panic App" width="180"></a><br><a href="panicapp.html">Panic App</a></td>
+    <td align="center" valign="top"><a href="sable.html"><img src="assets/sable.png" alt="SandSim.exe" width="180"></a><br><a href="sable.html">SandSim.exe</a><br><sub><a href="sableWebGL.html">version WebGL (expérimentale)</a></sub></td>
+    <td align="center" valign="top"><a href="echecs.html"><img src="assets/echecs.png" alt="Échecs" width="180"></a><br><a href="echecs.html">Échecs</a></td>
+  </tr>
+</table>
+
 ## [Calmomètre](calmometre.html)
 
 *Version 1.4.11*
-
-[![Calmomètre](assets/calmometre.png)](calmometre.html)
 
 ### But de l'appli
 
@@ -31,8 +38,6 @@ Aider à garder une conversation apaisée : **Calmomètre** écoute le niveau de
 
 *Version 0.4.1*
 
-[![Panic App](assets/panic.png)](panicapp.html)
-
 ### But de l'appli
 
 Aider à traverser une crise de panique ou de forte anxiété, en détournant l'attention vers des tâches simples plutôt que vers la crise.
@@ -48,8 +53,6 @@ Aider à traverser une crise de panique ou de forte anxiété, en détournant l'
 ## [SandSim.exe](sable.html)
 
 *Version 1.31.75*
-
-[![SandSim.exe](assets/sable.png)](sable.html)
 
 ### But de l'appli
 
@@ -67,11 +70,13 @@ Reproduire dans le navigateur ces cadres de « sable animé » où des sables co
 - Réglage du nombre de grains, de la proportion et de la densité de chaque couleur.
 - Réglages mémorisés d'une visite à l'autre.
 
+### Version WebGL (expérimentale)
+
+[SandSim.exe WebGL](sableWebGL.html) : la même appli, dont l'affichage du sable est calculé par la carte graphique. Elle permet de monter beaucoup plus haut en résolution (jusqu'à 1320 grains sur le petit côté, avec 300 000 grains au plus), en vue d'un futur mode plein écran à la résolution de l'écran. En cours d'optimisation : selon la machine, les très hautes résolutions peuvent encore ralentir.
+
 ## [Échecs](echecs.html)
 
 *Version 0.14.18*
-
-[![Échecs](assets/echecs.png)](echecs.html)
 
 ### But de l'appli
 
