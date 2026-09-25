@@ -30,6 +30,8 @@
     padding:14px 24px; background:#181818; border-bottom:1px solid #333;
   }
   h1 { margin:0; font-size:19px; font-weight:650; }
+  /* Petite mention "WebGL" accolée au nom, pour distinguer cette version de la version Canvas. */
+  .glTag { margin-left:4px; font-size:10px; font-weight:700; color:#888; letter-spacing:.03em; vertical-align:super; }
   main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
 
   /* Lien "Informations" (en-tête) et sa pop-up (version, auteur, date, licence) */
@@ -200,7 +202,7 @@
 </head>
 <body>
 <header>
-  <h1>🏜️ SandSim.exe</h1>
+  <h1>🏜️ SandSim.exe<sup class="glTag">WebGL</sup></h1>
   <div style="display:flex; align-items:center; gap:14px;">
     <a id="kofiLink" href="https://ko-fi.com/lfranck" target="_blank" rel="noopener" title="Soutenir mes projets sur Ko-fi" aria-label="M'offrir un café sur Ko-fi">☕<span class="kofiText">M'offrir un café</span></a>
     <button id="infoLink" type="button">ℹ️ Informations</button>
@@ -423,7 +425,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.34.82";
+const APP_VERSION = "1.34.83";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-25";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
