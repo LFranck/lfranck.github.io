@@ -230,6 +230,15 @@
           <div class="row"><span>Performance<button type="button" class="infoBtn" data-target="subPerf" aria-label="Informations">i</button></span><span class="value" id="perfVal">— fps</span></div>
           <span class="sub" id="subPerf">Images/seconde et part du budget d'image (16,7 ms à 60 fps) consommée par le calcul de la simulation. Indicatif : le navigateur ne donne pas accès au taux CPU réel de la machine.</span>
         </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="chunkShowCheckbox">
+            <span>Afficher les blocs éveillés</span>
+            <button type="button" class="infoBtn" data-target="subChunkShow" aria-label="Informations">i</button>
+            <span class="value" id="chunkVal"></span>
+          </label>
+          <span class="sub" id="subChunkShow">La grille est découpée en blocs de 16 × 16 grains : seuls les blocs "éveillés" (où quelque chose bouge ou peut encore bouger) sont recalculés, les zones au repos sont sautées. Coché : les blocs éveillés sont surlignés sur le tableau, avec leur nombre sur le total. Cadre incliné entre deux directions : tous les blocs restent éveillés.</span>
+        </div>
         <label>
           <div class="row"><span>Résolution du tableau<button type="button" class="infoBtn" data-target="subResolution" aria-label="Informations">i</button></span><span class="value" id="resolutionVal">245 × 356</span></div>
           <input type="range" id="resolutionSlider" min="50" max="660" value="245" step="5">
@@ -390,9 +399,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.31.75";
+const APP_VERSION = "1.32.76";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-24";
+const APP_DATE = "2026-09-25";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 const infoDialog = document.getElementById("infoDialog");
@@ -686,6 +695,10 @@ let gravityMixed = false; // angle entre deux directions : la mise en veille des
 // côtés (sA/sB) et diagonales de montée des bulles (uA/uB).
 let gDX = 0, gDY = 1, upDX = 0, upDY = -1;
 let dAX, dAY, dBX, dBY, sAX, sAY, sBX, sBY, uAX, uAY, uBX, uBY;
+// Portée (en cases) de l'effet d'une case modifiée sur les tests de mouvement de ses voisines, lue
+// par wake() : 1 en général, 2 quand la chute est en diagonale — le grain léger repoussé de côté
+// (tryDisplaceSideways) atterrit alors à 2 cases de celui qui tombe.
+let wakeMargin = 1;
 function setStepGravity() {
   let k = (Math.PI / 2 - gravityAngle) / (Math.PI / 4);
   k = ((k % 8) + 8) % 8;
@@ -698,6 +711,7 @@ function setStepGravity() {
   dAX = DIR_X[(g + 1) & 7]; dAY = DIR_Y[(g + 1) & 7]; dBX = DIR_X[(g + 7) & 7]; dBY = DIR_Y[(g + 7) & 7];
   sAX = DIR_X[(g + 2) & 7]; sAY = DIR_Y[(g + 2) & 7]; sBX = DIR_X[(g + 6) & 7]; sBY = DIR_Y[(g + 6) & 7];
   uAX = DIR_X[(g + 3) & 7]; uAY = DIR_Y[(g + 3) & 7]; uBX = DIR_X[(g + 5) & 7]; uBY = DIR_Y[(g + 5) & 7];
+  wakeMargin = gDX !== 0 && gDY !== 0 ? 2 : 1;
 }
 setStepGravity();
 // La gravité pointe-t-elle plutôt vers le bas de la grille ? (vue en couches)
@@ -705,12 +719,11 @@ const gravityPointsDown = () => Math.sin(gravityAngle) >= 0;
 
 // ---------- Mise en veille des zones au repos ----------
 // La grille est découpée en blocs de 16 × 16 cellules. Un bloc n'est simulé au pas suivant que
-// s'il est "éveillé" : parce qu'un grain y a bougé (ou juste à côté — wake() réveille le bloc et
-// ses 8 voisins), ou parce qu'un de ses grains a encore une case où aller même s'il n'a pas bougé
-// ce pas-ci (déplacements aléatoires — keepAwake()). Un tas de sable tassé n'est donc plus
-// recalculé à chaque pas : seules la surface, les zones en mouvement et le liquide qui les touche
-// coûtent. Toute modification extérieure de la grille (nouveau paysage, bulles, gravité, densités…)
-// appelle wakeAll().
+// s'il est "éveillé" : parce qu'une de ses cases a changé (ou une case juste à côté — voir wake()),
+// ou parce qu'un de ses grains a encore une case où aller même s'il n'a pas bougé ce pas-ci
+// (déplacements aléatoires — keepAwake()). Un tas de sable tassé n'est donc plus recalculé à chaque
+// pas : seules la surface, les zones en mouvement et le liquide qui les touche coûtent. Toute
+// modification extérieure de la grille (nouveau paysage, bulles, gravité, densités…) appelle wakeAll().
 const CHUNK_SHIFT = 4; // blocs de 2^4 = 16 cellules de côté
 let chunkCols = 1, chunkRows = 1;
 let chunkNow = new Uint8Array(1), chunkNext = new Uint8Array(1);
@@ -722,13 +735,21 @@ function allocChunks() {
 }
 allocChunks();
 function wakeAll() { chunkNow.fill(1); chunkNext.fill(1); }
+// La case (x,y) vient de changer : réveille son bloc, et les blocs voisins seulement si elle est à
+// moins de wakeMargin cases de leur bord — seuls les grains aussi proches testent cette case pour
+// bouger. Au milieu d'un bloc, un seul bloc réveillé (au lieu des 9 alentour). Bords liés : le bloc
+// de l'autre bout de la ligne est un voisin (x >= GRID_W - M couvre le dernier bloc incomplet).
 function wake(x, y) {
   if (x < 0) x += GRID_W; else if (x >= GRID_W) x -= GRID_W;
+  const S = 1 << CHUNK_SHIFT, M = wakeMargin;
   const cx = x >> CHUNK_SHIFT, cy = y >> CHUNK_SHIFT;
-  for (let dy = -1; dy <= 1; dy++) {
+  const lx = x & (S - 1), ly = y & (S - 1);
+  const dx0 = lx < M ? -1 : 0, dx1 = lx >= S - M || x >= GRID_W - M ? 1 : 0;
+  const dy0 = ly < M ? -1 : 0, dy1 = ly >= S - M ? 1 : 0;
+  for (let dy = dy0; dy <= dy1; dy++) {
     const ry = cy + dy;
     if (ry < 0 || ry >= chunkRows) continue;
-    for (let dx = -1; dx <= 1; dx++) {
+    for (let dx = dx0; dx <= dx1; dx++) {
       let rx = cx + dx;
       if (rx < 0 || rx >= chunkCols) {
         if (!params.wrapEdges) continue;
@@ -738,7 +759,56 @@ function wake(x, y) {
     }
   }
 }
+function wakeIdx(i) { const y = (i / GRID_W) | 0; wake(i - y * GRID_W, y); }
+// La case (x,y) vient de se vider. En plus du voisinage, un effet à distance : si elle est juste
+// après une poche de bulles (dans le sens de la chute), elle devient la case d'atterrissage d'un
+// forçage par la pression (tryPressureShift) — le sable posé sur la poche, parfois loin au-dessus,
+// peut de nouveau bouger : on remonte la poche pour réveiller son bloc.
+function wakeEmptied(x, y) {
+  wake(x, y);
+  let cx = wx(x + upDX), cy = y + upDY, k = 0;
+  while (k < STACK_CAP && inBounds(cx, cy) && grid[idx(cx, cy)] === BUBBLE) { cx = wx(cx + upDX); cy += upDY; k++; }
+  if (k === 0 || !inBounds(cx, cy)) return;
+  const v = grid[idx(cx, cy)];
+  if (v >= SAND_MIN && v <= SAND_MAX) wake(cx, cy);
+}
+// Déplace le grain v de la case i vers la case voisine ti, et réveille autour des deux cases.
+function moveGrain(i, ti, v) {
+  grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1;
+  wakeIdx(ti);
+  const y = (i / GRID_W) | 0;
+  wakeEmptied(i - y * GRID_W, y);
+}
 function keepAwake(x, y) { chunkNext[(y >> CHUNK_SHIFT) * chunkCols + (x >> CHUNK_SHIFT)] = 1; }
+
+// Case "Afficher les blocs éveillés" : surligne par-dessus le sable les blocs simulés au dernier pas
+// (chunkNow), pour voir où la mise en veille joue ou non. Outil de diagnostic, non mémorisé.
+let chunkShow = false;
+function drawAwakeChunks(ctx, canvasW, canvasH) {
+  const S = 1 << CHUNK_SHIFT;
+  const sx = canvasW / GRID_W, sy = canvasH / GRID_H;
+  ctx.beginPath();
+  for (let cy = 0; cy < chunkRows; cy++) {
+    const y0 = cy * S, h = Math.min(S, GRID_H - y0);
+    for (let cx = 0; cx < chunkCols; cx++) {
+      if (!chunkNow[cy * chunkCols + cx]) continue;
+      const x0 = cx * S, w = Math.min(S, GRID_W - x0);
+      ctx.rect(x0 * sx, y0 * sy, w * sx, h * sy);
+    }
+  }
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 60, 60, 0.18)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 60, 60, 0.7)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+}
+function countAwakeChunks() {
+  let n = 0;
+  for (let c = 0; c < chunkNow.length; c++) n += chunkNow[c];
+  return n;
+}
 
 const params = { gravityStrength: 0.3 + (8 / 19) * 1.7, viscosity: 3, bubblePct: 40, flowPct: 10, flowDrift: 3, flowShow: false, wrapEdges: true, frozen: false, night: false, tilt: false }; // curseurs : gravité 9/20 (x1.0), viscosité 3, bulles 40%, courant 10% (plafond), dérive du courant x3, affichage courant off, bords liés on, paysage figé off, jour, inclinaison off (sandCount : voir plus bas)
 
@@ -1093,7 +1163,8 @@ function tryDisplaceSideways(x, y) {
   const useA = aFree && bFree ? Math.random() < 0.5 : aFree;
   const ti = useA ? idx(x + sAX, y + sAY) : idx(x + sBX, y + sBY);
   grid[ti] = grid[i]; moved[ti] = 1;
-  grid[i] = EMPTY;
+  grid[i] = EMPTY; // aussitôt remplie par le grain lourd (l'appelant la réveille)
+  wakeIdx(ti);
   return true;
 }
 
@@ -1112,7 +1183,7 @@ function tryMoveSand(x, y) {
       const fx = x + (flow.vx > 0 ? 1 : -1);
       if (inBounds(fx, y)) {
         const fi = idx(fx, y);
-        if (!moved[fi] && grid[fi] === EMPTY) { grid[fi] = v; grid[i] = EMPTY; moved[fi] = 1; return; }
+        if (!moved[fi] && grid[fi] === EMPTY) { moveGrain(i, fi, v); return; }
       }
     }
   }
@@ -1124,7 +1195,7 @@ function tryMoveSand(x, y) {
     const ni = idx(nx, ny);
     if (!moved[ni]) {
       const n = grid[ni];
-      if (n === EMPTY) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
+      if (n === EMPTY) { moveGrain(i, ni, v); return; }
       if (n === BUBBLE) {
         // Le poids du sable accumulé juste au-dessus (pondéré par densité) peut suffire à forcer le
         // passage plutôt que d'attendre indéfiniment un trou — mais plus la poche de bulles à
@@ -1145,7 +1216,7 @@ function tryMoveSand(x, y) {
       } else if (n >= SAND_MIN && n <= SAND_MAX && DENSITY[n] < DENSITY[v]) {
         // Un grain plus lourd tombe sur un grain plus léger : celui-ci est repoussé de côté pour
         // libérer la place, plutôt que d'être traversé.
-        if (tryDisplaceSideways(nx, ny)) { grid[ni] = v; grid[i] = EMPTY; moved[ni] = 1; return; }
+        if (tryDisplaceSideways(nx, ny)) { moveGrain(i, ni, v); return; }
       }
     }
   }
@@ -1162,8 +1233,8 @@ function tryMoveSand(x, y) {
   }
   const t1x = aFirst ? dAX : dBX, t1y = aFirst ? dAY : dBY;
   const t2x = aFirst ? dBX : dAX, t2y = aFirst ? dBY : dAY;
-  if (isFreeAt(x + t1x, y + t1y)) { const ti = idx(x + t1x, y + t1y); grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1; return; }
-  if (isFreeAt(x + t2x, y + t2y)) { const ti = idx(x + t2x, y + t2y); grid[ti] = v; grid[i] = EMPTY; moved[ti] = 1; }
+  if (isFreeAt(x + t1x, y + t1y)) { moveGrain(i, idx(x + t1x, y + t1y), v); return; }
+  if (isFreeAt(x + t2x, y + t2y)) moveGrain(i, idx(x + t2x, y + t2y), v);
 }
 
 // Un grain immobile a-t-il encore une case où aller ? (mêmes règles que tryMoveSand, sans les
@@ -1224,15 +1295,14 @@ function tryMoveBubble(x, y) {
 
   // Priorité 1 : une place libre juste au-dessus (à l'opposé de la gravité) -> la bulle y va
   // directement, sans tirage.
-  if (isFreeAt(x + upDX, y + upDY)) { const ti = idx(x + upDX, y + upDY); grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return; }
+  if (isFreeAt(x + upDX, y + upDY)) { moveGrain(i, idx(x + upDX, y + upDY), BUBBLE); return; }
   // Priorité 2 : sinon une diagonale libre au-dessus. Si les deux côtés sont libres à la fois,
   // seul le choix entre les deux est aléatoire (même priorité) ; sinon c'est déterministe.
   const aFree = isFreeAt(x + uAX, y + uAY);
   const bFree = isFreeAt(x + uBX, y + uBY);
   if (aFree || bFree) {
     const useA = aFree && bFree ? Math.random() < 0.5 : aFree;
-    const ti = useA ? idx(x + uAX, y + uAY) : idx(x + uBX, y + uBY);
-    grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1; return;
+    moveGrain(i, useA ? idx(x + uAX, y + uAY) : idx(x + uBX, y + uBY), BUBBLE); return;
   }
   // Priorité 3 : bloquée au-dessus ET en diagonale (typiquement collée sous une couche de sable)
   // -> se répand directement sur le côté, comme un gaz qui se love sous une surface plutôt que de
@@ -1245,8 +1315,7 @@ function tryMoveBubble(x, y) {
   const sideBFree = isFreeAt(x + sBX, y + sBY);
   if (sideAFree || sideBFree) {
     const useA = sideAFree && sideBFree ? Math.random() < 0.5 : sideAFree;
-    const ti = useA ? idx(x + sAX, y + sAY) : idx(x + sBX, y + sBY);
-    grid[ti] = BUBBLE; grid[i] = EMPTY; moved[ti] = 1;
+    moveGrain(i, useA ? idx(x + sAX, y + sAY) : idx(x + sBX, y + sBY), BUBBLE);
   }
 }
 
@@ -1256,11 +1325,11 @@ function processCell(x, y) {
   const v = grid[i];
   if (v === EMPTY) return;
   if (v === BUBBLE) tryMoveBubble(x, y); else tryMoveSand(x, y);
-  // A bougé (case vidée, ou remplie par un bloc poussé par la pression) : réveille les blocs
-  // alentour, ses voisins ont peut-être maintenant la place de bouger. Sinon, garde son propre
-  // bloc éveillé s'il avait une case où aller (il n'a juste pas été tiré au sort ce pas-ci).
-  if (moved[i] || grid[i] !== v) wake(x, y);
-  else if (v === BUBBLE ? bubbleCanMove(x, y) : sandCanMove(x, y, v)) keepAwake(x, y);
+  // A bougé (case vidée, ou remplie par un bloc poussé par la pression) : les blocs alentour ont
+  // déjà été réveillés au moment du déplacement (moveGrain, tryPressureShift). Sinon, garde son
+  // propre bloc éveillé s'il avait une case où aller (il n'a juste pas été tiré au sort ce pas-ci).
+  if (moved[i] || grid[i] !== v) return;
+  if (v === BUBBLE ? bubbleCanMove(x, y) : sandCanMove(x, y, v)) keepAwake(x, y);
 }
 
 // Un pas de simulation : lignes parcourues alternativement dans un sens puis dans l'autre (pour ne
@@ -2457,7 +2526,7 @@ function grabUfoGrain(pose) {
     const v = grid[i];
     if (v < SAND_MIN || v > SAND_MAX) continue;
     grid[i] = EMPTY;
-    wake(i % GRID_W, (i / GRID_W) | 0);
+    wakeEmptied(i % GRID_W, (i / GRID_W) | 0);
     ufoGrains.push({
       x: sx, y: sy, type: v, shade: shade[i], tint: tint[i], held: false,
       ang: Math.random() * Math.PI * 2, rad: Math.sqrt(Math.random()), spin: 1.5 + Math.random() * 2.5,
@@ -2803,6 +2872,7 @@ function render() {
     mainCtx.drawImage(glowSmallCanvas, 0, 0, mainCanvas.width, mainCanvas.height);
     mainCtx.restore();
   }
+  if (chunkShow) drawAwakeChunks(mainCtx, mainCanvas.width, mainCanvas.height);
 }
 
 function stepsPerFrame() {
@@ -2813,6 +2883,7 @@ function stepsPerFrame() {
 // à 60 fps) consommée par le calcul (step + render). Lissage exponentiel pour un affichage stable.
 const perfVal = document.getElementById("perfVal");
 const activityVal = document.getElementById("activityVal");
+const chunkVal = document.getElementById("chunkVal");
 const flowSpeedVal = document.getElementById("flowSpeedVal");
 const FRAME_BUDGET_MS = 1000 / 60;
 let fpsSmoothed = 0;
@@ -2867,6 +2938,7 @@ function loop(ts) {
     }
     recentlyMoved.fill(0);
     activityVal.textContent = moving.toLocaleString("fr-FR") + " / " + total.toLocaleString("fr-FR");
+    if (chunkShow) chunkVal.textContent = countAwakeChunks() + " / " + chunkNow.length;
     // C'est cette même activité qui alimente le courant (voir effectiveFlowPct()) : plus il y a
     // de particules en mouvement, plus le courant se rapproche de son plafond (curseur "Courant") ;
     // un tableau qui s'est calmé fait retomber le courant tout seul, sans minuterie.
@@ -2997,6 +3069,12 @@ flowDriftSlider.addEventListener("input", () => {
 const flowShowCheckbox = document.getElementById("flowShowCheckbox");
 flowShowCheckbox.addEventListener("change", () => {
   params.flowShow = flowShowCheckbox.checked;
+});
+
+const chunkShowCheckbox = document.getElementById("chunkShowCheckbox");
+chunkShowCheckbox.addEventListener("change", () => {
+  chunkShow = chunkShowCheckbox.checked;
+  chunkVal.textContent = chunkShow ? countAwakeChunks() + " / " + chunkNow.length : "";
 });
 
 const DENSITY_SLIDERS = [
