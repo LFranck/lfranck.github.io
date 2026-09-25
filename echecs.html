@@ -126,6 +126,10 @@
   .square { position:relative; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; font-size:clamp(30px,7.5vw,52px); user-select:none; }
   .square.light { background:#ebd6b0; }
   .square.dark { background:#7c5738; }
+  /* Dernier coup joué : cases de départ et d'arrivée teintées (fond seulement, pour ne pas gêner
+     les contours et ombres des autres surlignages). */
+  .square.light.last-move { background:#f2e27a; }
+  .square.dark.last-move { background:#b9a13a; }
   .square.selected { outline:3px solid #4f9dff; outline-offset:-3px; z-index:2; }
   .square.legal-target::after {
     content:""; position:absolute; width:24%; height:24%; border-radius:50%; background:rgba(20,20,20,.35);
@@ -259,9 +263,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.14.18";
+const APP_VERSION = "0.14.20";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-24";
+const APP_DATE = "2026-09-25";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 // Position de départ (une lettre par case) : majuscule = pièce blanche, minuscule = pièce noire,
@@ -302,6 +306,7 @@ let turn = "white";       // couleur qui doit jouer
 let selected = null;      // {row,col} de la pièce sélectionnée, ou null
 let legalTargets = [];    // cases atteignables depuis "selected"
 let history = [];         // pile des positions précédentes, pour l'annulation de coup
+let lastMove = null;      // { from:{row,col}, to:{row,col} } du dernier coup joué, surligné sur le plateau
 let enPassantTarget = null; // {row,col} : case vide qu'un pion peut capturer "en passant" juste après un double pas, sinon null
 let castlingRights = { wK: true, wQ: true, bK: true, bQ: true }; // roque encore possible : (w/b)=couleur, (K/Q)=petit/grand roque
 let pendingPromotion = null; // {row,col,color} : pion arrivé sur la dernière rangée, en attente du choix de promotion
@@ -740,8 +745,10 @@ function movePiece(from, to) {
     positionCounts: new Map(positionCounts),
     moveHistory: moveHistory.slice(),
     capturedPieces: { white: capturedPieces.white.slice(), black: capturedPieces.black.slice() },
+    lastMove,
   });
   undoBtn.disabled = false;
+  lastMove = { from: { row: from.row, col: from.col }, to: { row: to.row, col: to.col } };
 
   updateCastlingRights(from, to, movingPiece);
 
@@ -814,6 +821,7 @@ function undoMove() {
   positionCounts = prev.positionCounts;
   moveHistory = prev.moveHistory;
   capturedPieces = prev.capturedPieces;
+  lastMove = prev.lastMove;
   pendingPromotion = null;
   gameOver = false;
   scanMode = 0;
@@ -834,6 +842,7 @@ function resetGame() {
   selected = null;
   legalTargets = [];
   history = [];
+  lastMove = null;
   enPassantTarget = null;
   castlingRights = { wK: true, wQ: true, bK: true, bQ: true };
   pendingPromotion = null;
@@ -874,6 +883,10 @@ function renderBoard() {
       const isLight = (boardRow + boardCol) % 2 === 0;
       square.className = "square " + (isLight ? "light" : "dark");
       square.dataset.square = squareName(boardRow, boardCol);
+      if (lastMove && ((lastMove.from.row === boardRow && lastMove.from.col === boardCol) ||
+                       (lastMove.to.row === boardRow && lastMove.to.col === boardCol))) {
+        square.classList.add("last-move");
+      }
 
       if (selected && selected.row === boardRow && selected.col === boardCol) {
         square.classList.add("selected");
@@ -1157,14 +1170,32 @@ function analyzeSpeech(raw) {
     .replace(/([a-h][1-8])(?=[a-h][1-8])/g, "$1 "); // "e2e4" -> "e2 e4"
   const words = text ? text.split(" ") : [];
   const squares = [], keys = [];
+  // Lettres et chiffres isolés (pas collés en case) : précision de la colonne ou de la rangée de
+  // départ, comme en notation ("tour f en h1" = Tfh1, "cavalier 1 en e2"). Beaucoup de ces mots
+  // sont aussi des mots courants ("de", "un"…) : ce ne sont que des indices, utilisés seulement
+  // pour départager plusieurs coups possibles (voir narrowByHints).
+  const hints = { cols: [], rows: [] };
   for (let i = 0; i < words.length; i++) {
     const glued = /^([a-h])([1-8])$/.exec(words[i]);
     if (glued) { squares.push(toSquare(glued[1], glued[2])); continue; }
     const letter = LETTER_OF[words[i]], digit = DIGIT_OF[words[i + 1]];
     if (letter && digit) { squares.push(toSquare(letter, digit)); i++; continue; }
+    if (letter) hints.cols.push(FILES.indexOf(letter));
+    if (DIGIT_OF[words[i]]) hints.rows.push(8 - Number(DIGIT_OF[words[i]]));
     keys.push(phoneticKey(words[i]));
   }
-  return { squares, keys };
+  return { squares, keys, hints };
+}
+// Plusieurs coups possibles : garde celui dont la case de départ correspond aux indices de colonne
+// et/ou de rangée entendus, s'il n'y en a qu'un (colonne ET rangée, puis colonne, puis rangée).
+// Sinon, rien n'est tranché : tous les coups sont rendus, et la commande reste ambiguë.
+function narrowByHints(candidates, hints) {
+  if (candidates.length < 2 || !hints) return candidates;
+  const byCol = candidates.filter(c => hints.cols.includes(c.from.col));
+  const byRow = candidates.filter(c => hints.rows.includes(c.from.row));
+  const both = byCol.filter(c => hints.rows.includes(c.from.row));
+  for (const set of [both, byCol, byRow]) if (set.length === 1) return set;
+  return candidates;
 }
 function toSquare(letter, digit) {
   return { col: FILES.indexOf(letter), row: 8 - Number(digit) };
@@ -1177,7 +1208,7 @@ function pieceIn(keys, types) {
 
 // Traduit une phrase en intention ({ kind, ... }), sans rien jouer ; null si rien n'est compris.
 function parseVoiceCommand(raw) {
-  const { squares, keys } = analyzeSpeech(raw);
+  const { squares, keys, hints } = analyzeSpeech(raw);
   if (hasPhrase(keys, VOICE_WORDS.newGame) || hasWord(keys, VOICE_WORDS.restart)) return { kind: "newGame" };
   if (pendingPromotion) {
     const type = pieceIn(keys, ["Q", "R", "B", "N"]);
@@ -1188,7 +1219,7 @@ function parseVoiceCommand(raw) {
     return { kind: "castle", side: hasWord(keys, VOICE_WORDS.queenSide) ? "queen" : "king" };
   }
   if (squares.length >= 2) return { kind: "move", from: squares[0], to: squares[squares.length - 1] };
-  if (squares.length === 1) return { kind: "pieceMove", type: pieceIn(keys, ["P", "N", "B", "R", "Q", "K"]), to: squares[0] };
+  if (squares.length === 1) return { kind: "pieceMove", type: pieceIn(keys, ["P", "N", "B", "R", "Q", "K"]), to: squares[0], hints };
   return null;
 }
 
@@ -1224,7 +1255,7 @@ function intentScore(intent) {
       if (!piece || pieceColor(piece) !== turn) return 1;
       return computeLegalMoves(intent.from.row, intent.from.col).some(m => m.row === intent.to.row && m.col === intent.to.col) ? 2 : 1;
     }
-    case "pieceMove": return findPieceMoveCandidates(intent.type, intent.to).length === 1 ? 2 : 1;
+    case "pieceMove": return narrowByHints(findPieceMoveCandidates(intent.type, intent.to), intent.hints).length === 1 ? 2 : 1;
   }
   return 1;
 }
@@ -1280,7 +1311,7 @@ function executeVoiceIntent(rawTranscript, intent) {
       return;
     case "castle": voiceCastle(rawTranscript, intent.side); return;
     case "move": voiceMove(rawTranscript, intent.from, intent.to); return;
-    case "pieceMove": voiceMoveByPiece(rawTranscript, intent.type, intent.to); return;
+    case "pieceMove": voiceMoveByPiece(rawTranscript, intent.type, intent.to, intent.hints); return;
   }
 
   speak("Commande non comprise.");
@@ -1311,8 +1342,9 @@ function voiceMove(rawTranscript, from, to) {
 // pour le camp au trait, peut légalement rejoindre cette case (sinon, demande de préciser).
 // Sans nom de pièce (ex. "e4" seul, type=null), cherche parmi toutes les pièces du camp au trait :
 // un seul coup possible → il est joué ; plusieurs → on demande de préciser la pièce.
-function voiceMoveByPiece(rawTranscript, type, to) {
-  const candidates = findPieceMoveCandidates(type, to);
+// Une colonne ou une rangée de départ dite en plus ("tour f en h1") départage plusieurs pièces.
+function voiceMoveByPiece(rawTranscript, type, to, hints) {
+  const candidates = narrowByHints(findPieceMoveCandidates(type, to), hints);
   if (candidates.length === 1) {
     movePiece(candidates[0].from, candidates[0].move);
     speak(squareName(to.row, to.col));
@@ -1321,7 +1353,7 @@ function voiceMoveByPiece(rawTranscript, type, to) {
     speak("Coup illégal.");
     showVoiceFeedback(rawTranscript, "coup illégal");
   } else if (type) {
-    speak("Plusieurs pièces peuvent jouer ce coup, précisez la case de départ.");
+    speak("Plusieurs pièces peuvent jouer ce coup, précisez la colonne ou la case de départ.");
     showVoiceFeedback(rawTranscript, "coup ambigu");
   } else {
     speak("Plusieurs pièces peuvent jouer cette case, précisez la pièce.");
@@ -1377,6 +1409,8 @@ const HELP_TEXTS = {
   helpVoiceBtn: "Active le micro (bouton 🎙️ Voix) puis dis par exemple « e2 e4 », « cavalier f3 », " +
     "« e4 » (case seule : le coup est joué s'il n'y en a qu'un possible, sinon on te demande de préciser " +
     "la pièce), « petit roque », « grand roque », « annule » (ou « retour ») ou « nouvelle partie ». " +
+    "Si deux pièces peuvent jouer le coup, précise la colonne ou la rangée de départ, comme dans les livres : " +
+    "« tour f en h1 », « cavalier 1 en e2 ». " +
     "Les chiffres peuvent être dits en toutes lettres (« f trois »), « reine » vaut « dame » et « cheval » vaut « cavalier ». " +
     "À savoir : sous Chrome et Edge, la reconnaissance vocale du navigateur envoie l'audio aux serveurs " +
     "de Google ou Microsoft pour le transcrire ; la page, elle, ne l'enregistre pas et ne l'envoie nulle part.",
