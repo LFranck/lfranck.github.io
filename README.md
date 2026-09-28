@@ -52,7 +52,7 @@ Aider à traverser une crise de panique ou de forte anxiété, en détournant l'
 
 ## [SandSim.exe](sable.html)
 
-*Version 1.31.75*
+*Version 1.36.85*
 
 ### But de l'appli
 
@@ -63,8 +63,10 @@ Reproduire dans le navigateur ces cadres de « sable animé » où des sables co
 - Simulation de sables colorés de densités différentes, qui traversent une couche de bulles d'air et s'empilent avec un angle de repos naturel.
 - Ciel animé : soleil, nuages, avions, étoiles filantes, et un ovni rigolo qui aspire du sable de temps en temps.
 - Modes Jour, Nuit et Auto (la nuit tombe quand le soleil sort du ciel).
-- Plusieurs thèmes, chacun avec ses sables et son ciel : Montagne, Désert, Arctique, Océans, Lune… et une mystérieuse planète inconnue.
+- Plusieurs thèmes, chacun avec ses sables et son ciel : Montagne, Désert, Arctique, Océans, Lune (ciel sans atmosphère, constellé d'étoiles fixes)… et une mystérieuse planète inconnue. En mode Auto, le thème change à chaque cycle jour/nuit.
+- MultiCouches : trois tableaux de sable simulés en même temps et superposés, pour donner de la profondeur. Les dunes du fond, plus hautes, se fondent dans la brume de l'horizon (réglable pour chaque couche), et chaque couche a son propre courant.
 - Retournement du cadre à 180°, passage du format vertical au format horizontal, plein écran.
+- Raccourcis clavier : F plein écran, R retourner le cadre, N nouveau paysage, J jour / nuit / auto, T thème.
 - Inclinaison libre du tableau à la souris, au doigt ou en penchant son téléphone : la gravité suit.
 - Réglages de la simulation : résolution, bulles, viscosité, gravité, courant tourbillonnant, bords reliés…
 - Réglage du nombre de grains, de la proportion et de la densité de chaque couleur.
@@ -72,7 +74,7 @@ Reproduire dans le navigateur ces cadres de « sable animé » où des sables co
 
 ### Version WebGL (expérimentale)
 
-[SandSim.exe WebGL](sableWebGL.html) : la même appli, dont l'affichage du sable est calculé par la carte graphique. Elle permet de monter beaucoup plus haut en résolution (jusqu'à 1320 grains sur le petit côté, avec 300 000 grains au plus), en vue d'un futur mode plein écran à la résolution de l'écran. En cours d'optimisation : selon la machine, les très hautes résolutions peuvent encore ralentir.
+[SandSim.exe WebGL](sableWebGL.html) : la même appli, dont l'affichage du sable est calculé par la carte graphique. Elle permet de monter beaucoup plus haut en résolution (jusqu'à 1320 grains sur le petit côté, avec 300 000 grains au plus), et offre un vrai plein écran, à la résolution de l'écran. En cours d'optimisation : selon la machine, les très hautes résolutions peuvent encore ralentir.
 
 ## [Échecs](echecs.html)
 
