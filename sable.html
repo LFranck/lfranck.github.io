@@ -223,7 +223,7 @@
         <button class="btn" id="flipBtn" type="button">🔄 Retourner le cadre</button>
         <button class="btn ghost" id="newBtn" type="button">🌄 Nouveau paysage</button>
         <button class="btn ghost" id="dayNightBtn" type="button" title="Ambiance : Jour (soleil et nuages), Nuit (ciel étoilé, lune, sable éclairé d'une lumière lunaire bleutée) ou Auto (la nuit tombe quand le soleil sort du ciel, le jour revient avec la lune). Un clic passe au mode suivant.">☀️ Jour</button>
-        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux), Océans (basalte, sable, algues, corail, nacre, vus sous l'eau, de plus en plus sombres en profondeur), Lune (régolithe gris et sol orange, sous un ciel noir où brille la Terre). Un clic passe au thème suivant.">🏔️ Montagne</button>
+        <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux), Océans (basalte, sable, algues, corail, nacre, vus sous l'eau, de plus en plus sombres en profondeur), Lune (régolithe gris et sol orange, sous un ciel noir où brille la Terre), puis Auto (le thème change tout seul à chaque cycle jour/nuit, au lever du soleil). Un clic passe au thème suivant.">🏔️ Montagne</button>
         <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
         <button class="btn ghost" id="fullscreenBtn" type="button" title="Affiche le tableau sur tout l'écran. Raccourci : F. Échap pour quitter.">⛶ Plein écran</button>
       </div>
@@ -291,6 +291,29 @@
             <button type="button" class="infoBtn" data-target="subTilt" aria-label="Informations">i</button>
           </label>
           <span class="sub" id="subTilt">Attrapez le cadre (souris ou doigt) et faites-le tourner : la gravité suit son inclinaison et le sable coule dans le nouveau sens. Sur téléphone ou tablette, la gravité suit aussi l'inclinaison de l'appareil (sur iPhone/iPad, autorisez l'accès aux capteurs quand il est demandé). Décoché : le cadre revient droit, ou retourné.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="multiLayerCheckbox">
+            <span>MultiCouches</span>
+            <button type="button" class="infoBtn" data-target="subMultiLayer" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subMultiLayer">Donne de la profondeur au tableau : derrière le sable habituel, deux autres tableaux sont simulés en même temps, de plus en plus lointains. Plus une couche est loin, plus elle a de grains (ses dunes dépassent derrière celles de devant) et plus ses couleurs se fondent dans l'horizon du ciel (brume, réglable par couche ci-dessous). Demande environ trois fois plus de calcul.</span>
+        </div>
+        <div id="multiLayerOptions" class="cartoucheHidden">
+          <label>
+            <div class="row"><span>Brume — couche de devant<button type="button" class="infoBtn" data-target="subLayerHaze" aria-label="Informations">i</button></span><span class="value" id="layerHaze0Val">0%</span></div>
+            <input type="range" id="layerHaze0" min="0" max="100" value="0" step="1">
+          </label>
+          <label>
+            <div class="row"><span>Brume — couche du milieu</span><span class="value" id="layerHaze1Val">20%</span></div>
+            <input type="range" id="layerHaze1" min="0" max="100" value="20" step="1">
+          </label>
+          <label>
+            <div class="row"><span>Brume — couche du fond</span><span class="value" id="layerHaze2Val">45%</span></div>
+            <input type="range" id="layerHaze2" min="0" max="100" value="45" step="1">
+          </label>
+          <span class="sub" id="subLayerHaze">Brume de chaque couche : part de la couleur de l'horizon du ciel (celle du thème, de jour ou de nuit) mélangée à la couleur des grains. 0% = couleurs franches, 100% = la couche se fond entièrement dans l'horizon. Par défaut, seule la couche de devant n'a pas de brume. Sur la Lune, sans atmosphère, la brume est presque nulle quel que soit le réglage.</span>
         </div>
       </div>
 
@@ -405,7 +428,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.33.79";
+const APP_VERSION = "1.36.85";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-28";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -616,10 +639,16 @@ const THEMES = [
       sun: ["#ffffff", "#fff6e0"], halo: "255,255,240", haloAlpha: 0.35,
       cloud: "255,255,255", cloudAlpha: 0,
       world: "moon",
+      hazeScale: 0.08, // MultiCouches : sans atmosphère, presque pas de brume sur les couches lointaines
     },
   },
 ];
 let themeIndex = 0;
+// Biome automatique (bouton Thème, après le dernier thème) : passe au thème suivant à chaque cycle
+// jour/nuit complet (2 × SUN_PERIOD), au lever du soleil quand l'ambiance est elle aussi en Auto.
+// themeCycle = numéro du cycle en cours (-1 : pas encore lu, pas de changement à la première image).
+let themeAuto = false;
+let themeCycle = -1;
 let glowType = THEMES[0].glowType;
 // Couleur courante de chaque sable, lue par render() — remplie depuis le thème actif.
 const COLOR_RGB = {};
@@ -998,6 +1027,10 @@ function maxSandCount() {
 function clampSandCount(n) {
   return Math.max(0, Math.min(maxSandCount(), Math.round(n) || 0));
 }
+// Grains de la couche active (Multicouches : les couches lointaines en ont plus, voir LAYER_LOOKS).
+function layerSandCount() {
+  return clampSandCount(params.sandCount * LAYER_LOOKS[activeLayer].sand);
+}
 
 function countBubbles() {
   let c = 0;
@@ -1038,7 +1071,7 @@ function removeBubblesTo(target) {
 function scatterInitial() {
   grid.fill(EMPTY);
   ufoGrains = []; // nouveau paysage : les grains emportés par l'ovni ne reviennent pas
-  const sandCount = clampSandCount(params.sandCount);
+  const sandCount = layerSandCount();
   const topRows = Math.floor(GRID_H * 0.12);
   const regionSize = (GRID_H - topRows) * GRID_W;
   const cells = new Uint32Array(CELL_COUNT);
@@ -1071,7 +1104,7 @@ let layerSnapshot = null;
 
 function buildLayers() {
   grid.fill(EMPTY);
-  const sandCount = clampSandCount(params.sandCount);
+  const sandCount = layerSandCount();
   const total = sandWeightTotal();
   const types = SAND_COLOR_WEIGHTS.map(([t]) => t).sort((a, b) => DENSITY[b] - DENSITY[a]);
   // Grains par couleur, arrondis de façon à ce que la somme fasse exactement sandCount.
@@ -1387,9 +1420,9 @@ function step() {
 // ---------- Rendu ----------
 const mainCanvas = document.getElementById("sandCanvas");
 const mainCtx = mainCanvas.getContext("2d");
-const offCanvas = document.createElement("canvas");
+let offCanvas = document.createElement("canvas"); // propre à chaque couche (voir useLayer)
 offCanvas.width = GRID_W; offCanvas.height = GRID_H;
-const offCtx = offCanvas.getContext("2d");
+let offCtx = offCanvas.getContext("2d");
 let imgData = offCtx.createImageData(GRID_W, GRID_H);
 
 // Réalloue la grille et tout ce qui en dépend à une nouvelle résolution (petit côté en cellules ;
@@ -1413,13 +1446,13 @@ function allocateGrid(shortSide) {
 // Change de résolution (ou de format) et repart sur un nouveau paysage.
 function rebuildGrid(shortSide) {
   const oldCellCount = CELL_COUNT;
-  allocateGrid(shortSide);
+  allLayers(() => allocateGrid(shortSide));
   // Le nombre de grains suit la résolution (même taux de remplissage), sinon passer en basse
   // résolution puis revenir laisserait un tableau presque vide.
   params.sandCount = clampSandCount(params.sandCount * (CELL_COUNT / oldCellCount));
   syncSandCountInput();
   resetFrame();
-  scatterInitial();
+  allLayers(scatterInitial);
 }
 
 // Décor d'arrière-plan (ciel, soleil, nuages), redessiné à chaque image derrière le sable — aucune
@@ -1429,7 +1462,7 @@ function rebuildGrid(shortSide) {
 // zone plus grande que le canvas pour que les coins restent couverts pendant la rotation.
 // Tout ce qui dépend de la taille du canvas (dégradés, soleil, étoiles) est recalculé par
 // layoutSky() quand le format change (vertical/horizontal).
-let SKY_W, SKY_H, SKY_PAD, SKY_UNIT, skyGrad, nightGrad, SUN_R, STARS;
+let SKY_W, SKY_H, SKY_PAD, SKY_UNIT, skyGrad, nightGrad, SUN_R, STARS, MOON_STARS;
 function layoutSky() {
   SKY_W = mainCanvas.width / SKY_SCALE; SKY_H = mainCanvas.height / SKY_SCALE;
   SKY_PAD = Math.hypot(SKY_W, SKY_H) / 2; // marge couvrant le canvas sous n'importe quel angle
@@ -1445,6 +1478,17 @@ function layoutSky() {
     0.8 + Math.random() * 2.2,
     Math.random() * Math.PI * 2,
   ]);
+  // Ciel lunaire : sans atmosphère, beaucoup plus d'étoiles, jusqu'à l'horizon, et qui ne scintillent
+  // pas (le scintillement vient de l'air) ; [x, y, côté, éclat]. Surtout de petites étoiles pâles.
+  MOON_STARS = Array.from({ length: 700 }, () => {
+    const b = Math.random();
+    return [
+      -SKY_PAD + Math.random() * (SKY_W + 2 * SKY_PAD),
+      -SKY_PAD + Math.random() * (SKY_H + 2 * SKY_PAD),
+      0.4 + b * b * 1.3,
+      0.25 + 0.75 * b,
+    ];
+  });
 }
 // Dégradés du ciel de jour et de nuit, propres au thème actif (voir THEMES[].sky) — recalculés au
 // changement de format (layoutSky) et de thème (applyTheme).
@@ -1539,7 +1583,7 @@ function drawDaySky(ctx, t) {
   ctx.fillStyle = skyGrad;
   ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
 
-  if (sky.world === "moon") drawStarField(ctx, t, 0.8); // sans atmosphère, étoiles en plein jour
+  if (sky.world === "moon") drawMoonStars(ctx, 0.85); // sans atmosphère, étoiles en plein jour
   const [sunX, sunY] = celestialPos(t);
   if (sky.world === "ocean") {
     drawGodRays(ctx, t, sunX); // sous l'eau, le soleil n'est plus qu'une lumière diffuse
@@ -1836,6 +1880,7 @@ function drawNightSky(ctx, t) {
   ctx.fillRect(-SKY_PAD, -SKY_PAD, SKY_W + 2 * SKY_PAD, SKY_H + 2 * SKY_PAD);
 
   if (sky.world === "ocean") drawPlankton(ctx, t); // sous l'eau, le plancton remplace les étoiles
+  else if (sky.world === "moon") drawMoonStars(ctx, 1);
   else drawStarField(ctx, t, 1);
   for (const m of meteors) (m.jelly ? drawJellyfish : drawMeteor)(ctx, t, m);
   ctx.globalAlpha = nightMix;
@@ -1863,6 +1908,17 @@ function drawStarField(ctx, t, alpha) {
     ctx.beginPath();
     ctx.arc(sx, sy, sr, 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.globalAlpha = base;
+}
+// Étoiles du ciel lunaire (MOON_STARS) : fixes, sans scintillement ; petits carrés, bien moins
+// coûteux que des disques pour plusieurs centaines d'étoiles.
+function drawMoonStars(ctx, alpha) {
+  const base = ctx.globalAlpha;
+  ctx.fillStyle = "#fff";
+  for (const [sx, sy, sr, b] of MOON_STARS) {
+    ctx.globalAlpha = base * alpha * b;
+    ctx.fillRect(sx - sr / 2, sy - sr / 2, sr, sr);
   }
   ctx.globalAlpha = base;
 }
@@ -2773,6 +2829,11 @@ function drawSky(ctx, t) {
   const dt = lastSkyTs ? Math.min(0.1, t - lastSkyTs) : 0;
   lastSkyTs = t;
   if (dayMode === "auto") params.night = t % (2 * SUN_PERIOD) >= SUN_PERIOD;
+  if (themeAuto) {
+    const cycle = Math.floor(t / (2 * SUN_PERIOD));
+    if (themeCycle >= 0 && cycle !== themeCycle) { themeIndex = (themeIndex + 1) % THEMES.length; applyTheme(); }
+    themeCycle = cycle;
+  }
   const target = params.night ? 1 : 0;
   const stepMix = dt / NIGHT_FADE_S;
   nightMix = target > nightMix ? Math.min(target, nightMix + stepMix) : Math.max(target, nightMix - stepMix);
@@ -2830,8 +2891,74 @@ function drawDepthShade(ctx) {
   ctx.restore();
 }
 
-let lastLightKey = ""; // éclairage/thème de la dernière image (voir render)
+let lastLightKey = ""; // éclairage/thème de la dernière image de la couche active (voir renderLayer)
+
+// ---------- Multicouches ----------
+// Case "MultiCouches" : trois tableaux de sable simulés en même temps et superposés, pour donner de
+// la profondeur. Couche 0 = devant (le tableau habituel, seule couche hors MultiCouches), 1 = milieu,
+// 2 = fond. Plus une couche est loin, plus elle a de grains (ses dunes dépassent derrière celles de
+// devant) et plus ses couleurs se fondent dans l'horizon du ciel (brume, perspective
+// atmosphérique ; réglable par couche, curseurs "Brume"). Toutes partagent la
+// résolution, la gravité et les réglages ; chacune a sa grille, son propre courant (mêmes réglages,
+// autres tourbillons) et son propre suivi (blocs éveillés, lignes à redessiner…). Plutôt que de passer la couche en paramètre à toute la
+// simulation, ses variables globales (grid, moved, chunkNow…) sont échangées : useLayer(k) range
+// celles de la couche active et installe celles de la couche k. La couche 0 est active en dehors des
+// parcours de couches (interface, ovni, ciel, halo, blocs éveillés).
+const LAYER_LOOKS = [
+  { sand: 1, haze: 0 },      // devant : couleurs franches
+  { sand: 1.3, haze: 0.2 },  // milieu
+  { sand: 1.6, haze: 0.45 }, // fond : le plus de grains, le plus atténué
+];
+let multiLayer = false;
+let activeLayer = 0;
+const layers = [null]; // états rangés des couches (celui de la couche active vit dans les globales)
+function useLayer(k) {
+  if (k === activeLayer) return;
+  layers[activeLayer] = { grid, moved, moveStamp, shade, tint, chunkNow, chunkNext, dirtyMinY, dirtyMaxY, dirtyAll,
+    particleTotal, layerSnapshot, ufoGrains, offCanvas, offCtx, imgData, lastLightKey, flowVX, flowVY, flowDriftX, flowDriftY };
+  ({ grid, moved, moveStamp, shade, tint, chunkNow, chunkNext, dirtyMinY, dirtyMaxY, dirtyAll,
+    particleTotal, layerSnapshot, ufoGrains, offCanvas, offCtx, imgData, lastLightKey, flowVX, flowVY, flowDriftX, flowDriftY } = layers[k]);
+  activeLayer = k;
+}
+// Joue fn sur chaque couche, du fond vers l'avant : la couche 0 est active à la fin. Jamais imbriqué
+// (fn ne doit pas rappeler allLayers).
+function allLayers(fn) {
+  for (let k = layers.length - 1; k >= 0; k--) { useLayer(k); fn(); }
+}
+function newLayerState() {
+  const canvas = document.createElement("canvas");
+  canvas.width = GRID_W; canvas.height = GRID_H;
+  const ctx = canvas.getContext("2d");
+  return {
+    grid: new Uint8Array(CELL_COUNT), moved: new Uint8Array(CELL_COUNT), moveStamp: 1,
+    shade: new Float32Array(CELL_COUNT), tint: new Float32Array(CELL_COUNT),
+    chunkNow: new Uint8Array(chunkCols * chunkRows).fill(1), chunkNext: new Uint8Array(chunkCols * chunkRows).fill(1),
+    dirtyMinY: 0, dirtyMaxY: -1, dirtyAll: true, particleTotal: -1, layerSnapshot: null, ufoGrains: [],
+    offCanvas: canvas, offCtx: ctx, imgData: ctx.createImageData(GRID_W, GRID_H), lastLightKey: "",
+    // Courant propre à la couche : même bruit, mais lu ailleurs (départ de dérive tiré au hasard,
+    // loin de celui des autres couches) -> d'autres tourbillons. Champ calculé par setMultiLayer.
+    flowVX: new Float32Array(1), flowVY: new Float32Array(1),
+    flowDriftX: 50 + Math.random() * 200, flowDriftY: 50 + Math.random() * 200,
+  };
+}
+// generate : génère aussitôt le paysage des nouvelles couches (sinon, à l'appelant de le faire).
+function setMultiLayer(on, generate) {
+  multiLayer = on;
+  useLayer(0);
+  layers.length = 1;
+  if (!on) return;
+  for (let k = 1; k < LAYER_LOOKS.length; k++) {
+    layers[k] = newLayerState();
+    useLayer(k);
+    rebuildFlowField();
+    if (generate) scatterInitial();
+  }
+  useLayer(0);
+}
+const hexRgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+
 function render() {
+  useLayer(0); // le ciel fait bouger l'ovni, qui n'agit que sur la couche de devant
   // Le ciel d'abord : c'est lui qui fait avancer nightMix, utilisé juste après pour l'éclairage.
   const tSec = performance.now() / 1000;
   drawSky(mainCtx, tSec);
@@ -2842,8 +2969,52 @@ function render() {
   const wr = 1 + (WHITE_NIGHT_LIGHT[0] - 1) * nightMix;
   const wg = 1 + (WHITE_NIGHT_LIGHT[1] - 1) * nightMix;
   const wb = 1 + (WHITE_NIGHT_LIGHT[2] - 1) * nightMix;
-  const bubbleR = 210 * lr, bubbleG = 235 * lg, bubbleB = 255 * lb;
-  const glowOn = nightMix > 0;
+  // Brume des couches lointaines : la couleur de l'horizon du ciel (dernier arrêt des dégradés de
+  // jour et de nuit, fondus comme le ciel lui-même).
+  const sky = THEMES[themeIndex].sky;
+  const hd = hexRgb(sky.day[sky.day.length - 1][1]), hn = hexRgb(sky.night[sky.night.length - 1][1]);
+  const light = {
+    lr, lg, lb, wr, wg, wb,
+    bubbleR: 210 * lr, bubbleG: 235 * lg, bubbleB: 255 * lb,
+    hazeR: hd[0] + (hn[0] - hd[0]) * nightMix, hazeG: hd[1] + (hn[1] - hd[1]) * nightMix, hazeB: hd[2] + (hn[2] - hd[2]) * nightMix,
+    glowOn: nightMix > 0,
+    hazeScale: sky.hazeScale ?? 1, // brume du thème (Lune : presque aucune), × curseurs Brume
+    key: lr + "," + lg + "," + lb + "," + wr + "," + wg + "," + wb + "," + glowType + "," + themeIndex,
+  };
+
+  if (params.flowPct > 0 && params.flowShow) {
+    updateFlowViz();
+    renderFlowViz(mainCtx, mainCanvas.width, mainCanvas.height);
+  }
+  let front = null;
+  for (let k = layers.length - 1; k >= 0; k--) {
+    useLayer(k);
+    front = renderLayer(k, light);
+  }
+  // Couche de devant active à nouveau : grains de l'ovni, voile de profondeur, halo, blocs éveillés.
+  drawUfoGrains(mainCtx, lr, lg, lb);
+  if (THEMES[themeIndex].sky.depth) drawDepthShade(mainCtx); // avant la luminescence, qui reste vive
+
+  if (light.glowOn) {
+    if (front.rows > 0) glowCtx.putImageData(glowData, 0, 0, 0, front.y0, GRID_W, front.rows);
+    glowSmallCtx.imageSmoothingEnabled = true;
+    glowSmallCtx.clearRect(0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
+    glowSmallCtx.drawImage(glowCanvas, 0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
+    mainCtx.save();
+    mainCtx.globalCompositeOperation = "lighter";
+    mainCtx.globalAlpha = nightMix * (0.55 + 0.15 * Math.sin(tSec * GLOW_PULSE_SPEED));
+    mainCtx.drawImage(glowSmallCanvas, 0, 0, mainCanvas.width, mainCanvas.height);
+    mainCtx.restore();
+  }
+  if (chunkShow) drawAwakeChunks(mainCtx, mainCanvas.width, mainCanvas.height);
+}
+
+// Colore la couche active (couche k) et la dessine sur le canvas principal. Le halo de luminescence
+// n'est calculé que pour la couche de devant. Renvoie les lignes recalculées (pour le halo).
+function renderLayer(k, light) {
+  const { lr, lg, lb, wr, wg, wb, bubbleR, bubbleG, bubbleB } = light;
+  const look = LAYER_LOOKS[k];
+  const glowOn = k === 0 && light.glowOn;
   if (glowOn && (glowCanvas.width !== GRID_W || glowCanvas.height !== GRID_H)) {
     glowCanvas.width = GRID_W; glowCanvas.height = GRID_H;
     glowSmallCanvas.width = Math.max(1, Math.ceil(GRID_W / GLOW_DOWNSCALE));
@@ -2854,12 +3025,16 @@ function render() {
   // Seules les lignes modifiées depuis la dernière image (voir wake/wakeAll) sont recalculées —
   // sauf si l'éclairage (fondu jour/nuit), le thème ou la luminescence ont changé : tout est alors
   // à recolorer.
-  const lightKey = lr + "," + lg + "," + lb + "," + wr + "," + wg + "," + wb + "," + glowOn + "," + glowType + "," + themeIndex;
+  const haze = multiLayer ? look.haze * light.hazeScale : 0; // hors MultiCouches, le tableau habituel n'a pas de brume
+  const lightKey = light.key + "," + glowOn + "," + haze;
   if (lightKey !== lastLightKey) { lastLightKey = lightKey; dirtyAll = true; }
   const y0 = dirtyAll ? 0 : dirtyMinY, y1 = dirtyAll ? GRID_H - 1 : dirtyMaxY;
   clearDirtyRows();
   const data = imgData.data;
   const gdata = glowOn ? glowData.data : null;
+  // Brume : couleur finale = couleur éclairée × keep + couleur de l'horizon × haze (rien devant).
+  const keep = 1 - haze;
+  const hr = light.hazeR * haze, hg = light.hazeG * haze, hb = light.hazeB * haze;
   const pEnd = (y1 + 1) * GRID_W;
   for (let p = y0 * GRID_W; p < pEnd; p++) {
     const v = grid[p];
@@ -2874,42 +3049,24 @@ function render() {
     if (v === EMPTY) {
       data[o + 3] = 0;
     } else if (v === BUBBLE) {
-      data[o] = bubbleR; data[o + 1] = bubbleG; data[o + 2] = bubbleB; data[o + 3] = 165;
+      data[o] = bubbleR * keep + hr; data[o + 1] = bubbleG * keep + hg; data[o + 2] = bubbleB * keep + hb; data[o + 3] = 165;
     } else {
       const c = COLOR_RGB[v];
       const s = shade[p];
       const t = tint[p] * 14; // léger écart chaud/froid par grain, en plus de la luminosité
       const isWhite = v === glowType; // le sable luminescent du thème n'est pas assombri la nuit
-      data[o] = Math.max(0, Math.min(255, (c[0] * s + t) * (isWhite ? wr : lr)));
-      data[o + 1] = Math.max(0, Math.min(255, c[1] * s * (isWhite ? wg : lg)));
-      data[o + 2] = Math.max(0, Math.min(255, (c[2] * s - t) * (isWhite ? wb : lb)));
+      data[o] = Math.max(0, Math.min(255, (c[0] * s + t) * (isWhite ? wr : lr))) * keep + hr;
+      data[o + 1] = Math.max(0, Math.min(255, c[1] * s * (isWhite ? wg : lg))) * keep + hg;
+      data[o + 2] = Math.max(0, Math.min(255, (c[2] * s - t) * (isWhite ? wb : lb))) * keep + hb;
       data[o + 3] = 255;
     }
   }
   const rows = y1 - y0 + 1;
   if (rows > 0) offCtx.putImageData(imgData, 0, 0, 0, y0, GRID_W, rows);
 
-  if (params.flowPct > 0 && params.flowShow) {
-    updateFlowViz();
-    renderFlowViz(mainCtx, mainCanvas.width, mainCanvas.height);
-  }
   mainCtx.imageSmoothingEnabled = true;
   mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
-  drawUfoGrains(mainCtx, lr, lg, lb);
-  if (THEMES[themeIndex].sky.depth) drawDepthShade(mainCtx); // avant la luminescence, qui reste vive
-
-  if (glowOn) {
-    if (rows > 0) glowCtx.putImageData(glowData, 0, 0, 0, y0, GRID_W, rows);
-    glowSmallCtx.imageSmoothingEnabled = true;
-    glowSmallCtx.clearRect(0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
-    glowSmallCtx.drawImage(glowCanvas, 0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
-    mainCtx.save();
-    mainCtx.globalCompositeOperation = "lighter";
-    mainCtx.globalAlpha = nightMix * (0.55 + 0.15 * Math.sin(tSec * GLOW_PULSE_SPEED));
-    mainCtx.drawImage(glowSmallCanvas, 0, 0, mainCanvas.width, mainCanvas.height);
-    mainCtx.restore();
-  }
-  if (chunkShow) drawAwakeChunks(mainCtx, mainCanvas.width, mainCanvas.height);
+  return { y0, rows };
 }
 
 function stepsPerFrame() {
@@ -2943,11 +3100,12 @@ function loop(ts) {
   const frozen = params.frozen;
   // Fait dériver lentement le champ de courant ; borné pour éviter un saut si l'onglet était
   // en arrière-plan (rAF suspendu, donc dtMs potentiellement énorme au retour).
-  if (!frozen) updateFlowField(Math.min(dtMs, 100) / 1000);
+  // Chaque couche a son propre courant (MultiCouches), qui dérive au même rythme.
+  if (!frozen) allLayers(() => updateFlowField(Math.min(dtMs, 100) / 1000));
 
   const t0 = performance.now();
   const n = frozen ? 0 : stepsPerFrame();
-  for (let i = 0; i < n; i++) step();
+  if (n > 0) allLayers(() => { for (let i = 0; i < n; i++) step(); });
   windowSteps += n;
   render();
   const computeMs = performance.now() - t0;
@@ -2963,11 +3121,15 @@ function loop(ts) {
     // Particules (sable + bulles) en mouvement, en moyenne par pas depuis le dernier rafraîchissement
     // (~250 ms), sur le total présent dans la grille — puis on repart à zéro pour la fenêtre suivante.
     // Total recompté seulement quand la grille a changé autrement que par des déplacements (particleTotal = -1).
-    if (particleTotal < 0) {
-      particleTotal = 0;
-      for (let p = 0; p < CELL_COUNT; p++) if (grid[p] !== EMPTY) particleTotal++;
-    }
-    const total = particleTotal;
+    // MultiCouches : déplacements et particules de toutes les couches, additionnés.
+    let total = 0;
+    allLayers(() => {
+      if (particleTotal < 0) {
+        particleTotal = 0;
+        for (let p = 0; p < CELL_COUNT; p++) if (grid[p] !== EMPTY) particleTotal++;
+      }
+      total += particleTotal;
+    });
     const moving = windowSteps > 0 ? Math.round(windowMoves / windowSteps) : 0;
     windowMoves = 0; windowSteps = 0;
     activityVal.textContent = moving.toLocaleString("fr-FR") + " / " + total.toLocaleString("fr-FR");
@@ -3029,8 +3191,9 @@ bubbleSlider.addEventListener("input", () => {
   // Vue en couches : pas de bulles affichées, elles seront ajustées au décochage (exitLayerView).
   if (!params.frozen) {
     const target = bubbleTargetCount();
-    const current = countBubbles();
-    if (target > current) spawnBubblesTo(target); else removeBubblesTo(target);
+    allLayers(() => {
+      if (target > countBubbles()) spawnBubblesTo(target); else removeBubblesTo(target);
+    });
   }
   syncSandCountInput(); // le plafond de grains dépend de la place laissée aux bulles
 });
@@ -3077,7 +3240,7 @@ gravitySlider.addEventListener("input", () => {
 const wrapEdgesCheckbox = document.getElementById("wrapEdgesCheckbox");
 wrapEdgesCheckbox.addEventListener("change", () => {
   params.wrapEdges = wrapEdgesCheckbox.checked;
-  wakeAll(); // les grains du bord ont (ou n'ont plus) un passage de l'autre côté
+  allLayers(wakeAll); // les grains du bord ont (ou n'ont plus) un passage de l'autre côté
 });
 
 const flowSlider = document.getElementById("flowSlider");
@@ -3085,7 +3248,7 @@ const flowVal = document.getElementById("flowVal");
 flowSlider.addEventListener("input", () => {
   params.flowPct = Number(flowSlider.value);
   flowVal.textContent = params.flowPct + "%";
-  wakeAll(); // le courant donne (ou retire) des possibilités de mouvement latéral
+  allLayers(wakeAll); // le courant donne (ou retire) des possibilités de mouvement latéral
 });
 
 // Dérive du motif de courant : multiplicateur de FLOW_DRIFT_SPEED (voir updateFlowField).
@@ -3124,8 +3287,10 @@ for (const { name, type } of DENSITY_SLIDERS) {
     const v = Number(slider.value);
     DENSITY[type] = v;
     val.textContent = v.toFixed(2);
-    wakeAll(); // un grain devenu plus lourd que son voisin du dessous peut maintenant le repousser
-    if (params.frozen) buildLayers(); // l'ordre des couches suit les densités
+    allLayers(() => {
+      wakeAll(); // un grain devenu plus lourd que son voisin du dessous peut maintenant le repousser
+      if (params.frozen) buildLayers(); // l'ordre des couches suit les densités
+    });
   });
 }
 
@@ -3146,11 +3311,11 @@ for (const { name, type } of DENSITY_SLIDERS) {
   slider.addEventListener("input", () => {
     entry[1] = Number(slider.value);
     updateProportionLabels();
-    if (params.frozen) buildLayers(); // vue en couches : l'épaisseur suit le curseur en direct
+    if (params.frozen) allLayers(buildLayers); // vue en couches : l'épaisseur suit le curseur en direct
   });
   slider.addEventListener("change", () => {
     resetFrame();
-    scatterInitial();
+    allLayers(scatterInitial);
   });
 }
 
@@ -3166,7 +3331,7 @@ sandCountInput.addEventListener("change", () => {
   params.sandCount = clampSandCount(Number(sandCountInput.value));
   syncSandCountInput(); // réaffiche la valeur réellement retenue si elle a été plafonnée
   resetFrame();
-  scatterInitial();
+  allLayers(scatterInitial);
 });
 syncSandCountInput();
 updateProportionLabels(); // libellés % calculés depuis SAND_COLOR_WEIGHTS
@@ -3187,21 +3352,43 @@ function applyTheme() {
       group.lastElementChild.textContent = label;
     }
   }
-  themeBtn.textContent = theme.label;
+  themeBtn.textContent = themeAuto ? "🔁 Auto" : theme.label;
   buildSkyGradients(); // chaque thème a son propre ciel
   // Autres mondes : les boutons du cartouche Ciel nomment ce qui remplace étoiles filantes, avions
   // et ovni.
   [meteorBtn.textContent, planeBtn.textContent, ufoBtn.textContent] = skyWorld().labels;
 }
+// Cycle du bouton : chaque thème, puis Auto (passe aussitôt au thème suivant, le premier, puis en
+// change à chaque cycle jour/nuit), puis retour au premier thème.
 themeBtn.addEventListener("click", () => {
-  themeIndex = (themeIndex + 1) % THEMES.length;
+  if (themeAuto) { themeAuto = false; themeIndex = 0; }
+  else if (themeIndex === THEMES.length - 1) { themeAuto = true; themeCycle = -1; themeIndex = 0; }
+  else themeIndex++;
   applyTheme();
 });
+
+const multiLayerCheckbox = document.getElementById("multiLayerCheckbox");
+const multiLayerOptions = document.getElementById("multiLayerOptions");
+multiLayerCheckbox.addEventListener("change", () => {
+  setMultiLayer(multiLayerCheckbox.checked, true);
+  multiLayerOptions.classList.toggle("cartoucheHidden", !multiLayerCheckbox.checked);
+});
+// Curseurs de brume, un par couche (affichés seulement avec MultiCouches) : règlent
+// LAYER_LOOKS[k].haze (0-1, affiché en %). Hors MultiCouches, la couche de devant n'a jamais de
+// brume (voir renderLayer). Changer la valeur recolore toute la couche (clé d'éclairage).
+for (let k = 0; k < LAYER_LOOKS.length; k++) {
+  const slider = document.getElementById("layerHaze" + k);
+  const val = document.getElementById("layerHaze" + k + "Val");
+  slider.addEventListener("input", () => {
+    LAYER_LOOKS[k].haze = Number(slider.value) / 100;
+    val.textContent = slider.value + "%";
+  });
+}
 
 const frozenCheckbox = document.getElementById("frozenCheckbox");
 frozenCheckbox.addEventListener("change", () => {
   params.frozen = frozenCheckbox.checked;
-  if (params.frozen) enterLayerView(); else exitLayerView();
+  allLayers(params.frozen ? enterLayerView : exitLayerView);
 });
 
 // ---------- Cadre : rotation, retournement et inclinaison ----------
@@ -3226,8 +3413,10 @@ function updateGravity() {
   if (diff > Math.PI) diff = 2 * Math.PI - diff;
   if (diff < 1e-4) return;
   gravityAngle = angle;
-  wakeAll(); // tout ce qui était au repos peut se remettre à couler
-  if (params.frozen) buildLayers(); // les couches se reposent du nouveau côté de la gravité
+  allLayers(() => {
+    wakeAll(); // tout ce qui était au repos peut se remettre à couler
+    if (params.frozen) buildLayers(); // les couches se reposent du nouveau côté de la gravité
+  });
 }
 // Remet le cadre à l'endroit (tour complet le plus proche, pour ne pas le faire tournoyer).
 function resetFrame() {
@@ -3245,7 +3434,7 @@ document.getElementById("flipBtn").addEventListener("click", () => {
 });
 document.getElementById("newBtn").addEventListener("click", () => {
   resetFrame();
-  scatterInitial();
+  allLayers(scatterInitial);
 });
 
 // Inclinaison à la souris ou au doigt : on "attrape" le cadre et on le fait tourner autour de son
@@ -3375,10 +3564,10 @@ function collectSettings() {
   const panels = {};
   for (const { checkbox } of PANEL_TOGGLES) panels[checkbox] = document.getElementById(checkbox).checked;
   return {
-    res: Number(resolutionSlider.value), landscape, theme: themeIndex, dayMode,
+    res: Number(resolutionSlider.value), landscape, theme: themeIndex, themeAuto, dayMode,
     bubbles: params.bubblePct, viscosity: params.viscosity, gravity: Number(gravitySlider.value),
     flow: params.flowPct, flowDrift: params.flowDrift, flowShow: params.flowShow, wrap: params.wrapEdges, tilt: params.tilt,
-    sandCount: params.sandCount, dens, prop, panels,
+    sandCount: params.sandCount, multiLayer, layerHaze: LAYER_LOOKS.map((l) => Math.round(l.haze * 100)), dens, prop, panels,
   };
 }
 let settingsReset = false; // plus aucune sauvegarde une fois les réglages effacés (rechargement en cours)
@@ -3422,11 +3611,12 @@ function loadSettings() {
   };
 
   if (isNum(s.theme) && THEMES[s.theme]) { themeIndex = s.theme; applyTheme(); }
+  if (s.themeAuto === true) { themeAuto = true; applyTheme(); }
   if (typeof s.dayMode === "string") setDayMode(s.dayMode);
   if (typeof s.landscape === "boolean" && s.landscape !== landscape) setLandscape(s.landscape);
   if (isNum(s.res)) resolutionSlider.value = String(s.res);
   const [w, h] = gridDims(Number(resolutionSlider.value));
-  if (w !== GRID_W || h !== GRID_H) allocateGrid(Number(resolutionSlider.value));
+  if (w !== GRID_W || h !== GRID_H) allLayers(() => allocateGrid(Number(resolutionSlider.value)));
   updateResolutionLabel();
 
   setRange(gravitySlider, s.gravity);
@@ -3451,11 +3641,20 @@ function loadSettings() {
   if (isNum(s.sandCount)) params.sandCount = clampSandCount(s.sandCount);
   syncSandCountInput();
   if (s.tilt === true) setTilt(true, false);
+  // Couches créées à la résolution finale ; leur paysage est généré au démarrage, juste après.
+  if (Array.isArray(s.layerHaze)) {
+    for (let k = 0; k < LAYER_LOOKS.length; k++) setRange(document.getElementById("layerHaze" + k), s.layerHaze[k]);
+  }
+  if (s.multiLayer === true) {
+    multiLayerCheckbox.checked = true;
+    multiLayerOptions.classList.remove("cartoucheHidden");
+    setMultiLayer(true, false);
+  }
 }
 
 // ---------- Démarrage ----------
 loadSettings();
-scatterInitial();
+allLayers(scatterInitial);
 requestAnimationFrame(loop);
 </script>
 </body>
