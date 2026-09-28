@@ -96,6 +96,7 @@
      est calculée pour tenir à la fois dans 90% de la largeur et 80% de la hauteur, sans déformer. */
   .jarWrap.landscape { width:min(440px,90vw); aspect-ratio:160/110; }
   .stage:fullscreen .jarWrap.landscape { height:auto; max-width:none; width:min(90vw, calc(80vh * 160 / 110), 1280px); }
+  kbd { display:inline-block; min-width:1.4em; padding:0 4px; border:1px solid #555; border-radius:4px; background:#2a2a2a; color:#eee; font:600 11px/1.5 inherit; text-align:center; }
   /* Case "Incliner le tableau" : le cadre s'attrape pour le faire tourner (touch-action:none pour
      qu'un glisser au doigt tourne le cadre au lieu de faire défiler la page). Pendant le glisser,
      pas de transition : le cadre suit le pointeur sans retard. */
@@ -198,6 +199,8 @@
     <dt>Licence</dt><dd id="infoLicense"></dd>
   </dl>
   <div id="panelToggles">
+    <h3>Raccourcis clavier</h3>
+    <p style="margin:0 0 14px; font-size:13.5px; color:#ccc; line-height:1.7;"><kbd>F</kbd> plein écran · <kbd>R</kbd> retourner le cadre · <kbd>N</kbd> nouveau paysage · <kbd>J</kbd> jour / nuit / auto · <kbd>T</kbd> thème. <kbd>Échap</kbd> pour quitter le plein écran.</p>
     <h3>Cartouches affichés</h3>
     <label class="row"><input type="checkbox" id="toggleSettings"><span>🎛️ Réglages</span></label>
     <label class="row"><input type="checkbox" id="toggleFlow"><span>🌊 Courant</span></label>
@@ -222,7 +225,7 @@
         <button class="btn ghost" id="dayNightBtn" type="button" title="Ambiance : Jour (soleil et nuages), Nuit (ciel étoilé, lune, sable éclairé d'une lumière lunaire bleutée) ou Auto (la nuit tombe quand le soleil sort du ciel, le jour revient avec la lune). Un clic passe au mode suivant.">☀️ Jour</button>
         <button class="btn ghost" id="themeBtn" type="button" title="Thème des couleurs du sable : Montagne (couleurs d'origine), Désert (de l'orange au jaune), Arctique (du bleu au blanc, puis gris), 🪐 une autre planète au nom illisible (violet, magenta, turquoise, vert acide, rose, sous une planète à anneaux), Océans (basalte, sable, algues, corail, nacre, vus sous l'eau, de plus en plus sombres en profondeur), Lune (régolithe gris et sol orange, sous un ciel noir où brille la Terre). Un clic passe au thème suivant.">🏔️ Montagne</button>
         <button class="btn ghost" id="formatBtn" type="button" title="Passe le tableau en format horizontal (paysage) ou vertical (portrait). Génère un nouveau paysage.">▭ Horizontal</button>
-        <button class="btn ghost" id="fullscreenBtn" type="button">⛶ Plein écran</button>
+        <button class="btn ghost" id="fullscreenBtn" type="button" title="Affiche le tableau sur tout l'écran. Raccourci : F. Échap pour quitter.">⛶ Plein écran</button>
       </div>
     </div>
 
@@ -402,9 +405,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.33.78";
+const APP_VERSION = "1.33.79";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-09-25";
+const APP_DATE = "2026-09-28";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 const infoDialog = document.getElementById("infoDialog");
@@ -3337,6 +3340,21 @@ fullscreenBtn.addEventListener("click", () => {
 document.addEventListener("fullscreenchange", () => {
   const on = document.fullscreenElement === stageEl;
   fullscreenBtn.textContent = on ? "⛶ Quitter le plein écran" : "⛶ Plein écran";
+});
+
+// Raccourcis clavier (plein écran ou non) : déclenchent les boutons correspondants, pour garder
+// une seule logique (et la sauvegarde des réglages, qui écoute les clics). Ignorés pendant la
+// saisie dans un champ, et avec Ctrl/Alt/Cmd (raccourcis du navigateur).
+const SHORTCUTS = { f: "fullscreenBtn", r: "flipBtn", n: "newBtn", j: "dayNightBtn", t: "themeBtn" };
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+  const el = e.target;
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+  if (infoDialog.open) return;
+  const id = SHORTCUTS[e.key.toLowerCase()];
+  if (!id) return;
+  e.preventDefault();
+  document.getElementById(id).click();
 });
 
 // ---------- Réglages mémorisés ----------
