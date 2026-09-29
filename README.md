@@ -52,7 +52,7 @@ Aider à traverser une crise de panique ou de forte anxiété, en détournant l'
 
 ## [SandSim.exe](sable.html)
 
-*Version 1.36.85*
+*Version 1.36.88*
 
 ### But de l'appli
 
@@ -64,7 +64,7 @@ Reproduire dans le navigateur ces cadres de « sable animé » où des sables co
 - Ciel animé : soleil, nuages, avions, étoiles filantes, et un ovni rigolo qui aspire du sable de temps en temps.
 - Modes Jour, Nuit et Auto (la nuit tombe quand le soleil sort du ciel).
 - Plusieurs thèmes, chacun avec ses sables et son ciel : Montagne, Désert, Arctique, Océans, Lune (ciel sans atmosphère, constellé d'étoiles fixes)… et une mystérieuse planète inconnue. En mode Auto, le thème change à chaque cycle jour/nuit.
-- MultiCouches : trois tableaux de sable simulés en même temps et superposés, pour donner de la profondeur. Les dunes du fond, plus hautes, se fondent dans la brume de l'horizon (réglable pour chaque couche), et chaque couche a son propre courant.
+- MultiCouches : trois tableaux de sable simulés en même temps et superposés, pour donner de la profondeur. Les dunes du fond, plus hautes, se fondent dans la brume de l'horizon (réglable pour chaque couche), chaque couche a son propre courant, et l'ovni vient aspirer du sable dans l'une ou l'autre.
 - Retournement du cadre à 180°, passage du format vertical au format horizontal, plein écran.
 - Raccourcis clavier : F plein écran, R retourner le cadre, N nouveau paysage, J jour / nuit / auto, T thème.
 - Inclinaison libre du tableau à la souris, au doigt ou en penchant son téléphone : la gravité suit.
