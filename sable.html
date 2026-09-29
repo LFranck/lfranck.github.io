@@ -306,12 +306,12 @@
             <input type="range" id="layerHaze0" min="0" max="100" value="0" step="1">
           </label>
           <label>
-            <div class="row"><span>Brume — couche du milieu</span><span class="value" id="layerHaze1Val">20%</span></div>
-            <input type="range" id="layerHaze1" min="0" max="100" value="20" step="1">
+            <div class="row"><span>Brume — couche du milieu</span><span class="value" id="layerHaze1Val">45%</span></div>
+            <input type="range" id="layerHaze1" min="0" max="100" value="45" step="1">
           </label>
           <label>
-            <div class="row"><span>Brume — couche du fond</span><span class="value" id="layerHaze2Val">45%</span></div>
-            <input type="range" id="layerHaze2" min="0" max="100" value="45" step="1">
+            <div class="row"><span>Brume — couche du fond</span><span class="value" id="layerHaze2Val">75%</span></div>
+            <input type="range" id="layerHaze2" min="0" max="100" value="75" step="1">
           </label>
           <span class="sub" id="subLayerHaze">Brume de chaque couche : part de la couleur de l'horizon du ciel (celle du thème, de jour ou de nuit) mélangée à la couleur des grains. 0% = couleurs franches, 100% = la couche se fond entièrement dans l'horizon. Par défaut, seule la couche de devant n'a pas de brume. Sur la Lune, sans atmosphère, la brume est presque nulle quel que soit le réglage.</span>
         </div>
@@ -428,7 +428,7 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "1.36.85";
+const APP_VERSION = "1.36.88";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
 const APP_DATE = "2026-09-28";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
@@ -2374,10 +2374,14 @@ function ufoPathBlocked(y) {
   }
   return false;
 }
+// MultiCouches : l'engin passe derrière toutes les couches, le sable de chacune peut donc le bloquer.
 function pickUfoAltitude() {
   const s = SKY_UNIT * 0.05, yLow = SKY_H * 0.3, yHigh = SKY_H * 0.12, yTop = 1.3 * s;
-  const clear = [];
-  for (let y = yLow; y >= yTop; y -= s * 0.5) if (!ufoPathBlocked(y)) clear.push(y); // de bas en haut
+  const clear = [], prev = activeLayer;
+  for (let y = yLow; y >= yTop; y -= s * 0.5) { // de bas en haut
+    if (!layers.some((_, k) => (useLayer(k), ufoPathBlocked(y)))) clear.push(y);
+  }
+  useLayer(prev);
   if (!clear.length) return -1;
   const usual = clear.filter((y) => y >= yHigh);
   return usual.length ? usual[Math.floor(Math.random() * usual.length)] : clear[0];
@@ -2386,7 +2390,9 @@ function pickUfoAltitude() {
 function spawnUfo(t) {
   const y = pickUfoAltitude();
   if (y < 0) return false;
-  ufo = { dir: randomSide(), t0: t, y, xc: SKY_W * (0.3 + Math.random() * 0.4), grabAcc: 0 };
+  // layer : couche (MultiCouches) dont le rayon aspire les grains, tirée au hasard à chaque visite.
+  ufo = { dir: randomSide(), t0: t, y, xc: SKY_W * (0.3 + Math.random() * 0.4), grabAcc: 0,
+    layer: Math.floor(Math.random() * layers.length) };
   ufo.pose = ufoPose(t);
   return true;
 }
@@ -2547,6 +2553,9 @@ function drawMiniUfo(ctx, t, p) {
 // arrivée jusqu'à 0,3 ; rayon de 0,3 à 0,58 ; grains tenus jusqu'à 0,72 ; relâchement et départ.
 const UFO_BEAM_START = 0.3, UFO_BEAM_END = 0.58, UFO_RELEASE = 0.72;
 const UFO_BEAM_LENGTH = 1.2; // longueur du rayon, en hauteurs de ciel (il va jusqu'au fond)
+// Demi-largeur du rayon (en tailles d'engin s) sous l'engin et au bout du rayon : les grains sont
+// aspirés sur toute cette largeur.
+const UFO_BEAM_TOP = 0.4, UFO_BEAM_SPREAD = 3.2;
 
 // Position et attitude de l'ovni à l'instant t (repère du ciel) : centre, inclinaison, puissance du
 // rayon (0 = éteint), âge, avancement de la visite et taille de référence s.
@@ -2599,7 +2608,7 @@ function grabUfoGrain(pose) {
   const s = pose.s, top = pose.y + 0.2 * s, h = SKY_H * UFO_BEAM_LENGTH;
   const u = Math.random() * 2 - 1, stepPx = SKY_W / GRID_W;
   for (let d = 0; d < h; d += stepPx) {
-    const sx = pose.x + u * (0.4 * s + 1.2 * s * d / h), sy = top + d;
+    const sx = pose.x + u * (UFO_BEAM_TOP + (UFO_BEAM_SPREAD - UFO_BEAM_TOP) * d / h) * s, sy = top + d;
     const [gx, gy] = skyToGrid(sx, sy);
     const i = gridCellAt(gx, gy);
     if (i < 0) continue;
@@ -2650,8 +2659,15 @@ function releaseUfoGrains() {
 
 // Rayon tracteur : aspire des grains tant qu'il est allumé (pas en vue figée, qui met le sable de
 // côté), les fait monter vers la soucoupe où ils tourbillonnent en amas, puis les relâche.
+// Agit sur la couche visée par l'ovni (ufo.layer), puis rend la main à la couche de devant.
 function updateUfoGrains(t, dt) {
   if (!ufo) return;
+  if (ufo.layer >= layers.length) ufo.layer = 0; // MultiCouches décoché pendant la visite
+  useLayer(ufo.layer);
+  updateActiveUfoGrains(t, dt);
+  useLayer(0);
+}
+function updateActiveUfoGrains(t, dt) {
   const pose = ufo.pose, s = pose.s;
   if (pose.beam > 0.3 && !params.frozen) {
     ufo.grabAcc += dt * UFO_GRAB_PER_S * pose.beam;
@@ -2675,10 +2691,12 @@ function updateUfoGrains(t, dt) {
   if (pose.p >= UFO_RELEASE && ufoGrains.length) releaseUfoGrains();
 }
 
-// Grains emportés, dessinés par-dessus le sable dans le repère du ciel, avec l'éclairage du moment
-// (lr, lg, lb : facteurs de lumière de render()).
-function drawUfoGrains(ctx, lr, lg, lb) {
+// Grains emportés de la couche active, dessinés par-dessus son sable dans le repère du ciel, avec
+// l'éclairage du moment et la brume de la couche (light, haze : voir render() et renderLayer()).
+function drawUfoGrains(ctx, light, haze) {
   if (!ufoGrains.length) return;
+  const { lr, lg, lb } = light, keep = 1 - haze;
+  const hr = light.hazeR * haze, hg = light.hazeG * haze, hb = light.hazeB * haze;
   const size = (SKY_W / GRID_W) * 1.2;
   ctx.save();
   ctx.scale(SKY_SCALE, SKY_SCALE);
@@ -2690,7 +2708,7 @@ function drawUfoGrains(ctx, lr, lg, lb) {
     const r = Math.max(0, Math.min(255, (c[0] * g.shade + k) * lr));
     const gr = Math.max(0, Math.min(255, c[1] * g.shade * lg));
     const b = Math.max(0, Math.min(255, (c[2] * g.shade - k) * lb));
-    ctx.fillStyle = "rgb(" + (r | 0) + "," + (gr | 0) + "," + (b | 0) + ")";
+    ctx.fillStyle = "rgb(" + ((r * keep + hr) | 0) + "," + ((gr * keep + hg) | 0) + "," + ((b * keep + hb) | 0) + ")";
     ctx.fillRect(g.x - size / 2, g.y - size / 2, size, size);
   }
   ctx.restore();
@@ -2706,7 +2724,8 @@ function drawTractorBeam(ctx, beam, s, rgb = "180,255,140") {
     g.addColorStop(1, "rgba(" + rgb + ",0)");
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.moveTo(-0.4 * s, 0.2 * s); ctx.lineTo(0.4 * s, 0.2 * s); ctx.lineTo(1.6 * s, h); ctx.lineTo(-1.6 * s, h);
+    ctx.moveTo(-UFO_BEAM_TOP * s, 0.2 * s); ctx.lineTo(UFO_BEAM_TOP * s, 0.2 * s);
+    ctx.lineTo(UFO_BEAM_SPREAD * s, h); ctx.lineTo(-UFO_BEAM_SPREAD * s, h);
     ctx.fill();
   }
 }
@@ -2865,11 +2884,27 @@ const WHITE_GLOW_RGB = [190, 235, 255]; // couleur du halo
 const WHITE_NIGHT_LIGHT = [1.0, 1.04, 1.1]; // éclairage des grains blancs eux-mêmes, en pleine nuit
 const GLOW_DOWNSCALE = 4;
 const GLOW_PULSE_SPEED = 1.3; // rad/s
-const glowCanvas = document.createElement("canvas");
-const glowCtx = glowCanvas.getContext("2d");
-const glowSmallCanvas = document.createElement("canvas");
-const glowSmallCtx = glowSmallCanvas.getContext("2d");
-let glowData = null;
+// Un calque de halo par couche (MultiCouches) : chaque couche ne recalcule que ses propres lignes
+// modifiées, un calque commun mélangerait leurs grains. Dimensionné à la première nuit (renderLayer).
+function newGlowState() {
+  const canvas = document.createElement("canvas");
+  const small = document.createElement("canvas");
+  return { canvas, ctx: canvas.getContext("2d"), small, smallCtx: small.getContext("2d"), data: null };
+}
+let glow = newGlowState(); // calque de la couche active (échangé par useLayer)
+// Ajoute le halo de la couche active par-dessus le canvas principal. res = lignes recalculées par
+// renderLayer, strength = atténuation (couches lointaines).
+function drawGlow(res, tSec, strength) {
+  if (res.rows > 0) glow.ctx.putImageData(glow.data, 0, 0, 0, res.y0, GRID_W, res.rows);
+  glow.smallCtx.imageSmoothingEnabled = true;
+  glow.smallCtx.clearRect(0, 0, glow.small.width, glow.small.height);
+  glow.smallCtx.drawImage(glow.canvas, 0, 0, glow.small.width, glow.small.height);
+  mainCtx.save();
+  mainCtx.globalCompositeOperation = "lighter";
+  mainCtx.globalAlpha = strength * nightMix * (0.55 + 0.15 * Math.sin(tSec * GLOW_PULSE_SPEED));
+  mainCtx.drawImage(glow.small, 0, 0, mainCanvas.width, mainCanvas.height);
+  mainCtx.restore();
+}
 
 // Atténuation de la lumière avec la profondeur (thème Océans) : un voile en mode "multiply", par-
 // dessus le ciel, le sable et les bulles, qui laisse la surface intacte (blanc = aucun effet) et
@@ -2906,8 +2941,8 @@ let lastLightKey = ""; // éclairage/thème de la dernière image de la couche a
 // parcours de couches (interface, ovni, ciel, halo, blocs éveillés).
 const LAYER_LOOKS = [
   { sand: 1, haze: 0 },      // devant : couleurs franches
-  { sand: 1.3, haze: 0.2 },  // milieu
-  { sand: 1.6, haze: 0.45 }, // fond : le plus de grains, le plus atténué
+  { sand: 1.3, haze: 0.45 }, // milieu
+  { sand: 1.6, haze: 0.75 }, // fond : le plus de grains, le plus atténué
 ];
 let multiLayer = false;
 let activeLayer = 0;
@@ -2915,9 +2950,9 @@ const layers = [null]; // états rangés des couches (celui de la couche active 
 function useLayer(k) {
   if (k === activeLayer) return;
   layers[activeLayer] = { grid, moved, moveStamp, shade, tint, chunkNow, chunkNext, dirtyMinY, dirtyMaxY, dirtyAll,
-    particleTotal, layerSnapshot, ufoGrains, offCanvas, offCtx, imgData, lastLightKey, flowVX, flowVY, flowDriftX, flowDriftY };
+    particleTotal, layerSnapshot, ufoGrains, offCanvas, offCtx, imgData, lastLightKey, glow, flowVX, flowVY, flowDriftX, flowDriftY };
   ({ grid, moved, moveStamp, shade, tint, chunkNow, chunkNext, dirtyMinY, dirtyMaxY, dirtyAll,
-    particleTotal, layerSnapshot, ufoGrains, offCanvas, offCtx, imgData, lastLightKey, flowVX, flowVY, flowDriftX, flowDriftY } = layers[k]);
+    particleTotal, layerSnapshot, ufoGrains, offCanvas, offCtx, imgData, lastLightKey, glow, flowVX, flowVY, flowDriftX, flowDriftY } = layers[k]);
   activeLayer = k;
 }
 // Joue fn sur chaque couche, du fond vers l'avant : la couche 0 est active à la fin. Jamais imbriqué
@@ -2934,7 +2969,7 @@ function newLayerState() {
     shade: new Float32Array(CELL_COUNT), tint: new Float32Array(CELL_COUNT),
     chunkNow: new Uint8Array(chunkCols * chunkRows).fill(1), chunkNext: new Uint8Array(chunkCols * chunkRows).fill(1),
     dirtyMinY: 0, dirtyMaxY: -1, dirtyAll: true, particleTotal: -1, layerSnapshot: null, ufoGrains: [],
-    offCanvas: canvas, offCtx: ctx, imgData: ctx.createImageData(GRID_W, GRID_H), lastLightKey: "",
+    offCanvas: canvas, offCtx: ctx, imgData: ctx.createImageData(GRID_W, GRID_H), lastLightKey: "", glow: newGlowState(),
     // Courant propre à la couche : même bruit, mais lu ailleurs (départ de dérive tiré au hasard,
     // loin de celui des autres couches) -> d'autres tourbillons. Champ calculé par setMultiLayer.
     flowVX: new Float32Array(1), flowVY: new Float32Array(1),
@@ -2958,7 +2993,7 @@ function setMultiLayer(on, generate) {
 const hexRgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
 
 function render() {
-  useLayer(0); // le ciel fait bouger l'ovni, qui n'agit que sur la couche de devant
+  useLayer(0); // le ciel fait bouger l'ovni (qui passe lui-même sur la couche qu'il vise, puis revient à 0)
   // Le ciel d'abord : c'est lui qui fait avancer nightMix, utilisé juste après pour l'éclairage.
   const tSec = performance.now() / 1000;
   drawSky(mainCtx, tSec);
@@ -2986,40 +3021,33 @@ function render() {
     updateFlowViz();
     renderFlowViz(mainCtx, mainCanvas.width, mainCanvas.height);
   }
+  // Le halo d'une couche lointaine est dessiné juste après elle, avant les couches de devant : leurs
+  // grains le masquent, comme ils masquent ceux de derrière. Il est atténué comme ses couleurs (brume).
   let front = null;
   for (let k = layers.length - 1; k >= 0; k--) {
     useLayer(k);
     front = renderLayer(k, light);
+    drawUfoGrains(mainCtx, light, front.haze); // grains aspirés dans cette couche, cachés par celles de devant
+    if (k > 0 && light.glowOn) drawGlow(front, tSec, 1 - front.haze);
   }
-  // Couche de devant active à nouveau : grains de l'ovni, voile de profondeur, halo, blocs éveillés.
-  drawUfoGrains(mainCtx, lr, lg, lb);
+  // Couche de devant active à nouveau : voile de profondeur, halo, blocs éveillés.
   if (THEMES[themeIndex].sky.depth) drawDepthShade(mainCtx); // avant la luminescence, qui reste vive
 
-  if (light.glowOn) {
-    if (front.rows > 0) glowCtx.putImageData(glowData, 0, 0, 0, front.y0, GRID_W, front.rows);
-    glowSmallCtx.imageSmoothingEnabled = true;
-    glowSmallCtx.clearRect(0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
-    glowSmallCtx.drawImage(glowCanvas, 0, 0, glowSmallCanvas.width, glowSmallCanvas.height);
-    mainCtx.save();
-    mainCtx.globalCompositeOperation = "lighter";
-    mainCtx.globalAlpha = nightMix * (0.55 + 0.15 * Math.sin(tSec * GLOW_PULSE_SPEED));
-    mainCtx.drawImage(glowSmallCanvas, 0, 0, mainCanvas.width, mainCanvas.height);
-    mainCtx.restore();
-  }
+  if (light.glowOn) drawGlow(front, tSec, 1);
   if (chunkShow) drawAwakeChunks(mainCtx, mainCanvas.width, mainCanvas.height);
 }
 
-// Colore la couche active (couche k) et la dessine sur le canvas principal. Le halo de luminescence
-// n'est calculé que pour la couche de devant. Renvoie les lignes recalculées (pour le halo).
+// Colore la couche active (couche k) et la dessine sur le canvas principal, en remplissant au
+// passage son calque de halo (la nuit). Renvoie les lignes recalculées et la brume (pour le halo).
 function renderLayer(k, light) {
   const { lr, lg, lb, wr, wg, wb, bubbleR, bubbleG, bubbleB } = light;
   const look = LAYER_LOOKS[k];
-  const glowOn = k === 0 && light.glowOn;
-  if (glowOn && (glowCanvas.width !== GRID_W || glowCanvas.height !== GRID_H)) {
-    glowCanvas.width = GRID_W; glowCanvas.height = GRID_H;
-    glowSmallCanvas.width = Math.max(1, Math.ceil(GRID_W / GLOW_DOWNSCALE));
-    glowSmallCanvas.height = Math.max(1, Math.ceil(GRID_H / GLOW_DOWNSCALE));
-    glowData = glowCtx.createImageData(GRID_W, GRID_H);
+  const glowOn = light.glowOn;
+  if (glowOn && (glow.canvas.width !== GRID_W || glow.canvas.height !== GRID_H)) {
+    glow.canvas.width = GRID_W; glow.canvas.height = GRID_H;
+    glow.small.width = Math.max(1, Math.ceil(GRID_W / GLOW_DOWNSCALE));
+    glow.small.height = Math.max(1, Math.ceil(GRID_H / GLOW_DOWNSCALE));
+    glow.data = glow.ctx.createImageData(GRID_W, GRID_H);
     dirtyAll = true;
   }
   // Seules les lignes modifiées depuis la dernière image (voir wake/wakeAll) sont recalculées —
@@ -3031,7 +3059,7 @@ function renderLayer(k, light) {
   const y0 = dirtyAll ? 0 : dirtyMinY, y1 = dirtyAll ? GRID_H - 1 : dirtyMaxY;
   clearDirtyRows();
   const data = imgData.data;
-  const gdata = glowOn ? glowData.data : null;
+  const gdata = glowOn ? glow.data.data : null;
   // Brume : couleur finale = couleur éclairée × keep + couleur de l'horizon × haze (rien devant).
   const keep = 1 - haze;
   const hr = light.hazeR * haze, hg = light.hazeG * haze, hb = light.hazeB * haze;
@@ -3066,7 +3094,7 @@ function renderLayer(k, light) {
 
   mainCtx.imageSmoothingEnabled = true;
   mainCtx.drawImage(offCanvas, 0, 0, GRID_W, GRID_H, 0, 0, mainCanvas.width, mainCanvas.height);
-  return { y0, rows };
+  return { y0, rows, haze };
 }
 
 function stepsPerFrame() {
