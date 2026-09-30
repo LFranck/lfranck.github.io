@@ -78,7 +78,7 @@ Reproduire dans le navigateur ces cadres de « sable animé » où des sables co
 
 ## [Échecs](echecs.html)
 
-*Version 0.14.18*
+*Version 0.14.20*
 
 ### But de l'appli
 
