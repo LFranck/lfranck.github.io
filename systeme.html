@@ -1,0 +1,1994 @@
+<!DOCTYPE html>
+<!--
+  StarForge — Naissance d'un système stellaire
+  Ces informations (version, auteur, date, licence) sont la source unique :
+  elles sont reprises dans les constantes APP_* du script et affichées dans
+  la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
+
+  Version : 0.3.6
+  Auteur  : Franck Legrand <franck.legrand@gmail.com>
+  Date    : 2026-09-30
+  Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
+  Statut  : Prototype (en cours de développement).
+  © 2026 Franck Legrand. Tous droits réservés.
+-->
+<html lang="fr">
+<head>
+<!-- Google Analytics, chargé seulement si le visiteur l'accepte (bandeau de consentement : consent.js) -->
+<script src="consent.js" data-ga-id="G-FNEPDDHNMK" defer></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StarForge — Naissance d'un système stellaire</title>
+<style>
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+    background:#111; color:#fff; display:flex; flex-direction:column;
+  }
+  header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 24px; background:#181818; border-bottom:1px solid #333;
+  }
+  h1 { margin:0; font-size:19px; font-weight:650; }
+  main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+
+  /* Lien "Informations" (en-tête) et sa pop-up (version, auteur, date, licence) */
+  #infoLink {
+    background:none; border:0; color:#aaa; font-size:13px; text-decoration:underline;
+    cursor:pointer; padding:4px;
+  }
+  #infoLink:hover { color:#fff; }
+  /* Lien de soutien Ko-fi (en-tête) : pastille ambrée ; sur petit écran, la tasse seule. */
+  #kofiLink {
+    display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:999px;
+    background:#f5a524; color:#1a1206; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap;
+  }
+  #kofiLink:hover { background:#ffb940; }
+  @media (max-width:560px) { #kofiLink .kofiText { display:none; } }
+  #infoDialog {
+    background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
+    padding:22px 26px; max-width:min(420px,90vw);
+  }
+  #infoDialog::backdrop { background:rgba(0,0,0,.6); }
+  #infoDialog h2 { margin:0 0 12px; font-size:18px; }
+  #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
+  #infoDialog dt { color:#999; }
+  #infoDialog dd { margin:0; }
+  #infoDialog button { padding:8px 16px; font-size:14px; border:0; border-radius:10px; cursor:pointer; background:#fff; color:#111; font-weight:700; }
+  #infoDialog #resetSettingsBtn { background:#333; color:#eee; margin-right:8px; }
+  #infoDialog #resetSettingsBtn:hover { background:#444; }
+  #panelToggles { margin:0 0 18px; padding-top:14px; border-top:1px solid #333; }
+  #panelToggles h3 { margin:0 0 10px; font-size:13px; font-weight:700; color:#999; text-transform:uppercase; letter-spacing:.03em; }
+  #panelToggles label { flex-direction:row; align-items:center; gap:8px; margin-bottom:8px; font-size:14px; color:#eee; cursor:pointer; }
+  .cartoucheHidden { display:none !important; }
+
+  .panel {
+    width:min(1180px,94vw); max-height:100%;
+    display:flex; flex-direction:column; align-items:center; gap:22px;
+    background:#161616; border:1px solid #262626; border-radius:22px;
+    padding:clamp(20px,4vh,32px) clamp(18px,4vw,28px);
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+    overflow:auto;
+  }
+  .stage { display:flex; flex-direction:column; align-items:center; gap:18px; flex:none; }
+  /* Les cartouches de réglages se placent côte à côte quand la largeur le permet, et repassent à
+     la ligne (empilés) sur un écran étroit. */
+  .sidebar { width:100%; display:flex; flex-direction:row; flex-wrap:wrap; align-items:flex-start; gap:16px; }
+
+  /* À partir de cette largeur, les cartouches de réglages passent sur le côté de la vue. */
+  @media (min-width:700px) {
+    .panel { flex-direction:row; align-items:flex-start; }
+    .sidebar { flex:1; min-width:0; }
+  }
+
+  /* Fenêtre sur l'espace : vue de dessus du nuage, carrée. Le canvas prend la taille affichée
+     (en pixels réels de l'écran, recalculée au redimensionnement). */
+  .spaceWrap {
+    position:relative; width:min(560px,86vw); aspect-ratio:1;
+    border-radius:18px; overflow:hidden; background:#03040a;
+    box-shadow:0 18px 45px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.08);
+  }
+  .spaceWrap canvas { width:100%; height:100%; display:block; cursor:grab; touch-action:none; }
+  .spaceWrap canvas.dragging { cursor:grabbing; }
+  /* En plein écran, la vue profite de tout l'espace disponible. */
+  .stage:fullscreen { width:100vw; height:100vh; justify-content:center; background:#0a0a0a; }
+  .stage:fullscreen .spaceWrap { width:min(94vw, calc(100vh - 110px)); }
+  /* Annonce brève affichée sur la vue (ex. allumage de l'étoile). */
+  #toast {
+    position:absolute; left:50%; top:16px; transform:translate(-50%,-8px);
+    background:rgba(20,20,28,.8); border:1px solid rgba(255,255,255,.15); border-radius:999px;
+    padding:7px 16px; font-size:14px; font-weight:650; white-space:nowrap; pointer-events:none;
+    opacity:0; transition:opacity .4s, transform .4s;
+  }
+  #toast.show { opacity:1; transform:translate(-50%,0); }
+  kbd { display:inline-block; min-width:1.4em; padding:0 4px; border:1px solid #555; border-radius:4px; background:#2a2a2a; color:#eee; font:600 11px/1.5 inherit; text-align:center; }
+
+  .hint { color:#999; font-size:12.5px; text-align:center; max-width:460px; margin:0; }
+
+  .actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .btn {
+    background:#fff; color:#111; border:0; border-radius:12px; padding:11px 18px;
+    font-size:14px; font-weight:700; cursor:pointer;
+  }
+  .btn:active { transform:scale(.97); }
+  .btn.ghost { background:none; border:1px solid #333; color:#ddd; font-weight:600; }
+  .btn:disabled { opacity:.35; cursor:default; transform:none; }
+
+  /* Contrôle segmenté (boutons sélectionnables) utilisé pour la vitesse de la simulation. */
+  .segmented { display:grid; grid-template-columns:repeat(10, 1fr); gap:3px; }
+  .segBtn {
+    min-width:0; background:#252525; color:#ccc; border:1px solid #3a3a3a;
+    border-radius:6px; padding:6px 0; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .segBtn:hover { border-color:#555; }
+  .segBtn.active { background:#fff; color:#111; border-color:#fff; }
+
+  .controls {
+    position:relative;
+    flex:1 1 240px; min-width:220px; background:#1b1b1b; border:1px solid #333; border-radius:14px;
+    padding:16px 18px; display:flex; flex-direction:column; gap:16px;
+  }
+  .cartoucheTitle { font-weight:700; font-size:14px; color:#fff; padding-right:22px; }
+  /* Croix de fermeture en haut à droite de chaque cartouche (ajoutée par le script) : décoche la
+     case correspondante de la fenêtre Informations. */
+  .closeBtn {
+    position:absolute; top:10px; right:10px; width:22px; height:22px; padding:0;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:none; color:#888; border:0; border-radius:6px; font-size:18px; line-height:1; cursor:pointer;
+  }
+  .closeBtn:hover { background:#333; color:#fff; }
+  label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:13.5px; }
+  .row { display:flex; flex-direction:row; align-items:center; gap:8px; }
+  .row:has(.value) { justify-content:space-between; }
+  .value { font-weight:700; color:#fff; text-align:right; }
+  input[type=range] { width:100%; }
+  .sub { color:#888; font-size:11.5px; display:none; }
+  .sub.show { display:block; margin-top:6px; }
+  /* Petit bouton "i" qui révèle l'explication (.sub) associée, cachée par défaut. */
+  .infoBtn {
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+    width:15px; height:15px; margin-left:5px; border-radius:50%;
+    background:#2a2a2a; color:#999; border:1px solid #444; font-size:10px; font-weight:700;
+    font-style:italic; font-family:Georgia,serif; cursor:pointer; line-height:1; padding:0;
+  }
+  .infoBtn:hover, .infoBtn.active { background:#444; color:#fff; }
+  .stats { display:flex; flex-direction:column; gap:10px; font-size:13.5px; color:#ccc; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌟 StarForge</h1>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <a id="kofiLink" href="https://ko-fi.com/lfranck" target="_blank" rel="noopener" title="Soutenir mes projets sur Ko-fi" aria-label="M'offrir un café sur Ko-fi">☕<span class="kofiText">M'offrir un café</span></a>
+    <button id="infoLink" type="button">ℹ️ Informations</button>
+  </div>
+</header>
+
+<dialog id="infoDialog">
+  <h2>À propos de StarForge</h2>
+  <dl>
+    <dt>Version</dt><dd id="infoVersion"></dd>
+    <dt>Auteur</dt><dd id="infoAuthor"></dd>
+    <dt>Date</dt><dd id="infoDate"></dd>
+    <dt>Licence</dt><dd id="infoLicense"></dd>
+  </dl>
+  <div id="panelToggles">
+    <h3>Raccourcis clavier</h3>
+    <p style="margin:0 0 14px; font-size:13.5px; color:#ccc; line-height:1.7;"><kbd>Espace</kbd> pause · <kbd>N</kbd> nouveau nuage · <kbd>D</kbd> phase disque · <kbd>F</kbd> plein écran · <kbd>T</kbd> traînées · <kbd>+</kbd> / <kbd>−</kbd> vitesse. <kbd>Échap</kbd> pour quitter le plein écran. Double-clic sur la vue : cadrage automatique.</p>
+    <h3>Cartouches affichés</h3>
+    <label class="row"><input type="checkbox" id="toggleSettings" checked><span>🎛️ Réglages</span></label>
+    <label class="row"><input type="checkbox" id="toggleView" checked><span>👁️ Affichage</span></label>
+    <label class="row"><input type="checkbox" id="toggleSystem" checked><span>📋 Système</span></label>
+  </div>
+  <button id="resetSettingsBtn" type="button" title="Oublie les réglages mémorisés dans le navigateur et recharge la page avec les valeurs par défaut.">↺ Valeurs par défaut</button>
+  <button id="infoClose" type="button">Fermer</button>
+</dialog>
+
+<main>
+  <div class="panel">
+    <div class="stage">
+      <div class="spaceWrap">
+        <canvas id="spaceCanvas" width="560" height="560"></canvas>
+        <div id="toast"></div>
+      </div>
+      <p class="hint">Un nuage de gaz et de poussières s'effondre sous sa propre gravité. En se contractant, il tourne de plus en plus vite et s'étale en disque autour d'une jeune étoile, qui finit par s'allumer. Molette ou pincement pour zoomer, glisser pour se déplacer, double-clic pour revenir au cadrage automatique.</p>
+      <div class="actions">
+        <button class="btn" id="pauseBtn" type="button">⏸️ Pause</button>
+        <button class="btn ghost" id="newBtn" type="button" title="Repart d'un nouveau nuage, tiré au hasard avec les réglages actuels. Raccourci : N.">🌌 Nouveau nuage</button>
+        <button class="btn ghost" id="diskBtn" type="button" disabled title="Disponible dès qu'une étoile est née. Zoome sur l'étoile a, à l'échelle des planètes (0,3 à 30 UA) : on repart avec sa masse et un disque de gaz et de poussières dont la masse et le sens de rotation sont mesurés dans le nuage (disque borné entre 1 et 10 % de la masse de l'étoile). Les autres étoiles ne sont pas reprises. Raccourci : D.">🪐 Phase disque</button>
+        <button class="btn ghost" id="fullscreenBtn" type="button" title="Affiche la vue sur tout l'écran. Raccourci : F. Échap pour quitter.">⛶ Plein écran</button>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="controls" id="panelSettings">
+        <div class="cartoucheTitle">🎛️ Réglages</div>
+        <div>
+          <div class="row"><span>Performance<button type="button" class="infoBtn" data-target="subPerf" aria-label="Informations">i</button></span><span class="value" id="perfVal">— fps</span></div>
+          <span class="sub" id="subPerf">Images/seconde et part du budget d'image (16,7 ms à 60 fps) consommée par le calcul de la simulation. Indicatif : le navigateur ne donne pas accès au taux CPU réel de la machine.</span>
+        </div>
+        <div>
+          <div class="row"><span>Vitesse<button type="button" class="infoBtn" data-target="subSpeed" aria-label="Informations">i</button></span><span class="value" id="speedVal">3</span></div>
+          <div class="segmented" id="speedSeg" role="group" aria-label="Vitesse de la simulation">
+            <button type="button" class="segBtn" data-value="1">1</button>
+            <button type="button" class="segBtn" data-value="2">2</button>
+            <button type="button" class="segBtn active" data-value="3">3</button>
+            <button type="button" class="segBtn" data-value="4">4</button>
+            <button type="button" class="segBtn" data-value="5">5</button>
+            <button type="button" class="segBtn" data-value="6">6</button>
+            <button type="button" class="segBtn" data-value="7">7</button>
+            <button type="button" class="segBtn" data-value="8">8</button>
+            <button type="button" class="segBtn" data-value="9">9</button>
+            <button type="button" class="segBtn" data-value="10">10</button>
+          </div>
+          <span class="sub" id="subSpeed">Nombre de pas de calcul par image : le temps passe d'autant plus vite. Chaque pas coûte le même calcul : si la machine n'arrive plus à suivre, l'animation ralentit (voir Performance). Raccourcis : + et −.</span>
+        </div>
+        <label>
+          <div class="row"><span>Particules<button type="button" class="infoBtn" data-target="subCount" aria-label="Informations">i</button></span><span class="value" id="countVal">1500</span></div>
+          <input type="range" id="countSlider" min="500" max="100000" value="1500" step="500">
+          <span class="sub" id="subCount">Nombre de grains de matière qui composent le nuage (la masse totale reste la même : plus de grains = des grains plus légers, un nuage plus fin). Chacun attire tous les autres. Jusqu'à 1000 grains, chaque paire est calculée ; au-delà, les grains lointains sont regroupés en paquets dont on ne calcule que l'attraction d'ensemble (méthode de Barnes-Hut) : le calcul croît alors à peu près comme le nombre de grains, un peu plus vite. Au-delà de quelques dizaines de milliers, baissez la vitesse si l'animation saccade. Un nouveau nuage est créé au relâchement.</span>
+        </label>
+        <label>
+          <div class="row"><span>Rotation initiale<button type="button" class="infoBtn" data-target="subRotation" aria-label="Informations">i</button></span><span class="value" id="rotationVal">50%</span></div>
+          <input type="range" id="rotationSlider" min="0" max="100" value="50" step="1">
+          <span class="sub" id="subRotation">Vitesse à laquelle le nuage tourne sur lui-même au départ (100% : le bord du nuage tourne à la vitesse d'une orbite). En se contractant, il tourne de plus en plus vite, comme une patineuse qui ramène les bras. Peu de rotation : presque tout tombe dans l'étoile et le disque est petit. Beaucoup : grand disque, étoile plus légère. Un nouveau nuage est créé au relâchement.</span>
+        </label>
+        <label>
+          <div class="row"><span>Turbulence<button type="button" class="infoBtn" data-target="subTurbulence" aria-label="Informations">i</button></span><span class="value" id="turbulenceVal">20%</span></div>
+          <input type="range" id="turbulenceSlider" min="0" max="100" value="20" step="1">
+          <span class="sub" id="subTurbulence">Grumeaux et tourbillons dans le nuage de départ. Ils rendent l'effondrement irrégulier : filaments, bras spiraux, disque décentré. Un nouveau nuage est créé au relâchement.</span>
+        </label>
+        <label>
+          <div class="row"><span>Agitation des grains<button type="button" class="infoBtn" data-target="subAgitation" aria-label="Informations">i</button></span><span class="value" id="agitationVal">30%</span></div>
+          <input type="range" id="agitationSlider" min="0" max="100" value="30" step="1">
+          <span class="sub" id="subAgitation">Au départ, chaque grain part dans une direction tirée au hasard, à une vitesse tirée au hasard entre 0 et ce maximum (100% : la vitesse d'une orbite au bord du nuage). Elle s'ajoute à la rotation et à la turbulence. Le frottement du gaz calme peu à peu cette agitation là où la matière se concentre ; trop forte, elle disperse une partie du nuage avant qu'il ne s'effondre. Un nouveau nuage est créé au relâchement.</span>
+        </label>
+        <label>
+          <div class="row"><span>Frottement du gaz<button type="button" class="infoBtn" data-target="subFriction" aria-label="Informations">i</button></span><span class="value" id="frictionVal">40%</span></div>
+          <input type="range" id="frictionSlider" min="0" max="100" value="40" step="1">
+          <span class="sub" id="subFriction">Le gaz freine les mouvements désordonnés : là où la matière est dense, chaque grain est entraîné par ses voisins. C'est ce qui permet au nuage de s'aplatir en disque et de nourrir l'étoile. 0% : les grains se croisent sans se gêner, le nuage oscille sans jamais former de disque net. Agit tout de suite, en phase Nuage seulement (en phase Disque, les poussières sont freinées par le gaz selon leur taille).</span>
+        </label>
+        <label>
+          <div class="row"><span>Accélération de la croissance<button type="button" class="infoBtn" data-target="subGrowth" aria-label="Informations">i</button></span><span class="value" id="growthVal">×1 000</span></div>
+          <input type="range" id="growthSlider" min="0" max="100" value="75" step="1">
+          <span class="sub" id="subGrowth">Phase Disque. Un planétésimal grossit en capturant les poussières (puis les autres corps) dont l'orbite est proche de la sienne, à chaque fois que la différence de vitesse orbitale les ramène côte à côte. En vrai, ces rencontres s'étalent sur des milliers ou des millions d'années ; elles sont ici multipliées par ce facteur, de ×1 (réaliste, trop lent pour être vu) à ×10 000. Le vent de l'étoile, qui finit par dissiper le gaz, suit la même horloge accélérée (« temps de croissance » du cartouche Système), pour garder la course entre les noyaux de planètes et la disparition du gaz. L'âge affiché, lui, n'est pas accéléré. Agit tout de suite.</span>
+        </label>
+      </div>
+
+      <div class="controls" id="panelView">
+        <div class="cartoucheTitle">👁️ Affichage</div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="trailsCheckbox">
+            <span>Traînées</span>
+            <button type="button" class="infoBtn" data-target="subTrails" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subTrails">Chaque grain laisse une trace qui s'estompe : on voit les orbites se dessiner. Raccourci : T.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="gasCheckbox" checked>
+            <span>Lueur du gaz</span>
+            <button type="button" class="infoBtn" data-target="subGas" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subGas">Nébuleuse colorée selon la densité de la matière : violette là où elle est diffuse, orangée là où elle se concentre. Décoché : seuls les grains sont dessinés.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="autoFrameCheckbox" checked>
+            <span>Cadrage automatique</span>
+            <button type="button" class="infoBtn" data-target="subAutoFrame" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subAutoFrame">La vue suit l'étoile et zoome pour garder la matière à l'écran pendant que le nuage se contracte. Se désactive dès qu'on zoome ou qu'on se déplace à la main ; un double-clic sur la vue le réactive.</span>
+        </div>
+      </div>
+
+      <div class="controls" id="panelSystem">
+        <div class="cartoucheTitle">📋 Système<button type="button" class="infoBtn" data-target="subSystem" aria-label="Informations">i</button></div>
+        <span class="sub" id="subSystem">Au départ, il n'y a pas d'étoile : le nuage s'effondre sous sa propre gravité, et une proto-étoile naît dans chaque grumeau assez dense (au moins 0,03 masse solaire réunie à moins de 25 UA), à condition qu'il tienne par sa propre gravité et ne soit pas déchiré par la marée d'une étoile voisine. Avec de la turbulence, plusieurs étoiles peuvent naître, ailleurs qu'au centre. Elles sont nommées a, b, c… de la plus massive à la moins massive (les lettres changent si l'ordre change). Elles s'attirent, avalent la matière qui passe trop près, fusionnent quand elles se rencontrent, et peuvent s'éjecter mutuellement du système. Une étoile s'allume à 0,6 masse solaire. Bouton 🪐 Phase disque : on zoome sur l'étoile a, à l'échelle des planètes (0,3 à 30 UA). Le disque y est fait de deux sortes de grains : le gaz (98,5 % de la masse, en violet), qui tourne un peu moins vite que les orbites car sa pression le soutient, et les poussières (1,5 %), plus légères et plus nombreuses par unité de masse : roche (orange) en deçà de la ligne des glaces, glace (bleu pâle) au-delà, où elles sont trois fois plus abondantes. Le gaz freine les poussières. Au départ, 2 % des poussières deviennent des planétésimaux, qui grossissent en balayant l'anneau autour de leur orbite (zone d'alimentation, ± 3 rayons de Hill) puis en se percutant entre voisins ; une fois leur anneau vidé, ils cessent de grossir. Chaque corps est classé selon sa masse et sa composition : planétésimal, embryon, puis (au-delà de 0,1 masse terrestre) planète tellurique, planète glacée, noyau de géante (au-delà de 10 masses terrestres). Les planètes sont nommées a-1, a-2… de la plus proche à la plus lointaine ; 🌍 signale une planète tellurique dans la zone habitable (anneau vert). Un corps dont le cœur solide dépasse 10 masses terrestres retient aussi le gaz de sa zone : sa zone s'élargit avec sa masse et la capture s'emballe, jusqu'à la géante de glace (10 à 50 % de gaz) puis la géante gazeuse (plus de 50 %). La course est limitée : après 30 000 ans de temps de croissance, le vent de l'étoile souffle le gaz de l'intérieur vers l'extérieur (anneau orangé) en 30 000 ans de plus. Seuls les noyaux formés avant son passage deviennent des géantes. Échelle de la phase Nuage : un nuage de 1000 UA de rayon (1 UA = distance Terre-Soleil) et de 1,5 masse solaire. L'âge en découle, par les lois de la gravitation. Dans la réalité, les nuages sont bien plus grands et la formation bien plus lente : la simulation montre les mécanismes, pas des chiffres exacts.</span>
+        <div class="stats">
+          <div class="row"><span>Âge</span><span class="value" id="ageVal">0 an</span></div>
+          <div class="row"><span>Phase</span><span class="value" id="phaseVal">Nuage</span></div>
+          <div class="row"><span>Étoiles</span><span class="value" id="starCountVal">Pas encore née</span></div>
+          <div class="stats" id="starList" style="padding-left:10px; border-left:2px solid #333;"></div>
+          <div class="stats cartoucheHidden" id="diskRows">
+            <div class="row"><span>Temps de croissance (accéléré)</span><span class="value" id="growthYearsVal">—</span></div>
+            <div class="row"><span>Gaz du disque</span><span class="value" id="diskGasVal">—</span></div>
+            <div class="row"><span>Vent de l'étoile</span><span class="value" id="windVal">—</span></div>
+            <div class="row"><span>Poussières</span><span class="value" id="diskDustVal">—</span></div>
+            <div class="row"><span>Ligne des glaces</span><span class="value" id="snowLineVal">—</span></div>
+            <div class="row"><span>Zone habitable</span><span class="value" id="habitableVal">—</span></div>
+            <div class="row"><span>Planétésimaux et embryons</span><span class="value" id="smallBodiesVal">—</span></div>
+            <div class="row"><span>Planètes</span><span class="value" id="planetsVal">—</span></div>
+            <div class="stats" id="planetList" style="padding-left:10px; border-left:2px solid #333;"></div>
+          </div>
+          <div class="row"><span>Matière autour</span><span class="value" id="matterVal">—</span></div>
+          <div class="row"><span>Rayon (90% de la matière)</span><span class="value" id="radiusVal">—</span></div>
+          <div class="row"><span>Éjectés</span><span class="value" id="ejectedVal">0 grain</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
+// et dans le commentaire d'en-tête du fichier (à garder synchronisés).
+const APP_VERSION = "0.3.6";
+const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
+const APP_DATE = "2026-09-30";
+const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
+
+const infoDialog = document.getElementById("infoDialog");
+document.getElementById("infoVersion").textContent = APP_VERSION;
+document.getElementById("infoAuthor").textContent = APP_AUTHOR;
+document.getElementById("infoDate").textContent = APP_DATE;
+document.getElementById("infoLicense").textContent = APP_LICENSE;
+document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
+document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+
+// Affichage/masquage des cartouches, piloté depuis la fenêtre Informations.
+const PANEL_TOGGLES = [
+  { checkbox: "toggleSettings", panel: "panelSettings" },
+  { checkbox: "toggleView", panel: "panelView" },
+  { checkbox: "toggleSystem", panel: "panelSystem" },
+];
+for (const { checkbox, panel } of PANEL_TOGGLES) {
+  const cb = document.getElementById(checkbox);
+  const el = document.getElementById(panel);
+  cb.addEventListener("change", () => {
+    el.classList.toggle("cartoucheHidden", !cb.checked);
+  });
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "closeBtn";
+  close.textContent = "×";
+  close.title = "Fermer (réaffichable depuis ℹ️ Informations)";
+  close.setAttribute("aria-label", "Fermer le cartouche");
+  close.addEventListener("click", (e) => {
+    e.preventDefault();
+    cb.checked = false;
+    cb.dispatchEvent(new Event("change"));
+  });
+  el.firstElementChild.appendChild(close);
+}
+
+// Boutons "i" qui révèlent l'explication (.sub) associée, cachée par défaut. Délégué sur tout le
+// document : chaque bouton référence son .sub par id (data-target).
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".infoBtn");
+  if (!btn) return;
+  e.preventDefault(); // au cas où le bouton est dans un <label> : n'active pas son input associé
+  const sub = document.getElementById(btn.dataset.target);
+  if (!sub) return;
+  const show = sub.classList.toggle("show");
+  btn.classList.toggle("active", show);
+});
+
+// ---------- Unités et constantes physiques ----------
+// Deux phases, chacune avec ses unités de calcul (constante de gravitation G = 1 dans les deux) :
+//   - phase Nuage : rayon du nuage de départ = 1, masse totale = 1 ;
+//   - phase Disque : longueur = 1 UA, masse = 1 masse solaire, autour de l'étoile a.
+// L'unité de temps en découle : sqrt(L³ / GM). Conversion en unités "réelles" pour l'affichage :
+// avec L en UA et M en masses solaires, une orbite de 1 UA autour d'une masse solaire dure 1 an,
+// soit sqrt(L³/GM) = sqrt(L³/M) / 2π années.
+const CLOUD_RADIUS_AU = 1000;
+const CLOUD_MASS_MSUN = 1.5;
+const CLOUD_UNITS = {
+  dt: 0.0015,                      // pas de temps — leapfrog, fixe
+  soft2: 0.01 ** 2,                // adoucissement de la gravité entre grains (évite les forces infinies au contact)
+  starSoft2: 0.005 ** 2,           // idem entre un grain et une étoile, et entre étoiles
+  accretion: 0.025,                // un grain plus proche d'une étoile tombe dedans (≈ 25 UA)
+  escape: 6,                       // un grain plus loin du centre est considéré comme éjecté du système
+  lengthAU: CLOUD_RADIUS_AU, massMsun: CLOUD_MASS_MSUN,
+  timeYears: Math.sqrt(CLOUD_RADIUS_AU ** 3 / CLOUD_MASS_MSUN) / (2 * Math.PI),
+  colorNear: 0.02, colorFar: 1.5,  // distances à l'étoile des couleurs extrêmes des grains (chaud → froid)
+};
+const DISK_UNITS = {
+  dt: 0.01, soft2: 0.02 ** 2, starSoft2: 0.01 ** 2, accretion: 0.2, escape: 200,
+  lengthAU: 1, massMsun: 1, timeYears: 1 / (2 * Math.PI),
+  colorNear: 0.3, colorFar: 30,
+};
+let U = CLOUD_UNITS;               // unités de la phase en cours
+let phase = "cloud";               // "cloud" (nuage) ou "disk" (disque)
+
+const STAR_FORM_MASS = 0.02;       // masse qu'il faut réunir dans le rayon d'accrétion pour qu'une proto-étoile naisse (part de la masse du nuage)
+const STAR_FORM_EVERY = 5;         // recherche d'un grumeau assez dense, tous les N pas (phase Nuage)
+const IGNITION_MSUN = 0.6;         // masse (en masses solaires) à laquelle une étoile s'allume
+
+// Phase Disque : disque protoplanétaire de DISK_R_IN à DISK_R_OUT UA autour de l'étoile a, de
+// densité de surface en 1/r (autant de masse dans chaque anneau de même largeur). Deux sortes de
+// grains : GAS_SHARE des grains portent le gaz (hydrogène, hélium), les autres les poussières,
+// DUST_FRACTION de la masse du disque : roche en deçà de la ligne des glaces, glace (et roche) au-delà,
+// où les poussières sont ICE_BOOST fois plus abondantes.
+const DISK_R_IN = 0.3, DISK_R_OUT = 30;
+const DISK_MIN_FRACTION = 0.01, DISK_MAX_FRACTION = 0.1; // masse du disque bornée (part de la masse de l'étoile)
+const DISK_MEASURE_RADIUS = 0.5;   // rayon (unités du nuage, 500 UA) où l'on mesure la matière liée à l'étoile a
+const GAS_SHARE = 0.5;
+const DUST_FRACTION = 0.015;
+const ICE_BOOST = 3;
+const SNOW_LINE_1MSUN = 2.7;       // ligne des glaces (UA) autour d'une étoile d'une masse solaire ; croît comme M² (luminosité ∝ M⁴)
+// Le gaz, soutenu par sa pression, tourne un peu moins vite que l'orbite (fraction η de la gravité,
+// croissante vers l'extérieur) ; les poussières sont freinées vers sa vitesse, en un temps de
+// DUST_STOKES / Ω (nombre de Stokes : couplage au gaz, ici celui de cailloux de quelques cm).
+const ETA_1AU = 0.0015;
+const DUST_STOKES = 0.1;
+const DISK_DISPERSION = 0.01;      // agitation de départ des grains du disque (part de la vitesse orbitale)
+const GAS = 1, ROCK = 2, ICE = 3;  // sortes de grains (0 : grain du nuage, sans composition)
+const BODY = 4;                    // corps solide en croissance : planétésimal, embryon, planète
+const ICE_GRAIN_ICE = 2 / 3;       // part de glace d'un grain de glace (le reste : roche)
+const EARTH_PER_MSUN = 332946;     // masses terrestres par masse solaire
+
+// Croissance des planètes (phase Disque). Au départ, SEED_FRACTION des poussières deviennent des
+// planétésimaux (corps). Chaque corps balaie sa zone d'alimentation, l'anneau de ± FEED_HILL rayons de
+// Hill autour de son orbite : chaque poussière de l'anneau passe près de lui une fois par période
+// synodique (le temps que l'écart de vitesse orbitale les ramène côte à côte) et y est alors capturée.
+// Un corps qui a vidé son anneau cesse de grossir (masse d'isolement). Deux corps dont les orbites sont
+// à moins de MERGE_HILL rayons de Hill mutuels se percutent de même, une fois par période synodique.
+// Ces rencontres sont accélérées d'un facteur réglable (curseur) : sans cela, il faudrait des milliers
+// d'années simulées, des heures de calcul.
+const SEED_FRACTION = 0.02;
+const FEED_HILL = 3;
+const MERGE_HILL = 3.5;
+const BIG_BODY_EARTH = 0.5;        // au-delà (masses terrestres), un corps attire aussi les grains de gaz et de poussières
+const PLANET_EARTH = 0.1;          // au-delà (masses terrestres), un corps est compté parmi les planètes
+const BIN_W = 0.05;                // largeur (UA) des anneaux où les poussières sont rangées par distance à l'étoile
+const NBINS = Math.ceil(2 * DISK_R_OUT / BIN_W);
+const HZ_INNER = 0.95, HZ_OUTER = 1.37; // zone habitable (UA) autour d'une étoile d'une luminosité solaire ; croît comme √L
+// Capture du gaz : un corps dont le cœur solide (roche + glace) dépasse CORE_CRIT_EARTH masses
+// terrestres attire assez fort pour retenir le gaz ; il balaie alors aussi les grains de gaz de sa zone
+// d'alimentation (même règle que pour les poussières). Sa zone s'élargissant avec sa masse, la capture
+// s'emballe : c'est la naissance d'une géante, jusqu'à ce que sa zone soit vide ou que le gaz disparaisse.
+const CORE_CRIT_EARTH = 10;
+// Vent de l'étoile (et évaporation par son rayonnement) : à partir de WIND_START_YEARS, un front balaie
+// le disque de l'intérieur vers l'extérieur en WIND_CLEAR_YEARS ; le gaz en deçà du front est soufflé
+// (en WIND_BLOW_YEARS environ). Ces durées sont comptées en temps de croissance, c'est-à-dire accélérées
+// comme les rencontres (curseur), pour garder la course entre la croissance des noyaux et la
+// disparition du gaz.
+const WIND_START_YEARS = 30000, WIND_CLEAR_YEARS = 30000, WIND_BLOW_YEARS = 1500;
+
+const GRID = 96;                   // grille de densité (frottement du gaz et lueur), GRID × GRID cellules
+const DRAG_RATE = 6;               // taux de frottement (par unité de temps) à 100%, à la densité du nuage de départ
+const DRAG_DENSITY_CAP = 8;        // plafond du facteur de densité (au-delà, le frottement ne croît plus)
+const MAX_PARTICLES = 100000;
+const DIRECT_MAX = 1000;           // jusqu'à ce nombre de grains, gravité calculée paire par paire ; au-delà, arbre de Barnes-Hut
+const BH_THETA2 = 0.6 ** 2;        // critère d'ouverture (taille du nœud / distance)², plus petit = plus précis et plus lent
+const BH_MAX_DEPTH = 32;           // profondeur maximale de l'arbre (grains quasi superposés : gardés ensemble dans la feuille)
+
+// ---------- État de la simulation ----------
+// Grains en "structure de tableaux" (un tableau typé par grandeur), les n premiers sont vivants.
+const px = new Float64Array(MAX_PARTICLES), py = new Float64Array(MAX_PARTICLES);
+const pvx = new Float64Array(MAX_PARTICLES), pvy = new Float64Array(MAX_PARTICLES);
+const pax = new Float64Array(MAX_PARTICLES), pay = new Float64Array(MAX_PARTICLES);
+const pmass = new Float64Array(MAX_PARTICLES);  // masse de chaque grain (tous égaux dans le nuage)
+const ptype = new Uint8Array(MAX_PARTICLES);    // sorte de grain : 0 (nuage), GAS, ROCK, ICE, BODY
+// Composition (phase Disque) : masses de roche, de glace et de gaz de chaque grain ou corps.
+const pRock = new Float64Array(MAX_PARTICLES), pIce = new Float64Array(MAX_PARTICLES), pGas = new Float64Array(MAX_PARTICLES);
+// Croissance (phase Disque) : distance à l'étoile, poussières rangées par anneau (listes chaînées),
+// indices des corps, grains absorbés pendant le pas.
+const prad = new Float64Array(MAX_PARTICLES);
+const binHead = new Int32Array(NBINS), gasBinHead = new Int32Array(NBINS), binNext = new Int32Array(MAX_PARTICLES);
+const bodyIdx = new Int32Array(MAX_PARTICLES), bigIdx = new Int32Array(MAX_PARTICLES);
+const removedFlag = new Uint8Array(MAX_PARTICLES);
+const cellIdx = new Int32Array(MAX_PARTICLES);
+const radiiTmp = new Float64Array(MAX_PARTICLES);
+let n = 0, n0 = 0;       // grains vivants, grains au départ de la phase
+let initialMatter = 1;   // masse des grains au départ de la phase
+let refDensity = 1;      // grains (de gaz, en phase Disque) par unité de surface au départ de la phase
+// Phase Disque : sens de rotation (+1 / −1), ligne des glaces (UA), masse et composition du disque.
+let diskSpin = 1, snowLine = SNOW_LINE_1MSUN, diskMass = 0;
+// Phase Disque : temps de croissance (années, accéléré comme les rencontres), masse de gaz au départ
+// et actuelle (mise à jour à chaque pas), gaz soufflé par le vent, annonces déjà faites.
+let growthYears = 0, gasInitial = 1, gasNow = 1, gasBlown = 0;
+const announced = new Set();
+// Étoiles : aucune au départ. Elles naissent de l'effondrement, dans les grumeaux assez denses
+// (tryFormStar), s'attirent entre elles et attirent les grains, avalent ceux qui passent trop
+// près et fusionnent quand elles se rencontrent. Tableau trié par masse décroissante ; name est la
+// lettre qui en découle (a = la plus massive), réattribuée quand l'ordre change.
+// grains : nombre de grains absorbés (à la naissance, par accrétion, et ceux des étoiles fusionnées).
+let stars = [];
+let ageYears = 0, ejected = 0, ejectedStars = 0, stepCount = 0;
+// Centre du système : l'étoile a une fois née, avant cela le centre de masse des grains.
+let centerX = 0, centerY = 0;
+
+// Grille de densité centrée sur l'étoile, qui s'adapte à l'étendue de la matière (gridHalf).
+const cellCount = new Float64Array(GRID * GRID);
+const cellVx = new Float64Array(GRID * GRID), cellVy = new Float64Array(GRID * GRID);
+let gridHalf = 1.1, gridCx = 0, gridCy = 0;
+let r90 = 1;             // rayon contenant 90% des grains (autour de l'étoile)
+
+const params = {
+  count: 1500, rotation: 50, turbulence: 20, agitation: 30, friction: 40, growth: 75, speed: 3,
+  trails: false, gas: true, autoFrame: true,
+};
+let paused = false;
+
+// ---------- Nuage de départ ----------
+function initCloud() {
+  phase = "cloud";
+  U = CLOUD_UNITS;
+  n = n0 = params.count;
+  pmass.fill(1 / n, 0, n);
+  ptype.fill(0, 0, n);
+  initialMatter = 1;
+  refDensity = n / Math.PI;
+  ageYears = 0;
+  ejected = 0;
+  stepCount = 0;
+  stars = [];
+  ejectedStars = 0;
+
+  // Turbulence : quelques ondes aléatoires. Leur somme module la densité (grumeaux, par tirage avec
+  // rejet) et sert de fonction de courant pour les vitesses (tourbillons sans compression).
+  const turb = params.turbulence / 100;
+  const modes = [];
+  for (let k = 0; k < 5; k++) {
+    const kLen = Math.PI * (1.5 + Math.random() * 3);
+    const dir = Math.random() * 2 * Math.PI;
+    modes.push({ kx: kLen * Math.cos(dir), ky: kLen * Math.sin(dir), ph: Math.random() * 2 * Math.PI, k: kLen });
+  }
+  const noise = (x, y) => {
+    let s = 0;
+    for (const m of modes) s += Math.sin(m.kx * x + m.ky * y + m.ph);
+    return s / modes.length;
+  };
+  // Vitesses : rotation d'ensemble (Ω au bord = rotation × vitesse orbitale, en unités G = M = R = 1)
+  // plus les tourbillons, d'amplitude turbulence × 0,6 vitesse orbitale.
+  const omega = params.rotation / 100;
+  const sigma = turb * 0.6;
+  const ampl = sigma / Math.sqrt(modes.length);
+  const agitationMax = params.agitation / 100;
+
+  let i = 0;
+  while (i < n) {
+    const r = Math.sqrt(Math.random()), a = Math.random() * 2 * Math.PI;
+    const x = r * Math.cos(a), y = r * Math.sin(a);
+    if (Math.random() > 0.5 + 0.5 * Math.min(1, turb * 1.6) * noise(x, y) + 0.5 * (1 - Math.min(1, turb * 1.6))) continue;
+    let vx = -omega * y, vy = omega * x;
+    for (const m of modes) {
+      const c = Math.cos(m.kx * x + m.ky * y + m.ph) * ampl / m.k;
+      vx += m.ky * c;
+      vy -= m.kx * c;
+    }
+    // Agitation propre à chaque grain : direction et vitesse tirées au hasard.
+    const dir = Math.random() * 2 * Math.PI, speed = Math.random() * agitationMax;
+    vx += speed * Math.cos(dir);
+    vy += speed * Math.sin(dir);
+    px[i] = x; py[i] = y; pvx[i] = vx; pvy[i] = vy;
+    i++;
+  }
+
+  // Centre de masse immobile, à l'origine.
+  let cx = 0, cy = 0, cvx = 0, cvy = 0;
+  for (let j = 0; j < n; j++) { cx += px[j]; cy += py[j]; cvx += pvx[j]; cvy += pvy[j]; }
+  cx /= n; cy /= n; cvx /= n; cvy /= n;
+  for (let j = 0; j < n; j++) { px[j] -= cx; py[j] -= cy; pvx[j] -= cvx; pvy[j] -= cvy; }
+
+  gridHalf = 1.1;
+  finishPhaseSetup();
+}
+
+// Fin de la mise en place d'une phase : forces, grille, étendue de la matière, cadrage.
+function finishPhaseSetup() {
+  gridCx = gridCy = centerX = centerY = 0;
+  computeForces();
+  depositGrid();
+  updateExtents();
+  if (params.autoFrame) { cam.x = 0; cam.y = 0; cam.half = viewTargetHalf(); }
+  clearTrails = true;
+  updateStats();
+}
+
+// ---------- Phase Disque ----------
+// Passage au disque protoplanétaire de l'étoile a. On mesure dans le nuage la matière liée à elle
+// (grains à moins de DISK_MEASURE_RADIUS dont l'énergie orbitale est négative) : sa masse, bornée
+// entre DISK_MIN_FRACTION et DISK_MAX_FRACTION de celle de l'étoile, devient celle du disque, et le
+// sens de son moment cinétique, celui de la rotation du disque. On repart ensuite à l'échelle des
+// planètes (en UA, étoile a au centre, immobile) avec un disque tout neuf, en deux sortes de grains.
+// Les autres étoiles éventuelles ne sont pas reprises : l'étoile a est étudiée seule.
+function enterDiskPhase() {
+  if (phase !== "cloud" || !stars.length) return;
+  const s = stars[0];
+  let mBound = 0, lz = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = px[i] - s.x, dy = py[i] - s.y, dvx = pvx[i] - s.vx, dvy = pvy[i] - s.vy;
+    const r = Math.hypot(dx, dy);
+    if (r > DISK_MEASURE_RADIUS || 0.5 * (dvx * dvx + dvy * dvy) - s.m / r >= 0) continue;
+    mBound += pmass[i];
+    lz += pmass[i] * (dx * dvy - dy * dvx);
+  }
+  const starMsun = s.m * CLOUD_MASS_MSUN;
+  diskMass = Math.min(DISK_MAX_FRACTION * starMsun, Math.max(DISK_MIN_FRACTION * starMsun, mBound * CLOUD_MASS_MSUN));
+  diskSpin = lz >= 0 ? 1 : -1;
+
+  phase = "disk";
+  U = DISK_UNITS;
+  stars = [{ x: 0, y: 0, vx: 0, vy: 0, ax: 0, ay: 0, m: starMsun, grains: s.grains, ignited: s.ignited, igniteAt: s.igniteAt, name: "a" }];
+  initDisk();
+  showToast("🪐 Phase disque : les futures planètes de l'étoile a");
+}
+
+// Grains du disque, répartis entre DISK_R_IN et DISK_R_OUT, sur des orbites circulaires (plus une
+// légère agitation), dans le sens diskSpin.
+function initDisk() {
+  const M = stars[0].m;
+  n = n0 = params.count;
+  const nGas = Math.round(n * GAS_SHARE), nDust = n - nGas;
+  snowLine = Math.min(20, Math.max(0.5, SNOW_LINE_1MSUN * M * M));
+  const mGas = diskMass * (1 - DUST_FRACTION) / nGas, mDust = diskMass * DUST_FRACTION / nDust;
+  gasInitial = gasNow = mGas * nGas; // avant les vitesses de départ, qui dépendent de diskInside
+  // Densité de surface en 1/r : le rayon est tiré uniformément. Pour les poussières, la zone au-delà
+  // de la ligne des glaces pèse ICE_BOOST fois plus (tirage sur la longueur pondérée).
+  const inner = Math.max(0, Math.min(snowLine, DISK_R_OUT) - DISK_R_IN);
+  const outer = Math.max(0, DISK_R_OUT - Math.max(snowLine, DISK_R_IN));
+  for (let i = 0; i < n; i++) {
+    let r;
+    if (i < nGas) {
+      ptype[i] = GAS;
+      pmass[i] = pGas[i] = mGas;
+      pRock[i] = pIce[i] = 0;
+      r = DISK_R_IN + Math.random() * (DISK_R_OUT - DISK_R_IN);
+    } else {
+      pmass[i] = mDust;
+      const u = Math.random() * (inner + ICE_BOOST * outer);
+      r = u < inner ? DISK_R_IN + u : Math.max(snowLine, DISK_R_IN) + (u - inner) / ICE_BOOST;
+      ptype[i] = r < snowLine ? ROCK : ICE;
+      pIce[i] = ptype[i] === ICE ? mDust * ICE_GRAIN_ICE : 0;
+      pRock[i] = mDust - pIce[i];
+      pGas[i] = 0;
+      // Germes : une petite part des poussières devient des planétésimaux (ils gardent leur composition).
+      if (Math.random() < SEED_FRACTION) ptype[i] = BODY;
+    }
+    const a = Math.random() * 2 * Math.PI;
+    // Vitesse circulaire autour de l'étoile et de la part du disque intérieure à r (croissante
+    // comme r pour une densité en 1/r) ; sous-orbitale pour le gaz, soutenu par sa pression.
+    let v = Math.sqrt(massInside(r) / r);
+    if (ptype[i] === GAS) v *= Math.sqrt(1 - 2 * etaAt(r));
+    const x = r * Math.cos(a), y = r * Math.sin(a);
+    const dir = Math.random() * 2 * Math.PI, jitter = Math.random() * DISK_DISPERSION * v;
+    px[i] = x; py[i] = y;
+    pvx[i] = -diskSpin * v * Math.sin(a) + jitter * Math.cos(dir);
+    pvy[i] = diskSpin * v * Math.cos(a) + jitter * Math.sin(dir);
+  }
+  initialMatter = diskMass;
+  growthYears = gasBlown = 0;
+  announced.clear();
+  refDensity = nGas / (Math.PI * DISK_R_OUT * DISK_R_OUT);
+  gridHalf = DISK_R_OUT * 1.1;
+  finishPhaseSetup();
+}
+
+// Part η de la gravité compensée par la pression du gaz, croissante vers l'extérieur (disque évasé).
+const etaAt = (r) => ETA_1AU * Math.sqrt(r);
+// Part du disque intérieure au rayon r (répartition de départ, diminuée à mesure que le gaz
+// disparaît), et masse totale (étoile a comprise) en deçà de r.
+const diskInside = (r) => diskMass * (gasNow / gasInitial) * Math.min(1, Math.max(0, (r - DISK_R_IN) / (DISK_R_OUT - DISK_R_IN)));
+const massInside = (r) => stars[0].m + diskInside(r);
+
+// Gaz et poussières du disque, appliqué après chaque pas en phase Disque :
+//   - poussée de la pression sur le gaz (vers l'extérieur, fraction η de l'attraction de l'étoile),
+//     pour que son orbite reste un peu plus lente que celle d'un caillou ;
+//   - freinage des poussières vers la vitesse locale du gaz, en un temps DUST_STOKES / Ω.
+// Les corps (planétésimaux et au-delà), trop gros, ne sentent pas le gaz.
+function applyDiskGas(dt) {
+  depositGrid();
+  const s = stars[0];
+  if (!s) return;
+  const front = windFront();
+  for (let i = 0; i < n; i++) {
+    if (ptype[i] === BODY) continue;
+    const dx = px[i] - s.x, dy = py[i] - s.y;
+    const r2 = dx * dx + dy * dy, r = Math.sqrt(r2);
+    const eta = etaAt(r);
+    if (ptype[i] === GAS) {
+      const push = 2 * eta * s.m / (r2 * r) * dt;
+      pvx[i] += dx * push; pvy[i] += dy * push;
+      continue;
+    }
+    if (r < front) continue; // plus de gaz ici : plus de freinage
+    const mIn = massInside(r);
+    const omega = Math.sqrt(mIn / (r2 * r));
+    const vGas = Math.sqrt((1 - 2 * eta) * mIn / r);
+    const gvx = s.vx - diskSpin * vGas * dy / r, gvy = s.vy + diskSpin * vGas * dx / r;
+    const f = 1 - Math.exp(-dt * omega / DUST_STOKES);
+    pvx[i] += (gvx - pvx[i]) * f;
+    pvy[i] += (gvy - pvy[i]) * f;
+  }
+}
+
+// Facteur d'accélération des rencontres (curseur 0 à 100 → ×1 à ×10 000, échelle logarithmique).
+const growthBoost = () => Math.pow(10, params.growth / 25);
+
+// Le corps b absorbe le grain ou le corps j : masse et composition s'ajoutent. La vitesse de b ne
+// change pas (le grain arrive d'un point quelconque de l'anneau : additionner les quantités de
+// mouvement fausserait l'orbite ; b garde la sienne).
+function absorbInto(b, j) {
+  pmass[b] += pmass[j];
+  pRock[b] += pRock[j]; pIce[b] += pIce[j]; pGas[b] += pGas[j];
+}
+
+// Rayon (UA) du front du vent de l'étoile : 0 avant son départ, puis de DISK_R_IN jusqu'au-delà du
+// bord du disque, en WIND_CLEAR_YEARS de temps de croissance.
+function windFront() {
+  if (phase !== "disk") return 0;
+  const t = (growthYears - WIND_START_YEARS) / WIND_CLEAR_YEARS;
+  if (t <= 0) return 0;
+  return DISK_R_IN + (1.2 * DISK_R_OUT - DISK_R_IN) * Math.min(1, t);
+}
+
+// Balaie la zone d'alimentation du corps b (distance rb à l'étoile, demi-largeur w, vitesse angulaire
+// omega) parmi les grains rangés dans les anneaux heads : chaque grain passe près du corps une fois par
+// période synodique 2π / ΔΩ, où ΔΩ = 1,5 Ω Δr / r est l'écart de vitesse angulaire entre les deux
+// orbites (écart minimal retenu : 0,3 fois la zone, sinon un grain sur la même orbite ne serait jamais
+// rattrapé) ; il est alors capturé. boostDt : pas de temps multiplié par l'accélération.
+function sweepZone(heads, b, rb, w, omega, boostDt) {
+  let removed = false;
+  const b0 = Math.max(0, Math.floor((rb - w) / BIN_W)), b1 = Math.min(NBINS - 1, Math.floor((rb + w) / BIN_W));
+  for (let bin = b0; bin <= b1; bin++) {
+    for (let j = heads[bin]; j >= 0; j = binNext[j]) {
+      if (removedFlag[j]) continue;
+      const dr = Math.abs(prad[j] - rb);
+      if (dr >= w) continue;
+      const dOmega = 1.5 * omega * Math.max(dr, 0.3 * w) / rb;
+      if (Math.random() >= boostDt * dOmega / (2 * Math.PI)) continue;
+      absorbInto(b, j);
+      removedFlag[j] = 1;
+      removed = true;
+    }
+  }
+  return removed;
+}
+
+// Croissance des corps, après chaque pas en phase Disque (voir SEED_FRACTION et suivants) : vent de
+// l'étoile, balayage des zones d'alimentation (poussières, et gaz pour les cœurs assez massifs), puis
+// rencontres entre corps voisins. Un grain ou un corps soufflé ou absorbé est marqué, puis tous les
+// marqués sont retirés à la fin (retirer en cours de route décalerait les indices).
+function growBodies(dt) {
+  const s = stars[0];
+  if (!s) return;
+  const M = s.m, boost = growthBoost();
+  growthYears += dt * U.timeYears * boost;
+  const front = windFront(), wasBlowing = front > 0;
+  const blowP = boost * dt * U.timeYears / WIND_BLOW_YEARS;
+  binHead.fill(-1);
+  gasBinHead.fill(-1);
+  let nb = 0, removed = false;
+  gasNow = 0;
+  for (let i = 0; i < n; i++) {
+    const r = Math.hypot(px[i] - s.x, py[i] - s.y);
+    prad[i] = r;
+    removedFlag[i] = 0;
+    const t = ptype[i];
+    if (t === BODY) { bodyIdx[nb++] = i; continue; }
+    if (t === GAS && r < front && Math.random() < blowP) {
+      gasBlown += pmass[i];
+      removedFlag[i] = 1;
+      removed = true;
+      continue;
+    }
+    const bin = Math.floor(r / BIN_W);
+    if (bin >= NBINS) { if (t === GAS) gasNow += pmass[i]; continue; }
+    if (t === GAS) {
+      gasNow += pmass[i];
+      binNext[i] = gasBinHead[bin];
+      gasBinHead[bin] = i;
+    } else if (t === ROCK || t === ICE) {
+      binNext[i] = binHead[bin];
+      binHead[bin] = i;
+    }
+  }
+  if (wasBlowing && !announced.has("wind")) { announced.add("wind"); showToast("💨 Le vent de l'étoile commence à souffler le gaz"); }
+  if (wasBlowing && gasNow === 0 && !announced.has("gasGone")) { announced.add("gasGone"); showToast("💨 Tout le gaz du disque est dissipé"); }
+
+  const coreCrit = CORE_CRIT_EARTH / EARTH_PER_MSUN;
+  for (let k = 0; k < nb; k++) {
+    const b = bodyIdx[k], rb = prad[b];
+    const w = FEED_HILL * rb * Math.cbrt(pmass[b] / (3 * M));
+    const omega = Math.sqrt(M / (rb * rb * rb));
+    if (sweepZone(binHead, b, rb, w, omega, boost * dt)) removed = true;
+    // Cœur assez massif : il retient aussi le gaz (grains capturés retirés du total de gaz).
+    if (pRock[b] + pIce[b] >= coreCrit) {
+      const before = pGas[b];
+      if (sweepZone(gasBinHead, b, rb, w, omega, boost * dt)) removed = true;
+      gasNow -= pGas[b] - before;
+    }
+  }
+  gasNow = Math.max(0, gasNow);
+
+  // Corps voisins (triés par distance à l'étoile, chacun comparé aux quelques suivants) : même règle,
+  // avec leur rayon de Hill mutuel. Le plus massif absorbe l'autre.
+  const order = Array.from(bodyIdx.subarray(0, nb)).sort((a, b) => prad[a] - prad[b]);
+  for (let k = 0; k < order.length; k++) {
+    const a = order[k];
+    if (removedFlag[a]) continue;
+    for (let q = k + 1; q < Math.min(order.length, k + 8); q++) {
+      const b = order[q];
+      if (removedFlag[b]) continue;
+      const dr = prad[b] - prad[a], rm = 0.5 * (prad[a] + prad[b]);
+      const rh = rm * Math.cbrt((pmass[a] + pmass[b]) / (3 * M));
+      if (dr >= MERGE_HILL * rh) continue;
+      const omega = Math.sqrt(M / (rm * rm * rm));
+      const dOmega = 1.5 * omega * Math.max(dr, 0.3 * rh) / rm;
+      if (Math.random() >= boost * dt * dOmega / (2 * Math.PI)) continue;
+      const big = pmass[a] >= pmass[b] ? a : b, small = big === a ? b : a;
+      absorbInto(big, small);
+      removedFlag[small] = 1;
+      removed = true;
+      if (small === a) break;
+    }
+  }
+
+  // Retrait des absorbés, à rebours : l'élément déplacé à la place d'un retiré a déjà été examiné
+  // (et n'était pas marqué, sinon il aurait été retiré avant).
+  if (removed) for (let i = n - 1; i >= 0; i--) if (removedFlag[i]) removeParticle(i);
+}
+
+// Gravité en phase Disque. Le gaz y est traité comme lisse : chaque grain est attiré par l'étoile a
+// et par la part du disque intérieure à son orbite (diskInside), sans que les grains de gaz, lourds,
+// ne bousculent individuellement les corps. Les corps s'attirent entre eux (paire par paire, exact)
+// et attirent l'étoile ; ceux de plus de BIG_BODY_EARTH attirent aussi les grains (ils y creusent
+// leur sillon).
+function computeForcesDisk() {
+  const s = stars[0];
+  const M = s.m, soft2 = U.soft2, starSoft2 = U.starSoft2;
+  const bigLimit = BIG_BODY_EARTH / EARTH_PER_MSUN;
+  let nb = 0, nBig = 0, sax = 0, say = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = s.x - px[i], dy = s.y - py[i];
+    const d2 = dx * dx + dy * dy;
+    const r2 = d2 + starSoft2;
+    const inv = 1 / (r2 * Math.sqrt(r2));
+    const mIn = M + diskInside(Math.sqrt(d2));
+    pax[i] = mIn * dx * inv; pay[i] = mIn * dy * inv;
+    if (ptype[i] !== BODY) continue;
+    bodyIdx[nb++] = i;
+    if (pmass[i] >= bigLimit) bigIdx[nBig++] = i;
+    sax -= pmass[i] * dx * inv; say -= pmass[i] * dy * inv;
+  }
+  s.ax = sax; s.ay = say;
+  for (let a = 0; a < nb; a++) {
+    const i = bodyIdx[a], xi = px[i], yi = py[i], mi = pmass[i];
+    for (let b = a + 1; b < nb; b++) {
+      const j = bodyIdx[b];
+      const dx = px[j] - xi, dy = py[j] - yi;
+      const r2 = dx * dx + dy * dy + soft2;
+      const f = 1 / (r2 * Math.sqrt(r2));
+      pax[i] += dx * f * pmass[j]; pay[i] += dy * f * pmass[j];
+      pax[j] -= dx * f * mi; pay[j] -= dy * f * mi;
+    }
+  }
+  for (let a = 0; a < nBig; a++) {
+    const j = bigIdx[a], xj = px[j], yj = py[j], mj = pmass[j];
+    for (let i = 0; i < n; i++) {
+      if (ptype[i] === BODY) continue;
+      const dx = xj - px[i], dy = yj - py[i];
+      const r2 = dx * dx + dy * dy + soft2;
+      const f = mj / (r2 * Math.sqrt(r2));
+      pax[i] += dx * f; pay[i] += dy * f;
+    }
+  }
+}
+
+// Type d'un corps selon sa masse (masses terrestres) et sa composition (parts de glace et de gaz).
+function classifyBody(mEarth, iceFrac, gasFrac) {
+  if (gasFrac >= 0.5) return "Géante gazeuse";
+  if (gasFrac >= 0.1) return "Géante de glace";
+  if (mEarth >= 10) return "Noyau de géante";
+  if (mEarth >= PLANET_EARTH) return iceFrac >= 0.25 ? "Planète glacée" : "Planète tellurique";
+  if (mEarth >= 0.01) return "Embryon";
+  return iceFrac >= 0.25 ? "Planétésimal glacé" : "Planétésimal rocheux";
+}
+
+// Zone habitable de l'étoile a (UA) : luminosité ∝ M⁴ (en luminosités solaires), distances ∝ √L.
+function habitableZone() {
+  const sqrtL = stars[0].m ** 2;
+  return [HZ_INNER * sqrtL, HZ_OUTER * sqrtL];
+}
+
+// Planètes de l'étoile a (corps de plus de PLANET_EARTH), de la plus proche à la plus lointaine, nommées
+// comme les exoplanètes : lettre de l'étoile, puis numéro d'ordre (a-1, a-2…).
+function listPlanets() {
+  if (phase !== "disk" || !stars.length) return [];
+  const s = stars[0], [hz0, hz1] = habitableZone(), list = [];
+  for (let i = 0; i < n; i++) {
+    if (ptype[i] !== BODY) continue;
+    const mEarth = pmass[i] * EARTH_PER_MSUN;
+    if (mEarth < PLANET_EARTH) continue;
+    const r = Math.hypot(px[i] - s.x, py[i] - s.y);
+    const iceFrac = pIce[i] / pmass[i], gasFrac = pGas[i] / pmass[i];
+    const type = classifyBody(mEarth, iceFrac, gasFrac);
+    list.push({ i, r, mEarth, iceFrac, gasFrac, type, habitable: type === "Planète tellurique" && r >= hz0 && r <= hz1 });
+  }
+  list.sort((a, b) => a.r - b.r);
+  list.forEach((p, k) => { p.name = `${s.name}-${k + 1}`; });
+  return list;
+}
+
+// ---------- Gravité ----------
+// Gravité en 1/r² (celle de notre espace à 3 dimensions, vue de dessus) pour obtenir de vraies
+// orbites de Kepler. Entre grains : somme directe tant qu'ils sont peu nombreux, arbre de
+// Barnes-Hut au-delà. L'attraction de l'étoile, elle, est toujours calculée exactement.
+function computeForces() {
+  if (phase === "disk") { computeForcesDisk(); return; }
+  if (n <= DIRECT_MAX) computeForcesDirect();
+  else computeForcesTree();
+  addStarForces();
+}
+
+// Somme directe sur toutes les paires (chaque paire calculée une fois, action = réaction).
+function computeForcesDirect() {
+  pax.fill(0, 0, n);
+  pay.fill(0, 0, n);
+  const soft2 = U.soft2;
+  for (let i = 0; i < n; i++) {
+    const xi = px[i], yi = py[i], mi = pmass[i];
+    let axi = pax[i], ayi = pay[i];
+    for (let j = i + 1; j < n; j++) {
+      const dx = px[j] - xi, dy = py[j] - yi;
+      const r2 = dx * dx + dy * dy + soft2;
+      const f = 1 / (r2 * Math.sqrt(r2));
+      const fx = dx * f, fy = dy * f;
+      const mj = pmass[j];
+      axi += fx * mj; ayi += fy * mj;
+      pax[j] -= fx * mi; pay[j] -= fy * mi;
+    }
+    pax[i] = axi; pay[i] = ayi;
+  }
+}
+
+// Attraction mutuelle de chaque étoile et de chaque grain, puis des étoiles entre elles (toujours
+// calculées exactement, paire par paire).
+function addStarForces() {
+  const starSoft2 = U.starSoft2;
+  for (const s of stars) {
+    let sax = 0, say = 0;
+    const sx = s.x, sy = s.y, sm = s.m;
+    for (let i = 0; i < n; i++) {
+      const dx = sx - px[i], dy = sy - py[i];
+      const r2 = dx * dx + dy * dy + starSoft2;
+      const inv = 1 / (r2 * Math.sqrt(r2));
+      pax[i] += sm * dx * inv; pay[i] += sm * dy * inv;
+      const mi = pmass[i];
+      sax -= mi * dx * inv; say -= mi * dy * inv;
+    }
+    s.ax = sax; s.ay = say;
+  }
+  for (let a = 0; a < stars.length; a++) {
+    const A = stars[a];
+    for (let b = a + 1; b < stars.length; b++) {
+      const B = stars[b];
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const r2 = dx * dx + dy * dy + starSoft2;
+      const inv = 1 / (r2 * Math.sqrt(r2));
+      A.ax += B.m * dx * inv; A.ay += B.m * dy * inv;
+      B.ax -= A.m * dx * inv; B.ay -= A.m * dy * inv;
+    }
+  }
+}
+
+// Arbre de Barnes-Hut (quadtree) : l'espace est découpé en carrés, eux-mêmes découpés en quatre
+// tant qu'ils contiennent plus d'un grain. Chaque nœud retient sa masse et son centre de masse ; un
+// paquet de grains assez petit vu de loin (taille / distance < θ) agit comme un seul grain placé
+// en son centre de masse. Nœuds rangés dans des tableaux typés, agrandis au besoin ; les quatre
+// enfants d'un nœud sont consécutifs (bhChild = indice du premier, -1 pour une feuille). Les grains
+// d'une feuille forment une liste chaînée (bhHead, puis bhNext) : un seul grain, sauf à la
+// profondeur maximale où des grains quasi superposés restent ensemble.
+let bhCap = 0, bhCount = 0;
+let bhCx, bhCy, bhHalf, bhMass, bhComX, bhComY, bhChild, bhHead;
+const bhNext = new Int32Array(MAX_PARTICLES);
+const bhStack = new Int32Array(4 * BH_MAX_DEPTH + 8);
+function bhEnsure(cap) {
+  if (cap <= bhCap) return;
+  const newCap = Math.max(cap, bhCap * 2, 1024);
+  const grow = (Arr, old) => { const a = new Arr(newCap); if (old) a.set(old.subarray(0, bhCount)); return a; };
+  bhCx = grow(Float64Array, bhCx); bhCy = grow(Float64Array, bhCy); bhHalf = grow(Float64Array, bhHalf);
+  bhMass = grow(Float64Array, bhMass); bhComX = grow(Float64Array, bhComX); bhComY = grow(Float64Array, bhComY);
+  bhChild = grow(Int32Array, bhChild); bhHead = grow(Int32Array, bhHead);
+  bhCap = newCap;
+}
+function bhNewNode(cx, cy, half) {
+  bhEnsure(bhCount + 1);
+  const k = bhCount++;
+  bhCx[k] = cx; bhCy[k] = cy; bhHalf[k] = half;
+  bhChild[k] = -1; bhHead[k] = -1;
+  return k;
+}
+function bhSubdivide(k) {
+  const h = bhHalf[k] / 2, cx = bhCx[k], cy = bhCy[k];
+  const base = bhNewNode(cx - h, cy - h, h);
+  bhNewNode(cx + h, cy - h, h);
+  bhNewNode(cx - h, cy + h, h);
+  bhNewNode(cx + h, cy + h, h);
+  bhChild[k] = base;
+}
+// Quadrant (0 à 3, dans l'ordre de création des enfants) où tombe le point (x, y).
+const bhQuadrant = (k, x, y) => (x >= bhCx[k] ? 1 : 0) + (y >= bhCy[k] ? 2 : 0);
+
+function bhInsert(i) {
+  const x = px[i], y = py[i];
+  let k = 0, depth = 0;
+  for (;;) {
+    if (bhChild[k] >= 0) { k = bhChild[k] + bhQuadrant(k, x, y); depth++; continue; }
+    if (bhHead[k] < 0 || depth >= BH_MAX_DEPTH) { bhNext[i] = bhHead[k]; bhHead[k] = i; return; }
+    // Feuille déjà occupée par un grain : elle est découpée, son grain descend d'un niveau, et
+    // l'insertion reprend depuis ce nœud devenu interne.
+    const j = bhHead[k];
+    bhSubdivide(k);
+    bhHead[k] = -1;
+    const c = bhChild[k] + bhQuadrant(k, px[j], py[j]);
+    bhNext[j] = -1;
+    bhHead[c] = j;
+  }
+}
+
+function bhBuild() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const x = px[i], y = py[i];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  bhCount = 0;
+  bhNewNode((minX + maxX) / 2, (minY + maxY) / 2, Math.max(maxX - minX, maxY - minY) / 2 * 1.0001 + 1e-9);
+  for (let i = 0; i < n; i++) bhInsert(i);
+  // Masses et centres de masse, des feuilles vers la racine : un enfant est toujours créé après
+  // son parent, un parcours à rebours traite donc les enfants d'abord.
+  for (let k = bhCount - 1; k >= 0; k--) {
+    let m = 0, mx = 0, my = 0;
+    const c = bhChild[k];
+    if (c >= 0) {
+      for (let q = c; q < c + 4; q++) { const mq = bhMass[q]; m += mq; mx += bhComX[q] * mq; my += bhComY[q] * mq; }
+    } else {
+      for (let i = bhHead[k]; i >= 0; i = bhNext[i]) { const mi = pmass[i]; m += mi; mx += px[i] * mi; my += py[i] * mi; }
+    }
+    bhMass[k] = m;
+    if (m > 0) { bhComX[k] = mx / m; bhComY[k] = my / m; }
+  }
+}
+
+// Avec θ < 0,7, un nœud qui contient le grain lui-même n'est jamais accepté en bloc (le grain est
+// à moins d'une diagonale de son centre de masse) : il est toujours ouvert, et le grain s'exclut
+// lui-même dans sa feuille.
+function computeForcesTree() {
+  bhBuild();
+  const soft2 = U.soft2;
+  for (let i = 0; i < n; i++) {
+    const x = px[i], y = py[i];
+    let ax = 0, ay = 0, sp = 0;
+    bhStack[sp++] = 0;
+    while (sp > 0) {
+      const k = bhStack[--sp];
+      const m = bhMass[k];
+      if (m === 0) continue;
+      const c = bhChild[k];
+      if (c >= 0) {
+        const dx = bhComX[k] - x, dy = bhComY[k] - y;
+        const d2 = dx * dx + dy * dy;
+        const size = 2 * bhHalf[k];
+        if (size * size < BH_THETA2 * d2) {
+          const r2 = d2 + soft2;
+          const f = m / (r2 * Math.sqrt(r2));
+          ax += dx * f; ay += dy * f;
+        } else {
+          bhStack[sp++] = c; bhStack[sp++] = c + 1; bhStack[sp++] = c + 2; bhStack[sp++] = c + 3;
+        }
+      } else {
+        for (let j = bhHead[k]; j >= 0; j = bhNext[j]) {
+          if (j === i) continue;
+          const dx = px[j] - x, dy = py[j] - y;
+          const r2 = dx * dx + dy * dy + soft2;
+          const f = pmass[j] / (r2 * Math.sqrt(r2));
+          ax += dx * f; ay += dy * f;
+        }
+      }
+    }
+    pax[i] = ax; pay[i] = ay;
+  }
+}
+
+// ---------- Gaz : grille de densité et frottement ----------
+// Chaque grain est compté dans sa cellule, avec sa vitesse. La grille sert à la fois au frottement
+// (chaque grain est tiré vers la vitesse moyenne de sa cellule, d'autant plus fort que la cellule
+// est dense : la quantité de mouvement de la cellule est conservée) et à dessiner la lueur du gaz.
+// En phase Disque, seuls les grains de gaz y sont comptés (elle ne sert plus qu'à la lueur).
+function depositGrid() {
+  cellCount.fill(0); cellVx.fill(0); cellVy.fill(0);
+  updateCenter();
+  gridCx = centerX; gridCy = centerY;
+  const s = GRID / (2 * gridHalf);
+  const ox = gridCx - gridHalf, oy = gridCy - gridHalf;
+  const gasOnly = phase === "disk";
+  for (let i = 0; i < n; i++) {
+    if (gasOnly && ptype[i] !== GAS) { cellIdx[i] = -1; continue; }
+    const gx = Math.floor((px[i] - ox) * s), gy = Math.floor((py[i] - oy) * s);
+    if (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID) { cellIdx[i] = -1; continue; }
+    const k = gy * GRID + gx;
+    cellIdx[i] = k;
+    cellCount[k] += 1;
+    cellVx[k] += pvx[i];
+    cellVy[k] += pvy[i];
+  }
+}
+
+function applyGasDrag(dt) {
+  depositGrid();
+  if (params.friction <= 0) return;
+  const cellW = 2 * gridHalf / GRID;
+  const ref = refDensity * cellW * cellW; // grains par cellule à la densité du nuage de départ
+  const base = params.friction / 100 * DRAG_RATE * dt;
+  for (let i = 0; i < n; i++) {
+    const k = cellIdx[i];
+    if (k < 0) continue;
+    const c = cellCount[k];
+    if (c < 2) continue;
+    const f = 1 - Math.exp(-base * Math.min(c / ref, DRAG_DENSITY_CAP));
+    pvx[i] += (cellVx[k] / c - pvx[i]) * f;
+    pvy[i] += (cellVy[k] / c - pvy[i]) * f;
+  }
+}
+
+// ---------- Accrétion et éjection ----------
+// Retire le grain i en le remplaçant par le dernier (l'ordre des grains n'a pas d'importance).
+function removeParticle(i) {
+  const last = --n;
+  px[i] = px[last]; py[i] = py[last];
+  pvx[i] = pvx[last]; pvy[i] = pvy[last];
+  pax[i] = pax[last]; pay[i] = pay[last];
+  pmass[i] = pmass[last]; ptype[i] = ptype[last];
+  pRock[i] = pRock[last]; pIce[i] = pIce[last]; pGas[i] = pGas[last];
+}
+
+// Centre du système : l'étoile a (la plus massive) s'il y en a une, sinon le centre de masse des grains.
+function updateCenter() {
+  if (stars.length) { centerX = stars[0].x; centerY = stars[0].y; return; }
+  if (n === 0) return;
+  let sx = 0, sy = 0;
+  for (let i = 0; i < n; i++) { sx += px[i]; sy += py[i]; }
+  centerX = sx / n; centerY = sy / n;
+}
+
+// Tri par masse décroissante et lettres correspondantes (a, b, c…, puis a2, b2… au-delà de 26).
+function sortStars() {
+  stars.sort((a, b) => b.m - a.m);
+  stars.forEach((s, i) => { s.name = String.fromCharCode(97 + i % 26) + (i >= 26 ? Math.floor(i / 26) + 1 : ""); });
+}
+
+// Naissance d'une étoile ("particule puits", comme dans les codes d'astrophysique). On cherche la
+// cellule la plus peuplée de la grille, hors des zones où la marée d'une étoile existante
+// déchirerait un grumeau (voir plus bas). Autour du centre de masse de cette cellule, les grains
+// situés à moins du rayon d'accrétion fusionnent en une proto-étoile, qui garde leur masse, leur
+// centre de masse et leur quantité de mouvement — à trois conditions :
+//   - assez de matière : au moins STAR_FORM_MASS ;
+//   - grumeau lié par sa propre gravité : son agitation interne (énergie cinétique autour de son
+//     centre de masse) ne dépasse pas la moitié de son énergie gravitationnelle, estimée à M²/2R
+//     (théorème du viriel) ;
+//   - pas déchiré par la marée d'une étoile voisine : son rayon de Hill, d·∛(M / 3M★), doit
+//     dépasser le rayon d'accrétion pour chaque étoile de masse M★ à la distance d.
+// Les étoiles naissent donc là où le nuage se concentre : au centre, dans les grumeaux de la
+// turbulence, ou dans un disque assez massif pour se fragmenter. Phase Nuage seulement (grains tous
+// de même masse). À appeler juste après depositGrid (cellIdx doit correspondre aux grains actuels).
+function tryFormStar() {
+  const ACCRETION_RADIUS = U.accretion, pm = 1 / n0;
+  const cellW = 2 * gridHalf / GRID, ox = gridCx - gridHalf, oy = gridCy - gridHalf;
+  // Zone d'exclusion autour de chaque étoile : distance en deçà de laquelle même un grumeau de
+  // masse STAR_FORM_MASS aurait un rayon de Hill trop petit.
+  const excl = stars.map((s) => ({ x: s.x, y: s.y, r2: (ACCRETION_RADIUS / Math.cbrt(STAR_FORM_MASS / (3 * s.m))) ** 2 }));
+  let kMax = -1, best = 0;
+  for (let k = 0; k < GRID * GRID; k++) {
+    const c = cellCount[k];
+    if (c <= best) continue;
+    const x = ox + (k % GRID + 0.5) * cellW, y = oy + (Math.floor(k / GRID) + 0.5) * cellW;
+    let free = true;
+    for (const e of excl) {
+      const dx = x - e.x, dy = y - e.y;
+      if (dx * dx + dy * dy < e.r2) { free = false; break; }
+    }
+    if (free) { best = c; kMax = k; }
+  }
+  if (kMax < 0) return;
+  // Filtre rapide : la cellule doit porter au moins sa part de la masse requise (au prorata de sa
+  // surface dans le disque de rayon ACCRETION_RADIUS), avec de la marge.
+  const share = Math.min(1, cellW * cellW / (Math.PI * ACCRETION_RADIUS ** 2));
+  if (best * pm < STAR_FORM_MASS * share * 0.5) return;
+  let cx = 0, cy = 0, c = 0;
+  for (let i = 0; i < n; i++) if (cellIdx[i] === kMax) { cx += px[i]; cy += py[i]; c++; }
+  cx /= c; cy /= c;
+
+  const r2 = ACCRETION_RADIUS ** 2;
+  let inside = 0, sx = 0, sy = 0, svx = 0, svy = 0, sv2 = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = px[i] - cx, dy = py[i] - cy;
+    if (dx * dx + dy * dy >= r2) continue;
+    inside++;
+    sx += px[i]; sy += py[i]; svx += pvx[i]; svy += pvy[i];
+    sv2 += pvx[i] * pvx[i] + pvy[i] * pvy[i];
+  }
+  const m = inside * pm;
+  if (m < STAR_FORM_MASS) return;
+  const gx = sx / inside, gy = sy / inside, gvx = svx / inside, gvy = svy / inside;
+  const kinetic = 0.5 * pm * (sv2 - inside * (gvx * gvx + gvy * gvy));
+  if (kinetic > 0.25 * m * m / ACCRETION_RADIUS) return;
+  for (const s of stars) {
+    if (Math.hypot(gx - s.x, gy - s.y) * Math.cbrt(m / (3 * s.m)) < ACCRETION_RADIUS) return;
+  }
+
+  for (let i = n - 1; i >= 0; i--) {
+    const dx = px[i] - cx, dy = py[i] - cy;
+    if (dx * dx + dy * dy < r2) removeParticle(i);
+  }
+  const star = { x: gx, y: gy, vx: gvx, vy: gvy, ax: 0, ay: 0, m, grains: inside, ignited: false, igniteAt: 0, name: "" };
+  stars.push(star);
+  sortStars();
+  showToast(stars.length === 1 ? "🌟 Une proto-étoile est née" : `🌟 Une nouvelle proto-étoile est née : ${star.name}`);
+}
+
+// Deux étoiles qui se rencontrent (plus proches que le rayon d'accrétion) fusionnent : masses, grains
+// et quantités de mouvement s'additionnent, au centre de masse des deux. La fusion d'une étoile
+// allumée reste allumée.
+function mergeStars() {
+  const r2 = U.accretion ** 2;
+  for (let a = 0; a < stars.length; a++) {
+    for (let b = a + 1; b < stars.length; b++) {
+      const A = stars[a], B = stars[b];
+      const dx = B.x - A.x, dy = B.y - A.y;
+      if (dx * dx + dy * dy >= r2) continue;
+      const m = A.m + B.m;
+      A.x = (A.x * A.m + B.x * B.m) / m; A.y = (A.y * A.m + B.y * B.m) / m;
+      A.vx = (A.vx * A.m + B.vx * B.m) / m; A.vy = (A.vy * A.m + B.vy * B.m) / m;
+      A.ax = (A.ax * A.m + B.ax * B.m) / m; A.ay = (A.ay * A.m + B.ay * B.m) / m;
+      A.m = m;
+      A.grains += B.grains;
+      if (!A.ignited && B.ignited) { A.ignited = true; A.igniteAt = B.igniteAt; }
+      showToast(`💥 Les étoiles ${A.name} et ${B.name} fusionnent`);
+      stars.splice(b, 1);
+      b = a; // A a bougé : on revérifie ses distances aux autres étoiles
+    }
+  }
+}
+
+// Les grains tombés dans une étoile lui cèdent masse et quantité de mouvement. Les grains et les
+// étoiles partis trop loin du centre sont retirés (éjectés). Parcours à rebours : le grain déplacé à
+// la place d'un grain retiré a déjà été examiné.
+function accrete() {
+  const rAcc2 = U.accretion ** 2, rOut2 = U.escape ** 2;
+  const S = stars.length;
+  for (const s of stars) { s.qx = s.m * s.vx; s.qy = s.m * s.vy; }
+  for (let i = n - 1; i >= 0; i--) {
+    const x = px[i], y = py[i];
+    let absorbed = false;
+    for (let k = 0; k < S; k++) {
+      const s = stars[k];
+      const dx = x - s.x, dy = y - s.y;
+      if (dx * dx + dy * dy >= rAcc2) continue;
+      const mi = pmass[i];
+      s.m += mi; s.qx += mi * pvx[i]; s.qy += mi * pvy[i];
+      s.grains++;
+      removeParticle(i);
+      absorbed = true;
+      break;
+    }
+    if (absorbed) continue;
+    const dx = x - centerX, dy = y - centerY;
+    if (dx * dx + dy * dy > rOut2) {
+      ejected++;
+      removeParticle(i);
+    }
+  }
+  for (const s of stars) { s.vx = s.qx / s.m; s.vy = s.qy / s.m; }
+
+  mergeStars();
+  sortStars();
+  for (let k = stars.length - 1; k > 0; k--) {
+    const s = stars[k];
+    if (Math.hypot(s.x - stars[0].x, s.y - stars[0].y) <= U.escape) continue;
+    showToast(`🚀 L'étoile ${s.name} est éjectée du système`);
+    stars.splice(k, 1);
+    ejectedStars++;
+  }
+  sortStars();
+  for (const s of stars) {
+    if (s.ignited || s.m * U.massMsun < IGNITION_MSUN) continue;
+    s.ignited = true;
+    s.igniteAt = performance.now();
+    showToast(stars.length === 1 ? "✨ L'étoile s'allume !" : `✨ L'étoile ${s.name} s'allume !`);
+  }
+}
+
+// ---------- Un pas de temps (leapfrog "kick-drift-kick") ----------
+// Intégrateur symplectique : les orbites ne dérivent pas avec le temps, contrairement à un simple
+// schéma d'Euler. Le frottement, la naissance des étoiles et l'accrétion sont appliqués après le pas.
+function step() {
+  const dt = U.dt, h = dt / 2;
+  for (let i = 0; i < n; i++) { pvx[i] += pax[i] * h; pvy[i] += pay[i] * h; }
+  for (const s of stars) { s.vx += s.ax * h; s.vy += s.ay * h; }
+  for (let i = 0; i < n; i++) { px[i] += pvx[i] * dt; py[i] += pvy[i] * dt; }
+  for (const s of stars) { s.x += s.vx * dt; s.y += s.vy * dt; }
+  computeForces();
+  for (let i = 0; i < n; i++) { pvx[i] += pax[i] * h; pvy[i] += pay[i] * h; }
+  for (const s of stars) { s.vx += s.ax * h; s.vy += s.ay * h; }
+  if (phase === "cloud") {
+    applyGasDrag(dt);
+    if (++stepCount % STAR_FORM_EVERY === 0) tryFormStar();
+  } else {
+    applyDiskGas(dt);
+    growBodies(dt);
+  }
+  accrete();
+  ageYears += dt * U.timeYears;
+}
+
+// Étendue de la matière autour du centre (rayons à 90% et 97% des grains) : règle la grille de
+// densité et le cadrage automatique. Tri, sur un échantillon d'au plus 20 000 grains.
+function updateExtents() {
+  if (n === 0) { r90 = 0.05; gridHalf = 0.1; return; }
+  updateCenter();
+  const stride = Math.ceil(n / 20000);
+  let c = 0;
+  for (let i = 0; i < n; i += stride) radiiTmp[c++] = Math.hypot(px[i] - centerX, py[i] - centerY);
+  const r = radiiTmp.subarray(0, c).sort();
+  r90 = r[Math.floor(0.9 * (c - 1))];
+  gridHalf = Math.max(0.06, 1.1 * r[Math.floor(0.97 * (c - 1))]);
+}
+
+// ---------- Vue (caméra) ----------
+const canvas = document.getElementById("spaceCanvas");
+const ctx = canvas.getContext("2d");
+// Calque hors écran pour le fond, le gaz et les grains : c'est lui qui garde les traînées (il n'est
+// qu'estompé d'une image à l'autre). Il est recopié sur la vue à chaque image, puis l'étoile et la
+// barre d'échelle sont dessinées par-dessus, nettes, sans traînée.
+const layer = document.createElement("canvas");
+const lctx = layer.getContext("2d");
+const cam = { x: 0, y: 0, half: 1.3 }; // centre et demi-largeur visible (unités de calcul)
+const viewTargetHalf = () => Math.max(0.08, 1.25 * r90);
+const viewScale = () => Math.min(canvas.width, canvas.height) / 2 / cam.half;
+const toScreenX = (wx) => canvas.width / 2 + (wx - cam.x) * viewScale();
+const toScreenY = (wy) => canvas.height / 2 + (wy - cam.y) * viewScale();
+
+// Canvas à la taille affichée, en pixels réels de l'écran (net en plein écran et sur écran haute densité).
+new ResizeObserver(() => {
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; clearTrails = true; }
+  if (layer.width !== w || layer.height !== h) { layer.width = w; layer.height = h; clearTrails = true; }
+}).observe(canvas);
+
+function updateCamera() {
+  if (!params.autoFrame) return;
+  const k = 0.06;
+  cam.x += (centerX - cam.x) * k;
+  cam.y += (centerY - cam.y) * k;
+  cam.half += (viewTargetHalf() - cam.half) * k;
+}
+
+const autoFrameCheckbox = document.getElementById("autoFrameCheckbox");
+function setAutoFrame(on) {
+  if (autoFrameCheckbox.checked === on) return;
+  autoFrameCheckbox.checked = on;
+  autoFrameCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+}
+autoFrameCheckbox.addEventListener("change", () => { params.autoFrame = autoFrameCheckbox.checked; });
+
+// Zoom autour d'un point de l'écran (coordonnées client) : le point sous le curseur reste en place.
+function zoomAt(clientX, clientY, factor) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = (clientX - rect.left) * canvas.width / rect.width;
+  const sy = (clientY - rect.top) * canvas.height / rect.height;
+  const s0 = viewScale();
+  const wx = cam.x + (sx - canvas.width / 2) / s0, wy = cam.y + (sy - canvas.height / 2) / s0;
+  cam.half = Math.min(U.escape * 3, Math.max(U.accretion * 0.2, cam.half * factor));
+  const s1 = viewScale();
+  cam.x = wx - (sx - canvas.width / 2) / s1;
+  cam.y = wy - (sy - canvas.height / 2) / s1;
+  setAutoFrame(false);
+  clearTrails = true;
+}
+
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0015));
+}, { passive: false });
+
+// Glisser (un doigt ou la souris) : déplacement ; deux doigts : zoom et déplacement.
+const pointers = new Map();
+let dragMoved = 0;
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  dragMoved = 0;
+  canvas.classList.add("dragging");
+});
+canvas.addEventListener("pointermove", (e) => {
+  const prev = pointers.get(e.pointerId);
+  if (!prev) return;
+  const rect = canvas.getBoundingClientRect();
+  const ratio = canvas.width / rect.width;
+  if (pointers.size === 1) {
+    const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+    dragMoved += Math.abs(dx) + Math.abs(dy);
+    if (dragMoved > 4) {
+      const s = viewScale();
+      cam.x -= dx * ratio / s;
+      cam.y -= dy * ratio / s;
+      setAutoFrame(false);
+      clearTrails = true;
+    }
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const other = a === prev ? b : a;
+    const d0 = Math.hypot(prev.x - other.x, prev.y - other.y);
+    const d1 = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+    if (d0 > 0 && d1 > 0) zoomAt((e.clientX + other.x) / 2, (e.clientY + other.y) / 2, d0 / d1);
+  }
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+});
+const endPointer = (e) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size === 0) canvas.classList.remove("dragging");
+};
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("dblclick", () => setAutoFrame(true));
+
+// ---------- Rendu ----------
+// Étoiles lointaines du fond, fixes à l'écran (positions relatives 0..1).
+const BACKGROUND_STARS = Array.from({ length: 260 }, () => ({
+  x: Math.random(), y: Math.random(), a: 0.15 + Math.random() * 0.55, s: Math.random() < 0.1 ? 2 : 1,
+}));
+
+// Couleurs des grains, du plus lointain (froid, brun-rouge) au plus proche de l'étoile (chaud, jaune pâle).
+const GRAIN_COLORS = ["#5a2e1e", "#7a3d22", "#9c5327", "#bd6d2e", "#d98c3c", "#eeae55", "#f8cf82", "#fff0c8"];
+const grainBucket = new Uint8Array(MAX_PARTICLES);
+// Phase Disque : couleurs selon la sorte de grain (gaz discret, roche, glace).
+const GAS_COLOR = "rgba(150,130,230,0.45)", ROCK_COLOR = "#d98c4a", ICE_COLOR = "#cfeaff";
+
+const gasCanvas = document.createElement("canvas");
+gasCanvas.width = gasCanvas.height = GRID;
+const gasCtx = gasCanvas.getContext("2d");
+const gasImg = gasCtx.createImageData(GRID, GRID);
+const LOG_GAS_MAX = Math.log1p(60);
+
+let clearTrails = true;
+
+// Couleur de l'étoile selon sa masse (en masses solaires) : naine rouge → Soleil → étoile blanc-bleu.
+const STAR_COLOR_STOPS = [
+  [0.2, [255, 120, 60]], [0.6, [255, 180, 100]], [1.0, [255, 236, 200]], [1.5, [245, 245, 255]], [3, [170, 195, 255]],
+];
+function starRGB(msun) {
+  const st = STAR_COLOR_STOPS;
+  if (msun <= st[0][0]) return st[0][1];
+  for (let i = 1; i < st.length; i++) {
+    if (msun <= st[i][0]) {
+      const t = (msun - st[i - 1][0]) / (st[i][0] - st[i - 1][0]);
+      return st[i - 1][1].map((c, k) => Math.round(c + (st[i][1][k] - c) * t));
+    }
+  }
+  return st[st.length - 1][1];
+}
+
+function drawGas() {
+  const cellW = 2 * gridHalf / GRID;
+  const ref = refDensity * cellW * cellW;
+  const d = gasImg.data;
+  for (let k = 0; k < GRID * GRID; k++) {
+    const q = cellCount[k] / ref;
+    const o = k * 4;
+    if (q <= 0) { d[o + 3] = 0; continue; }
+    const t = Math.min(1, Math.log1p(q) / LOG_GAS_MAX);
+    d[o] = 70 + 185 * t;
+    d[o + 1] = 30 + 120 * t * t;
+    d[o + 2] = 120 - 50 * t;
+    d[o + 3] = 150 * Math.min(1, 0.25 + t);
+  }
+  gasCtx.putImageData(gasImg, 0, 0);
+  const s = viewScale();
+  const size = 2 * gridHalf * s;
+  lctx.save();
+  lctx.globalCompositeOperation = "lighter";
+  lctx.imageSmoothingEnabled = true;
+  lctx.filter = "blur(" + Math.min(40, Math.max(1, cellW * s * 0.8)).toFixed(1) + "px)";
+  lctx.drawImage(gasCanvas, toScreenX(gridCx - gridHalf), toScreenY(gridCy - gridHalf), size, size);
+  lctx.restore();
+}
+
+function drawStar(star, now) {
+  const W = canvas.width, H = canvas.height, base = Math.min(W, H);
+  const sx = toScreenX(star.x), sy = toScreenY(star.y);
+  const msun = star.m * U.massMsun;
+  let rgb, glowR, alpha;
+  if (star.ignited) {
+    rgb = starRGB(msun);
+    glowR = base * (0.05 + 0.06 * Math.min(1, msun / 1.2));
+    alpha = 0.9;
+  } else {
+    // Proto-étoile : chauffée par la matière qui tombe, rouge sombre, de plus en plus visible.
+    const t = Math.min(1, msun / IGNITION_MSUN);
+    rgb = [200, 70 + 40 * t, 40];
+    glowR = base * (0.015 + 0.03 * t);
+    alpha = 0.25 + 0.5 * t;
+  }
+  const [r, g, b] = rgb;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
+  grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+  grad.addColorStop(0.25, `rgba(${r},${g},${b},${alpha * 0.35})`);
+  grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(sx - glowR, sy - glowR, glowR * 2, glowR * 2);
+  // Onde lumineuse de l'allumage : un anneau qui s'élargit et s'estompe.
+  if (star.ignited) {
+    const age = (now - star.igniteAt) / 2500;
+    if (age < 1) {
+      ctx.strokeStyle = `rgba(${r},${g},${b},${(1 - age) * 0.8})`;
+      ctx.lineWidth = base * 0.006 * (1 - age) + 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy, base * 0.4 * Math.sqrt(age), 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  const coreR = Math.max(1.5, base * (star.ignited ? 0.006 : 0.004) * Math.sqrt(msun / IGNITION_MSUN));
+  ctx.fillStyle = star.ignited ? "#fff" : `rgb(${r},${g},${b})`;
+  ctx.beginPath();
+  ctx.arc(sx, sy, coreR, 0, 2 * Math.PI);
+  ctx.fill();
+}
+
+// Lettre de chaque étoile, en haut à droite de son cœur.
+function drawStarLabel(star) {
+  const dpr = window.devicePixelRatio || 1;
+  const off = Math.max(6 * dpr, Math.min(canvas.width, canvas.height) * 0.012);
+  ctx.fillStyle = "rgba(255,255,255,.85)";
+  ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`;
+  ctx.fillText(star.name, toScreenX(star.x) + off, toScreenY(star.y) - off);
+}
+
+// Couleur d'un corps selon sa composition : roche (orangé), glace (bleu pâle), gaz (beige).
+const ROCK_RGB = [217, 140, 74], ICE_RGB = [207, 234, 255], GAS_RGB = [232, 205, 150];
+function bodyColor(i) {
+  const m = pmass[i], fr = pRock[i] / m, fi = pIce[i] / m, fg = pGas[i] / m;
+  const c = [0, 1, 2].map((k) => Math.round(ROCK_RGB[k] * fr + ICE_RGB[k] * fi + GAS_RGB[k] * fg));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+// Corps (planétésimaux, embryons, planètes), sur le calque des grains (ils laissent donc une traînée
+// quand elle est activée) : disque dont la taille croît comme la racine cubique de la masse.
+function drawBodies(cx, cy, s, dpr) {
+  const W = canvas.width, H = canvas.height;
+  for (let i = 0; i < n; i++) {
+    if (ptype[i] !== BODY) continue;
+    const x = cx + px[i] * s, y = cy + py[i] * s;
+    const rad = Math.max(1.2 * dpr, 2.2 * dpr * Math.cbrt(pmass[i] * EARTH_PER_MSUN));
+    if (x < -rad || y < -rad || x > W + rad || y > H + rad) continue;
+    lctx.fillStyle = bodyColor(i);
+    lctx.beginPath();
+    lctx.arc(x, y, rad, 0, 2 * Math.PI);
+    lctx.fill();
+  }
+}
+
+// Nom des planètes, à côté de chacune (🌍 pour une planète tellurique en zone habitable).
+function drawPlanetLabels(planets) {
+  const dpr = window.devicePixelRatio || 1;
+  ctx.fillStyle = "rgba(255,255,255,.8)";
+  ctx.font = `${10.5 * dpr}px system-ui, sans-serif`;
+  for (const p of planets) {
+    const off = 3 * dpr + 2.2 * dpr * Math.cbrt(p.mEarth);
+    ctx.fillText(p.name + (p.habitable ? " 🌍" : ""), toScreenX(px[p.i]) + off, toScreenY(py[p.i]) - off);
+  }
+}
+
+// Phase Disque : zone habitable (anneau vert pâle) et ligne des glaces (cercle pointillé) autour de
+// l'étoile a, avec leurs noms.
+function drawSnowLine() {
+  const dpr = window.devicePixelRatio || 1;
+  const sx = toScreenX(stars[0].x), sy = toScreenY(stars[0].y), r = snowLine * viewScale();
+  const [hz0, hz1] = habitableZone().map((v) => v * viewScale());
+  ctx.save();
+  ctx.fillStyle = "rgba(120,220,140,.08)";
+  ctx.beginPath();
+  ctx.arc(sx, sy, hz1, 0, 2 * Math.PI);
+  ctx.arc(sx, sy, hz0, 0, 2 * Math.PI, true);
+  ctx.fill();
+  // Front du vent de l'étoile, tant qu'il traverse le disque.
+  const front = windFront();
+  if (front > 0 && front < DISK_R_OUT) {
+    ctx.strokeStyle = "rgba(255,200,120,.35)";
+    ctx.lineWidth = Math.max(1, 2 * dpr);
+    ctx.beginPath();
+    ctx.arc(sx, sy, front * viewScale(), 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+  if (hz1 > 30 * dpr) {
+    ctx.fillStyle = "rgba(140,230,160,.6)";
+    ctx.font = `${10.5 * dpr}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("zone habitable", sx, sy + hz1 + 12 * dpr);
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle = "rgba(190,225,255,.45)";
+  ctx.lineWidth = Math.max(1, dpr);
+  ctx.setLineDash([4 * dpr, 5 * dpr]);
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, 2 * Math.PI);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(190,225,255,.7)";
+  ctx.font = `${10.5 * dpr}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillText("ligne des glaces", sx, sy - r - 5 * dpr);
+  ctx.restore();
+}
+
+// Barre d'échelle (en UA), longueur ronde (1, 2 ou 5 × 10^k) proche d'un cinquième de la vue.
+function drawScaleBar() {
+  const W = canvas.width, H = canvas.height;
+  const pxPerAu = viewScale() / U.lengthAU;
+  const target = Math.min(W, H) * 0.2 / pxPerAu;
+  const p = Math.pow(10, Math.floor(Math.log10(target)));
+  const au = [1, 2, 5, 10].map((m) => m * p).reduce((best, v) => Math.abs(v - target) < Math.abs(best - target) ? v : best);
+  const len = au * pxPerAu;
+  const dpr = window.devicePixelRatio || 1;
+  const x0 = 14 * dpr, y0 = H - 16 * dpr;
+  ctx.strokeStyle = "rgba(255,255,255,.55)";
+  ctx.lineWidth = Math.max(1, dpr);
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 - 4 * dpr); ctx.lineTo(x0, y0); ctx.lineTo(x0 + len, y0); ctx.lineTo(x0 + len, y0 - 4 * dpr);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,.7)";
+  ctx.font = `${11 * dpr}px system-ui, sans-serif`;
+  ctx.fillText(au.toLocaleString("fr-FR") + " UA", x0 + len + 6 * dpr, y0);
+}
+
+function draw(now) {
+  const W = canvas.width, H = canvas.height;
+  lctx.globalCompositeOperation = "source-over";
+  lctx.filter = "none";
+  if (params.trails && !clearTrails) {
+    lctx.fillStyle = "rgba(3,4,10,0.12)";
+  } else {
+    lctx.fillStyle = "#03040a";
+  }
+  clearTrails = false;
+  lctx.fillRect(0, 0, W, H);
+
+  const dpr = window.devicePixelRatio || 1;
+  for (const s of BACKGROUND_STARS) {
+    lctx.fillStyle = `rgba(210,220,255,${params.trails ? s.a * 0.15 : s.a})`;
+    lctx.fillRect(s.x * W, s.y * H, s.s * dpr, s.s * dpr);
+  }
+
+  if (params.gas) drawGas();
+
+  // Grains, regroupés par couleur (un seul changement de couleur par groupe). Phase Nuage : couleur
+  // selon la distance à l'étoile la plus proche (au centre du nuage tant qu'il n'y en a pas). Phase
+  // Disque : selon la sorte de grain, le gaz d'abord, les poussières par-dessus.
+  const palette = phase === "disk" ? [GAS_COLOR, ROCK_COLOR, ICE_COLOR] : GRAIN_COLORS;
+  if (phase === "disk") {
+    for (let i = 0; i < n; i++) grainBucket[i] = ptype[i] - GAS;
+  } else {
+    const logNear = Math.log(U.colorNear), invSpan = 1 / (Math.log(U.colorFar) - logNear);
+    for (let i = 0; i < n; i++) {
+      let r2 = Infinity;
+      if (stars.length === 0) {
+        r2 = (px[i] - centerX) ** 2 + (py[i] - centerY) ** 2;
+      } else {
+        for (const st of stars) r2 = Math.min(r2, (px[i] - st.x) ** 2 + (py[i] - st.y) ** 2);
+      }
+      const t = 1 - (0.5 * Math.log(Math.max(r2, 1e-8)) - logNear) * invSpan;
+      grainBucket[i] = Math.max(0, Math.min(7, Math.round(t * 7)));
+    }
+  }
+  const s = viewScale(), cx = W / 2 - cam.x * s, cy = H / 2 - cam.y * s;
+  // Points plus fins quand les grains sont nombreux, pour que le nuage ne devienne pas une tache pleine.
+  const dot = Math.max(1, dpr * Math.min(1.6, Math.max(0.8, 1.6 * Math.sqrt(1500 / n0))));
+  for (let b = 0; b < palette.length; b++) {
+    lctx.fillStyle = palette[b];
+    for (let i = 0; i < n; i++) {
+      if (grainBucket[i] !== b) continue;
+      const x = cx + px[i] * s, y = cy + py[i] * s;
+      if (x < -2 || y < -2 || x > W + 2 || y > H + 2) continue;
+      lctx.fillRect(x - dot / 2, y - dot / 2, dot, dot);
+    }
+  }
+
+  const planets = listPlanets();
+  if (phase === "disk") drawBodies(cx, cy, s, dpr);
+
+  ctx.globalCompositeOperation = "copy";
+  ctx.drawImage(layer, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  if (phase === "disk" && stars.length) { drawSnowLine(); drawPlanetLabels(planets); }
+  // Des moins massives aux plus massives : l'étoile a est dessinée en dernier, par-dessus.
+  for (let k = stars.length - 1; k >= 0; k--) drawStar(stars[k], now);
+  for (const st of stars) drawStarLabel(st);
+  drawScaleBar();
+}
+
+// ---------- Annonces et statistiques ----------
+const toastEl = document.getElementById("toast");
+let toastTimer = 0;
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
+}
+
+function formatAge(years) {
+  if (years < 1e6) {
+    const y = Math.round(years);
+    return y.toLocaleString("fr-FR") + (y < 2 ? " an" : " ans");
+  }
+  return (years / 1e6).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " Ma";
+}
+
+const ageVal = document.getElementById("ageVal");
+const starCountVal = document.getElementById("starCountVal");
+const starList = document.getElementById("starList");
+const matterVal = document.getElementById("matterVal");
+const radiusVal = document.getElementById("radiusVal");
+const ejectedVal = document.getElementById("ejectedVal");
+const phaseVal = document.getElementById("phaseVal");
+const diskRows = document.getElementById("diskRows");
+const diskGasVal = document.getElementById("diskGasVal");
+const diskDustVal = document.getElementById("diskDustVal");
+const snowLineVal = document.getElementById("snowLineVal");
+const growthYearsVal = document.getElementById("growthYearsVal");
+const windVal = document.getElementById("windVal");
+const habitableVal = document.getElementById("habitableVal");
+const smallBodiesVal = document.getElementById("smallBodiesVal");
+const planetsVal = document.getElementById("planetsVal");
+const planetList = document.getElementById("planetList");
+const diskBtn = document.getElementById("diskBtn");
+const plural = (k, word) => k.toLocaleString("fr-FR") + " " + word + (k < 2 ? "" : "s");
+const fmt = (v, digits) => v.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+// Masse en masses terrestres, lisible de la fraction de Terre aux centaines.
+const fmtEarth = (msun) => { const e = msun * EARTH_PER_MSUN; return fmt(e, e < 10 ? 1 : 0) + " M⊕"; };
+function updateStats() {
+  ageVal.textContent = formatAge(ageYears);
+  phaseVal.textContent = phase === "disk" ? `Disque (${fmt(DISK_R_IN, 1)} à ${DISK_R_OUT} UA)` : "Nuage";
+  diskBtn.disabled = phase !== "cloud" || stars.length === 0;
+  diskRows.classList.toggle("cartoucheHidden", phase !== "disk");
+  if (phase === "disk") {
+    // Matière restante du disque, par sorte de grain.
+    let gas = 0, rock = 0, ice = 0, nRock = 0, nIce = 0, nSmall = 0, small = 0;
+    const planetLimit = PLANET_EARTH / EARTH_PER_MSUN;
+    for (let i = 0; i < n; i++) {
+      const t = ptype[i];
+      if (t === GAS) gas += pmass[i];
+      else if (t === ROCK) { rock += pmass[i]; nRock++; }
+      else if (t === ICE) { ice += pmass[i]; nIce++; }
+      else if (t === BODY && pmass[i] < planetLimit) { small += pmass[i]; nSmall++; }
+    }
+    diskGasVal.textContent = fmt(gas, 3) + " M☉ (" + Math.round(gas / gasInitial * 100) + "%)";
+    const front = windFront();
+    growthYearsVal.textContent = formatAge(growthYears);
+    windVal.textContent = front <= 0
+      ? "dans " + formatAge(WIND_START_YEARS - growthYears)
+      : gas <= 0 ? "gaz dissipé (" + fmt(gasBlown, 3) + " M☉ soufflées)"
+      : "front à " + fmt(Math.min(front, DISK_R_OUT), 1) + " UA (" + fmt(gasBlown, 3) + " M☉ soufflées)";
+    diskDustVal.textContent = `${fmtEarth(rock)} roche (${plural(nRock, "grain")}) · ${fmtEarth(ice)} glace (${plural(nIce, "grain")})`;
+    snowLineVal.textContent = fmt(snowLine, 1) + " UA";
+    smallBodiesVal.textContent = `${nSmall.toLocaleString("fr-FR")} (${fmtEarth(small)})`;
+    const [hz0, hz1] = habitableZone();
+    habitableVal.textContent = `${fmt(hz0, 2)} à ${fmt(hz1, 2)} UA`;
+    // Une ligne par planète : nom et type, puis masse, part de glace et distance à l'étoile.
+    const planets = listPlanets();
+    planetsVal.textContent = planets.length || "Aucune pour l'instant";
+    // Annonce du premier noyau qui capture le gaz, puis de chaque nouveau nombre record de géantes gazeuses.
+    const giants = planets.filter((p) => p.type === "Géante gazeuse").length;
+    if (giants > 0 && !announced.has("giants:" + giants)) {
+      announced.add("giants:" + giants);
+      showToast(giants === 1 ? "🪐 Une géante gazeuse est née" : `🪐 ${giants} géantes gazeuses`);
+    } else if (planets.some((p) => p.type === "Noyau de géante") && !announced.has("core")) {
+      announced.add("core");
+      showToast("🪨 Un noyau de 10 masses terrestres commence à capturer le gaz");
+    }
+    planetList.replaceChildren(...planets.map((p) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const label = document.createElement("span");
+      label.textContent = `${p.name} · ${p.type}${p.habitable ? " 🌍" : ""}`;
+      const value = document.createElement("span");
+      value.className = "value";
+      const gasPart = p.gasFrac > 0 ? ` · ${Math.round(p.gasFrac * 100)}% gaz` : "";
+      value.textContent = `${fmtEarth(p.mEarth / EARTH_PER_MSUN)} · ${Math.round(p.iceFrac * 100)}% glace${gasPart} · ${fmt(p.r, 1)} UA`;
+      row.append(label, value);
+      return row;
+    }));
+  }
+  starCountVal.textContent = stars.length ? stars.length : "Pas encore née";
+  // Une ligne par étoile : lettre et état, puis masse et nombre de grains qui la composent.
+  starList.replaceChildren(...stars.map((s) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    const label = document.createElement("span");
+    label.textContent = `${s.name} · ${s.ignited ? "✨ allumée" : "proto-étoile"}`;
+    const value = document.createElement("span");
+    value.className = "value";
+    value.textContent = fmt(s.m * U.massMsun, 2) + " M☉ (" + plural(s.grains, "grain") + ")";
+    row.append(label, value);
+    return row;
+  }));
+  let matter = 0;
+  for (let i = 0; i < n; i++) matter += pmass[i];
+  matterVal.textContent = plural(n, "grain") + " (" + Math.round(matter / initialMatter * 100) + "%)";
+  radiusVal.textContent = Math.round(r90 * U.lengthAU).toLocaleString("fr-FR") + " UA";
+  ejectedVal.textContent = plural(ejected, "grain") + (ejectedStars ? ", " + plural(ejectedStars, "étoile") : "");
+}
+
+// ---------- Boucle principale ----------
+const perfVal = document.getElementById("perfVal");
+let frameCount = 0, lastFrame = 0, fpsSmooth = 60, physSmooth = 0, lastStatsAt = 0;
+function loop(now) {
+  const elapsed = lastFrame ? now - lastFrame : 16.7;
+  lastFrame = now;
+  fpsSmooth += (1000 / Math.max(1, elapsed) - fpsSmooth) * 0.05;
+
+  if (!paused) {
+    const t0 = performance.now();
+    for (let k = 0; k < params.speed; k++) step();
+    physSmooth += (performance.now() - t0 - physSmooth) * 0.1;
+  }
+  if (++frameCount % 20 === 0) updateExtents();
+  updateCamera();
+  draw(now);
+
+  if (now - lastStatsAt > 250) {
+    lastStatsAt = now;
+    updateStats();
+    perfVal.textContent = Math.round(fpsSmooth) + " fps · calcul " + Math.round(physSmooth / 16.7 * 100) + "%";
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- Commandes ----------
+const pauseBtn = document.getElementById("pauseBtn");
+function setPaused(on) {
+  paused = on;
+  pauseBtn.textContent = on ? "▶️ Reprendre" : "⏸️ Pause";
+}
+pauseBtn.addEventListener("click", () => setPaused(!paused));
+document.getElementById("newBtn").addEventListener("click", initCloud);
+diskBtn.addEventListener("click", () => { enterDiskPhase(); updateStats(); });
+
+const speedSeg = document.getElementById("speedSeg");
+const speedVal = document.getElementById("speedVal");
+speedSeg.addEventListener("click", (e) => {
+  const btn = e.target.closest(".segBtn");
+  if (!btn) return;
+  for (const b of speedSeg.querySelectorAll(".segBtn")) b.classList.toggle("active", b === btn);
+  params.speed = Number(btn.dataset.value);
+  speedVal.textContent = params.speed;
+});
+function speedStep(delta) {
+  const v = Math.max(1, Math.min(10, params.speed + delta));
+  speedSeg.querySelector('.segBtn[data-value="' + v + '"]').click();
+}
+
+// Curseurs : le libellé et le paramètre suivent en direct ("input") ; ceux qui définissent le nuage
+// de départ en créent un nouveau au relâchement ("change").
+const SLIDERS = [
+  { id: "countSlider", label: "countVal", key: "count", fmt: (v) => String(v), restart: true },
+  { id: "rotationSlider", label: "rotationVal", key: "rotation", fmt: (v) => v + "%", restart: true },
+  { id: "turbulenceSlider", label: "turbulenceVal", key: "turbulence", fmt: (v) => v + "%", restart: true },
+  { id: "agitationSlider", label: "agitationVal", key: "agitation", fmt: (v) => v + "%", restart: true },
+  { id: "frictionSlider", label: "frictionVal", key: "friction", fmt: (v) => v + "%", restart: false },
+  { id: "growthSlider", label: "growthVal", key: "growth", fmt: (v) => "×" + Math.round(Math.pow(10, v / 25)).toLocaleString("fr-FR"), restart: false },
+];
+for (const { id, label, key, fmt, restart } of SLIDERS) {
+  const el = document.getElementById(id), lab = document.getElementById(label);
+  el.addEventListener("input", () => {
+    params[key] = Number(el.value);
+    lab.textContent = fmt(params[key]);
+  });
+  if (restart) el.addEventListener("change", initCloud);
+}
+
+const trailsCheckbox = document.getElementById("trailsCheckbox");
+trailsCheckbox.addEventListener("change", () => { params.trails = trailsCheckbox.checked; clearTrails = true; });
+const gasCheckbox = document.getElementById("gasCheckbox");
+gasCheckbox.addEventListener("change", () => { params.gas = gasCheckbox.checked; });
+
+const stageEl = document.querySelector(".stage");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
+fullscreenBtn.addEventListener("click", () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else stageEl.requestFullscreen().catch(() => {});
+});
+document.addEventListener("fullscreenchange", () => {
+  const on = document.fullscreenElement === stageEl;
+  fullscreenBtn.textContent = on ? "⛶ Quitter le plein écran" : "⛶ Plein écran";
+});
+
+// Raccourcis clavier : déclenchent les boutons correspondants, pour garder une seule logique (et la
+// sauvegarde des réglages, qui écoute les clics). Ignorés pendant la saisie dans un champ, et avec
+// Ctrl/Alt/Cmd (raccourcis du navigateur).
+const SHORTCUTS = { " ": "pauseBtn", n: "newBtn", d: "diskBtn", f: "fullscreenBtn", t: "trailsCheckbox" };
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+  const el = e.target;
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+  if (infoDialog.open) return;
+  const key = e.key.toLowerCase();
+  if (key === "+" || key === "=") { e.preventDefault(); speedStep(1); return; }
+  if (key === "-" || key === "_") { e.preventDefault(); speedStep(-1); return; }
+  const id = SHORTCUTS[key];
+  if (!id) return;
+  e.preventDefault();
+  // Un bouton qui a le focus serait aussi activé par la barre d'espace : on le libère d'abord.
+  if (document.activeElement && document.activeElement.tagName === "BUTTON") document.activeElement.blur();
+  document.getElementById(id).click();
+});
+
+// ---------- Réglages mémorisés ----------
+// Gardés dans le navigateur (localStorage) et restaurés au chargement : curseurs, vitesse, cases à
+// cocher, cartouches affichés. Sauvegarde déclenchée par n'importe quelle interaction avec la page,
+// regroupée (SAVE_DELAY_MS). Stockage indisponible (navigation privée…) : ignoré.
+const SETTINGS_KEY = "starforge.settings.v1";
+const SAVE_DELAY_MS = 300;
+let saveTimer = 0;
+let settingsReset = false; // plus aucune sauvegarde une fois les réglages effacés (rechargement en cours)
+function collectSettings() {
+  const panels = {};
+  for (const { checkbox } of PANEL_TOGGLES) panels[checkbox] = document.getElementById(checkbox).checked;
+  return {
+    count: params.count, rotation: params.rotation, turbulence: params.turbulence, agitation: params.agitation, friction: params.friction, growth: params.growth,
+    speed: params.speed, trails: params.trails, gas: params.gas, autoFrame: params.autoFrame, panels,
+  };
+}
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  if (settingsReset) return;
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(collectSettings())); } catch (e) { /* stockage indisponible */ }
+  }, SAVE_DELAY_MS);
+}
+for (const type of ["input", "change", "click"]) document.addEventListener(type, scheduleSave);
+
+document.getElementById("resetSettingsBtn").addEventListener("click", () => {
+  if (!confirm("Remettre tous les réglages à leurs valeurs par défaut ? La page va être rechargée.")) return;
+  settingsReset = true;
+  clearTimeout(saveTimer);
+  try { localStorage.removeItem(SETTINGS_KEY); } catch (e) { /* stockage indisponible */ }
+  location.reload();
+});
+
+// Restaure les réglages mémorisés, avant la création du premier nuage. Chaque valeur est vérifiée
+// (type, bornes du curseur) : un réglage absent ou abîmé garde sa valeur par défaut.
+function loadSettings() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); } catch (e) { s = null; }
+  if (!s || typeof s !== "object") return;
+  const isNum = (v) => typeof v === "number" && isFinite(v);
+  const setCheck = (el, v) => {
+    if (typeof v !== "boolean") return;
+    el.checked = v;
+    el.dispatchEvent(new Event("change"));
+  };
+  for (const { id, key } of SLIDERS) {
+    const el = document.getElementById(id), v = s[key];
+    if (!isNum(v) || v < Number(el.min) || v > Number(el.max)) continue;
+    el.value = String(v);
+    el.dispatchEvent(new Event("input"));
+  }
+  if (isNum(s.speed)) {
+    const btn = speedSeg.querySelector('.segBtn[data-value="' + s.speed + '"]');
+    if (btn) btn.click();
+  }
+  setCheck(trailsCheckbox, s.trails);
+  setCheck(gasCheckbox, s.gas);
+  setCheck(autoFrameCheckbox, s.autoFrame);
+  if (s.panels && typeof s.panels === "object") {
+    for (const { checkbox } of PANEL_TOGGLES) setCheck(document.getElementById(checkbox), s.panels[checkbox]);
+  }
+}
+
+// ---------- Démarrage ----------
+loadSettings();
+initCloud();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
