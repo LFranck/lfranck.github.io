@@ -15,6 +15,7 @@ Ceci un espace pour partager mes projets.
     <td align="center" valign="top"><a href="panicapp.html"><img src="assets/panic.png" alt="Panic App" width="180"></a><br><a href="panicapp.html">Panic App</a></td>
     <td align="center" valign="top"><a href="sable.html"><img src="assets/sable.png" alt="SandSim.exe" width="180"></a><br><a href="sable.html">SandSim.exe</a><br><sub><a href="sableWebGL.html">version WebGL (expérimentale)</a></sub></td>
     <td align="center" valign="top"><a href="echecs.html"><img src="assets/echecs.png" alt="Échecs" width="180"></a><br><a href="echecs.html">Échecs</a></td>
+    <td align="center" valign="top"><a href="planete.html"><img src="assets/planete.png" alt="PlanetForge" width="180"></a><br><a href="planete.html">PlanetForge</a></td>
   </tr>
 </table>
 
@@ -91,3 +92,26 @@ Suivre un livre de stratégie d'échecs sans échiquier sous la main : on dicte 
 - Notation des coups joués et affichage des pièces capturées.
 - Nouvelle partie et annulation de coup.
 - Méthode d'entraînement « échecs / prises / menaces / pièces en prise », qui surligne sur le plateau les coups ou pièces concernés.
+
+## [PlanetForge](planete.html)
+
+*Version 0.11.6*
+
+### But de l'appli
+
+Regarder naître la surface d'une planète : partie d'une sphère parfaitement lisse, elle est coupée des milliers de fois en deux hémisphères par un plan tiré au hasard, un côté monte, l'autre descend. Faille après faille, les continents émergent, puis les côtes et les montagnes se ciselent. *(Prototype en cours de développement.)*
+
+### Fonctionnalités
+
+- Formation animée, de 0,5 à 50 000 failles par seconde, limitée à un nombre de failles ou sans fin, avec la dernière faille tracée sur la carte.
+- Trois vues : carte de Mercator, carte équirectangulaire et globe 3D éclairé, qu'on fait tourner et incliner à la souris ou au doigt.
+- Vue au sol à la première personne, sur n'importe quel point de la planète : on s'y pose d'un clic, puis on se déplace au clavier (flèches, ZQSD / WASD), à l'altitude de son choix, avec la courbure de la planète, la brume au loin et le relief exagéré à volonté.
+- Part d'océans réglable, calottes polaires, ombrage du relief (accentuation réglable).
+- Altitudes en mètres : point culminant, fosse la plus profonde et dénivelé total, comparé à celui de la Terre (19 784 m, de la fosse des Mariannes à l'Everest).
+- Palettes : Terre, Désert, Glace, Volcan, Mars, Alien.
+- Biomes selon le climat (latitude, altitude, éloignement de la mer) : forêt tropicale, savane, désert, forêt tempérée, prairie, steppe, taïga, toundra.
+- Rivières qui ruissellent jusqu'à la mer, en remplissant les cuvettes en lacs.
+- Érosion réglable : les rivières creusent leurs vallées et déposent leurs débris à l'embouchure, les pentes s'adoucissent.
+- Résolution de la carte au choix (512, 1024 ou 2048 points de large), plein écran, export de l'image en PNG.
+- Raccourcis clavier : Espace pause, N nouvelle planète, P projection, V vue au sol, R rotation automatique, F plein écran, E export PNG, + / − vitesse.
+- Réglages mémorisés d'une visite à l'autre.

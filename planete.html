@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<!--
+  PlanetForge — Formation de la surface d'une planète
+  Ces informations (version, auteur, date, licence) sont la source unique :
+  elles sont reprises dans les constantes APP_* du script et affichées dans
+  la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
+
+  Version : 0.11.6
+  Auteur  : Franck Legrand <franck.legrand@gmail.com>
+  Date    : 2026-10-23
+  Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
+  Statut  : Prototype (en cours de développement).
+  © 2026 Franck Legrand. Tous droits réservés.
+-->
+<html lang="fr">
+<head>
+<!-- Google Analytics, chargé seulement si le visiteur l'accepte (bandeau de consentement : consent.js) -->
+<script src="consent.js" data-ga-id="G-FNEPDDHNMK" defer></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PlanetForge — Formation de la surface d'une planète</title>
+<style>
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,sans-serif;
+    background:#111; color:#fff; display:flex; flex-direction:column;
+  }
+  header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 24px; background:#181818; border-bottom:1px solid #333;
+  }
+  h1 { margin:0; font-size:19px; font-weight:650; }
+  main { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+
+  /* Lien "Informations" (en-tête) et sa pop-up (version, auteur, date, licence) */
+  #infoLink {
+    background:none; border:0; color:#aaa; font-size:13px; text-decoration:underline;
+    cursor:pointer; padding:4px;
+  }
+  #infoLink:hover { color:#fff; }
+  /* Lien de soutien Ko-fi (en-tête) : pastille ambrée ; sur petit écran, la tasse seule. */
+  #kofiLink {
+    display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:999px;
+    background:#f5a524; color:#1a1206; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap;
+  }
+  #kofiLink:hover { background:#ffb940; }
+  @media (max-width:560px) { #kofiLink .kofiText { display:none; } }
+  #infoDialog {
+    background:#1b1b1b; color:#eee; border:1px solid #333; border-radius:14px;
+    padding:22px 26px; max-width:min(420px,90vw);
+  }
+  #infoDialog::backdrop { background:rgba(0,0,0,.6); }
+  #infoDialog h2 { margin:0 0 12px; font-size:18px; }
+  #infoDialog dl { margin:0 0 16px; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:14px; }
+  #infoDialog dt { color:#999; }
+  #infoDialog dd { margin:0; }
+  #infoDialog button { padding:8px 16px; font-size:14px; border:0; border-radius:10px; cursor:pointer; background:#fff; color:#111; font-weight:700; }
+  #infoDialog #resetSettingsBtn { background:#333; color:#eee; margin-right:8px; }
+  #infoDialog #resetSettingsBtn:hover { background:#444; }
+  #panelToggles { margin:0 0 18px; padding-top:14px; border-top:1px solid #333; }
+  #panelToggles h3 { margin:0 0 10px; font-size:13px; font-weight:700; color:#999; text-transform:uppercase; letter-spacing:.03em; }
+  #panelToggles label { flex-direction:row; align-items:center; gap:8px; margin-bottom:8px; font-size:14px; color:#eee; cursor:pointer; }
+  .cartoucheHidden { display:none !important; }
+
+  .panel {
+    width:min(1180px,96vw); max-height:100%;
+    display:flex; flex-direction:column; align-items:center; gap:22px;
+    background:#161616; border:1px solid #262626; border-radius:22px;
+    padding:clamp(20px,4vh,32px) clamp(14px,3vw,28px);
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+    overflow:auto;
+  }
+  .stage { display:flex; flex-direction:column; align-items:center; gap:18px; flex:none; width:100%; }
+  /* Les cartouches de réglages se placent côte à côte sous la carte quand la largeur le permet, et
+     repassent à la ligne (empilés) sur un écran étroit. */
+  .sidebar { width:100%; display:flex; flex-direction:row; flex-wrap:wrap; align-items:flex-start; gap:16px; }
+
+  /* Carte de la planète. Son rapport largeur/hauteur (--aspect) dépend de la projection ; la
+     largeur est bornée par la hauteur de l'écran pour que la carte reste visible en entier. Le
+     canvas prend la taille affichée (en pixels réels de l'écran, recalculée au redimensionnement). */
+  .mapWrap {
+    --aspect:2;
+    position:relative; width:min(100%, calc((100vh - 230px) * var(--aspect))); min-width:min(100%, 280px);
+    aspect-ratio:var(--aspect);
+    border-radius:14px; overflow:hidden; background:#0a2350;
+    box-shadow:0 18px 45px rgba(0,0,0,.5), inset 0 0 0 2px rgba(255,255,255,.08);
+  }
+  .mapWrap canvas { width:100%; height:100%; display:block; cursor:grab; touch-action:none; }
+  .mapWrap canvas.dragging { cursor:grabbing; }
+  .mapWrap canvas.picking { cursor:crosshair; }
+  /* Vue au sol : paysage en 16:9. */
+  .mapWrap.ground { background:#8fb4dc; }
+  /* Globe : la planète vue de l'espace. */
+  .mapWrap.globe { background:radial-gradient(circle at 50% 45%, #0b1226 0%, #03040a 70%); }
+  /* En plein écran, la carte profite de tout l'espace disponible. */
+  .stage:fullscreen { width:100vw; height:100vh; justify-content:center; background:#0a0a0a; }
+  .stage:fullscreen .mapWrap { width:min(96vw, calc((100vh - 110px) * var(--aspect))); }
+  /* Annonce brève affichée sur la carte (ex. image enregistrée). */
+  #toast {
+    position:absolute; left:50%; top:16px; transform:translate(-50%,-8px);
+    background:rgba(20,20,28,.85); border:1px solid rgba(255,255,255,.15); border-radius:999px;
+    padding:7px 16px; font-size:14px; font-weight:650; white-space:nowrap; pointer-events:none;
+    opacity:0; transition:opacity .4s, transform .4s;
+  }
+  #toast.show { opacity:1; transform:translate(-50%,0); }
+  kbd { display:inline-block; min-width:1.4em; padding:0 4px; border:1px solid #555; border-radius:4px; background:#2a2a2a; color:#eee; font:600 11px/1.5 inherit; text-align:center; }
+
+  .hint { color:#999; font-size:12.5px; text-align:center; max-width:620px; margin:0; }
+
+  .actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .btn {
+    background:#fff; color:#111; border:0; border-radius:12px; padding:11px 18px;
+    font-size:14px; font-weight:700; cursor:pointer;
+  }
+  .btn:active { transform:scale(.97); }
+  .btn.ghost { background:none; border:1px solid #333; color:#ddd; font-weight:600; }
+  .btn:disabled { opacity:.35; cursor:default; transform:none; }
+
+  /* Contrôle segmenté (boutons sélectionnables) : vitesse, projection, résolution. */
+  .segmented { display:grid; grid-template-columns:repeat(var(--cols,10), 1fr); gap:3px; }
+  .segBtn {
+    min-width:0; background:#252525; color:#ccc; border:1px solid #3a3a3a;
+    border-radius:6px; padding:6px 0; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .segBtn:hover { border-color:#555; }
+  .segBtn.active { background:#fff; color:#111; border-color:#fff; }
+
+  .controls {
+    position:relative;
+    flex:1 1 260px; min-width:220px; background:#1b1b1b; border:1px solid #333; border-radius:14px;
+    padding:16px 18px; display:flex; flex-direction:column; gap:16px;
+  }
+  .cartoucheTitle { font-weight:700; font-size:14px; color:#fff; padding-right:22px; }
+  /* Croix de fermeture en haut à droite de chaque cartouche (ajoutée par le script) : décoche la
+     case correspondante de la fenêtre Informations. */
+  .closeBtn {
+    position:absolute; top:10px; right:10px; width:22px; height:22px; padding:0;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:none; color:#888; border:0; border-radius:6px; font-size:18px; line-height:1; cursor:pointer;
+  }
+  .closeBtn:hover { background:#333; color:#fff; }
+  label { display:flex; flex-direction:column; gap:6px; color:#ccc; font-size:13.5px; }
+  .row { display:flex; flex-direction:row; align-items:center; gap:8px; }
+  .row:has(.value) { justify-content:space-between; }
+  .value { font-weight:700; color:#fff; text-align:right; }
+  input[type=range] { width:100%; }
+  .sub { color:#888; font-size:11.5px; display:none; }
+  .sub.show { display:block; margin-top:6px; }
+  /* Petit bouton "i" qui révèle l'explication (.sub) associée, cachée par défaut. */
+  .infoBtn {
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+    width:15px; height:15px; margin-left:5px; border-radius:50%;
+    background:#2a2a2a; color:#999; border:1px solid #444; font-size:10px; font-weight:700;
+    font-style:italic; font-family:Georgia,serif; cursor:pointer; line-height:1; padding:0;
+  }
+  .infoBtn:hover, .infoBtn.active { background:#444; color:#fff; }
+  .stats { display:flex; flex-direction:column; gap:10px; font-size:13.5px; color:#ccc; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌍 PlanetForge</h1>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <a id="kofiLink" href="https://ko-fi.com/lfranck" target="_blank" rel="noopener" title="Soutenir mes projets sur Ko-fi" aria-label="M'offrir un café sur Ko-fi">☕<span class="kofiText">M'offrir un café</span></a>
+    <button id="infoLink" type="button">ℹ️ Informations</button>
+  </div>
+</header>
+
+<dialog id="infoDialog">
+  <h2>À propos de PlanetForge</h2>
+  <dl>
+    <dt>Version</dt><dd id="infoVersion"></dd>
+    <dt>Auteur</dt><dd id="infoAuthor"></dd>
+    <dt>Date</dt><dd id="infoDate"></dd>
+    <dt>Licence</dt><dd id="infoLicense"></dd>
+  </dl>
+  <div id="panelToggles">
+    <h3>Raccourcis clavier</h3>
+    <p style="margin:0 0 14px; font-size:13.5px; color:#ccc; line-height:1.7;"><kbd>Espace</kbd> pause · <kbd>N</kbd> nouvelle planète · <kbd>P</kbd> projection · <kbd>R</kbd> rotation automatique · <kbd>F</kbd> plein écran · <kbd>E</kbd> exporter en PNG · <kbd>V</kbd> vue au sol (puis flèches ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> pour avancer, <kbd>Maj</kbd> plus vite, molette pour l'altitude, <kbd>Échap</kbd> retour) · <kbd>+</kbd> / <kbd>−</kbd> vitesse. <kbd>Échap</kbd> pour quitter le plein écran. Glisser sur la carte pour faire tourner la planète (sur le globe, glisser à la verticale l'incline), double-clic pour la recentrer.</p>
+    <h3>Cartouches affichés</h3>
+    <label class="row"><input type="checkbox" id="toggleSettings" checked><span>🎛️ Réglages</span></label>
+    <label class="row"><input type="checkbox" id="toggleView" checked><span>👁️ Affichage</span></label>
+    <label class="row"><input type="checkbox" id="togglePlanet" checked><span>📋 Planète</span></label>
+  </div>
+  <button id="resetSettingsBtn" type="button" title="Oublie les réglages mémorisés dans le navigateur et recharge la page avec les valeurs par défaut.">↺ Valeurs par défaut</button>
+  <button id="infoClose" type="button">Fermer</button>
+</dialog>
+
+<main>
+  <div class="panel">
+    <div class="stage">
+      <div class="mapWrap" id="mapWrap">
+        <canvas id="mapCanvas" width="1024" height="512"></canvas>
+        <div id="toast"></div>
+      </div>
+      <p class="hint">La planète part d'une surface parfaitement lisse. À chaque faille, elle est coupée en deux hémisphères par un plan tiré au hasard : un côté monte, l'autre descend. Faille après faille, les continents émergent puis se ciselent. Glisser sur la carte pour faire tourner la planète (sur le globe, glisser à la verticale l'incline), double-clic pour la recentrer.</p>
+      <div class="actions">
+        <button class="btn" id="pauseBtn" type="button">⏸️ Pause</button>
+        <button class="btn ghost" id="newBtn" type="button" title="Repart d'une planète lisse, avec de nouvelles failles tirées au hasard. Raccourci : N.">🌍 Nouvelle planète</button>
+        <button class="btn ghost" id="fullscreenBtn" type="button" title="Affiche la carte sur tout l'écran. Raccourci : F. Échap pour quitter.">⛶ Plein écran</button>
+        <button class="btn ghost" id="groundBtn" type="button" title="Vue à la première personne : cliquez ensuite sur un point de la carte ou du globe pour vous y poser. Glisser pour regarder autour, flèches ou ZQSD / WASD pour avancer (Maj : plus vite), molette pour monter ou descendre. Échap ou ce bouton pour revenir à la carte. Raccourci : V.">🧍 Vue au sol</button>
+        <button class="btn ghost" id="exportBtn" type="button" title="Enregistre l'image affichée (carte ou globe), sans la dernière faille ni les repères. Carte : à la résolution de la grille. Raccourci : E.">📷 PNG</button>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="controls" id="panelSettings">
+        <div class="cartoucheTitle">🎛️ Réglages</div>
+        <div>
+          <div class="row"><span>Performance<button type="button" class="infoBtn" data-target="subPerf" aria-label="Informations">i</button></span><span class="value" id="perfVal">—</span></div>
+          <span class="sub" id="subPerf">Failles appliquées par seconde et images par seconde. Le calcul est limité à une part de chaque image pour que l'affichage reste fluide : aux vitesses les plus hautes, c'est la machine qui fixe le rythme.</span>
+        </div>
+        <label>
+          <div class="row"><span>Vitesse<button type="button" class="infoBtn" data-target="subSpeed" aria-label="Informations">i</button></span><span class="value" id="speedVal">2,8 failles/s</span></div>
+          <input type="range" id="speedSlider" min="0" max="100" value="15" step="1">
+          <span class="sub" id="subSpeed">Nombre de failles ajoutées par seconde, de 0,5 (on suit chaque coupure, une à une) à 50 000. Les premières dizaines de failles découpent la planète en grands blocs, les premières centaines dessinent la forme des continents ; les suivantes affinent les côtes et le relief : accélérez au fil de la formation. Aux vitesses les plus hautes, c'est la machine qui fixe le rythme (voir Performance). Raccourcis : + et −.</span>
+        </label>
+        <label>
+          <div class="row"><span>Nombre de failles<button type="button" class="infoBtn" data-target="subFaults" aria-label="Informations">i</button></span><span class="value" id="faultsVal">Illimité</span></div>
+          <input type="range" id="faultsSlider" min="0" max="100" value="100" step="1">
+          <span class="sub" id="subFaults">La formation s'arrête une fois ce nombre de failles atteint (de 100 à 93 000) ; tout à droite, « Illimité » : elle continue sans fin, jusqu'à la pause. Plus il y a de failles, plus les côtes et le relief sont fins, et plus le dénivelé grandit. L'augmenter relance la formation là où elle s'était arrêtée ; le placer sous le nombre de failles déjà appliquées arrête la formation (la planète reste telle quelle).</span>
+        </label>
+        <label>
+          <div class="row"><span>Océans<button type="button" class="infoBtn" data-target="subOcean" aria-label="Informations">i</button></span><span class="value" id="oceanVal">70%</span></div>
+          <input type="range" id="oceanSlider" min="0" max="100" value="70" step="1">
+          <span class="sub" id="subOcean">Part de la surface de la planète sous les eaux (sur Terre : 71 %). Le niveau de la mer est placé à l'altitude qui noie exactement cette part de la surface, mesurée sur la sphère (les régions proches des pôles, agrandies par les cartes plates, comptent moins). Agit tout de suite.</span>
+        </label>
+        <label>
+          <div class="row"><span>Érosion<button type="button" class="infoBtn" data-target="subErosion" aria-label="Informations">i</button></span><span class="value" id="erosionVal">Aucune</span></div>
+          <input type="range" id="erosionSlider" min="0" max="100" value="0" step="1">
+          <span class="sub" id="subErosion">Usure du relief, qui s'oppose à sa montée par les failles. Deux processus : les rivières creusent leur lit, d'autant plus qu'elles drainent d'eau et que la pente est forte (les vallées se dessinent, les sommets reculent), et emportent les débris jusqu'à la mer, où ils se déposent près de l'embouchure ; les pentes s'adoucissent lentement partout (plus lentement sous la mer). L'érosion avance au rythme des failles (le temps géologique) : à vitesse égale de formation, plus elle est forte, plus le dénivelé plafonne bas. En pause, elle s'arrête aussi. Calculée chaque seconde (le ruissellement est le même que celui des rivières).</span>
+        </label>
+      </div>
+
+      <div class="controls" id="panelView">
+        <div class="cartoucheTitle">👁️ Affichage</div>
+        <div>
+          <div class="row"><span>Palette<button type="button" class="infoBtn" data-target="subPalette" aria-label="Informations">i</button></span></div>
+          <div class="segmented" id="paletteSeg" style="--cols:3; margin-top:6px;" role="group" aria-label="Palette de couleurs">
+            <button type="button" class="segBtn active" data-value="terre">Terre</button>
+            <button type="button" class="segBtn" data-value="desert">Désert</button>
+            <button type="button" class="segBtn" data-value="glace">Glace</button>
+            <button type="button" class="segBtn" data-value="volcan">Volcan</button>
+            <button type="button" class="segBtn" data-value="mars">Mars</button>
+            <button type="button" class="segBtn" data-value="alien">Alien</button>
+          </div>
+          <span class="sub" id="subPalette">Couleurs de la planète, du fond des océans aux sommets. Terre : océans bleus, plaines vertes, montagnes brunes et neiges. Désert : mers turquoise peu profondes et terres de sable et d'ocre. Glace : océans sombres et terres gelées. Volcan : mers de lave et roches de basalte. Mars : plaines rouillées sans eau, calottes de glace. Alien : mers vertes et terres violettes. Seules les couleurs changent : la planète et son relief restent les mêmes.</span>
+        </div>
+        <div>
+          <div class="row"><span>Projection<button type="button" class="infoBtn" data-target="subProjection" aria-label="Informations">i</button></span></div>
+          <div class="segmented" id="projectionSeg" style="--cols:3; margin-top:6px;" role="group" aria-label="Projection de la carte">
+            <button type="button" class="segBtn active" data-value="mercator">Mercator</button>
+            <button type="button" class="segBtn" data-value="equirect" title="Équirectangulaire">Équirect.</button>
+            <button type="button" class="segBtn" data-value="globe">Globe</button>
+          </div>
+          <span class="sub" id="subProjection">Façon de montrer la sphère. Mercator : carte plate où les formes sont respectées localement, mais les régions sont de plus en plus agrandies vers les pôles (la carte s'arrête à 85° de latitude, au-delà elle partirait à l'infini). Équirectangulaire : carte plate où latitude et longitude sont réparties régulièrement, toute la planète est visible, les pôles sont étirés en largeur. Globe : la planète vue de l'espace, éclairée par un soleil fixe ; glisser à l'horizontale la fait tourner, à la verticale l'incline pour voir les pôles. Le relief est calculé sur la sphère : changer de projection ne change pas la planète. Raccourci : P.</span>
+        </div>
+        <div>
+          <div class="row"><span>Résolution<button type="button" class="infoBtn" data-target="subRes" aria-label="Informations">i</button></span></div>
+          <div class="segmented" id="resSeg" style="--cols:3; margin-top:6px;" role="group" aria-label="Résolution de la carte">
+            <button type="button" class="segBtn" data-value="512">512</button>
+            <button type="button" class="segBtn active" data-value="1024">1024</button>
+            <button type="button" class="segBtn" data-value="2048">2048</button>
+          </div>
+          <span class="sub" id="subRes">Largeur de la carte en points. Plus elle est grande, plus les détails sont fins, et plus le calcul de chaque faille est long. Changer de résolution garde la planète en cours, ré-échantillonnée à la nouvelle taille : passer à une résolution plus fine ne crée pas de détail sur le moment, les failles suivantes en ajouteront ; passer à une résolution plus grossière en perd. Changer de projection ne change que l'affichage.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="autoRotateCheckbox">
+            <span>Rotation automatique</span>
+            <button type="button" class="infoBtn" data-target="subAutoRotate" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subAutoRotate">La planète tourne lentement sur elle-même, d'ouest en est (un tour par minute) : le globe défile, la carte glisse vers la droite. On peut toujours la faire tourner à la main en glissant. Raccourci : R.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="biomesCheckbox">
+            <span>Biomes</span>
+            <button type="button" class="infoBtn" data-target="subBiomes" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subBiomes">Colore les terres selon leur climat plutôt que selon leur altitude (les océans gardent les couleurs de la palette). La température dépend de la latitude (30 °C à l'équateur, environ 0 °C à 60°, −25 °C aux pôles) et baisse de 6,5 °C par kilomètre d'altitude, comme sur Terre : les hauts sommets deviennent toundra puis glace. L'humidité suit les grandes ceintures de pluie (forte à l'équateur, faible vers 25-30° où naissent les grands déserts, de nouveau forte aux latitudes moyennes) et baisse au cœur des continents, loin de la mer. On obtient, du chaud et humide au froid et sec : forêt tropicale, savane, désert, forêt tempérée, prairie, steppe, taïga, toundra. Avec Calottes polaires, les terres sous −12 °C sont couvertes de glace. Recalculé chaque seconde pendant la formation.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="riversCheckbox">
+            <span>Rivières</span>
+            <button type="button" class="infoBtn" data-target="subRivers" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subRivers">La pluie tombe sur les terres (plus près de la mer et dans les ceintures humides) et ruisselle toujours vers le bas, jusqu'à la mer. Une cuvette se remplit en lac et déborde par son col le plus bas. Chaque point reçoit l'eau de tout son bassin versant ; les 2,5 % des terres qui en reçoivent le plus forment les rivières, et les plus gros débits les grands fleuves (plus foncés). Elles prennent la couleur des eaux côtières de la palette (lave sur Volcan…). Recalculé chaque seconde pendant la formation : les rivières se déplacent quand le relief change.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="hillCheckbox" checked>
+            <span>Ombrage du relief</span>
+            <button type="button" class="infoBtn" data-target="subHill" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subHill">Éclaire le relief comme sur une carte d'atlas, par une lumière venue du nord-ouest : les pentes tournées vers elle s'éclaircissent, les autres s'assombrissent, et les montagnes prennent du volume. Le fond des océans n'est que très légèrement ombré. Sur le globe, le relief est accentué (pentes exagérées) pour rester lisible vu de loin. Au tout début de la formation, quand il y a peu de failles, chaque faille marque une arête nette : c'est la marche entre le côté qui monte et celui qui descend.</span>
+        </div>
+        <label>
+          <div class="row"><span>Accentuation du relief<button type="button" class="infoBtn" data-target="subExaggeration" aria-label="Informations">i</button></span><span class="value" id="exaggerationVal">×1</span></div>
+          <input type="range" id="exaggerationSlider" min="0" max="100" value="50" step="1">
+          <span class="sub" id="subExaggeration">Exagère ou adoucit les pentes de l'ombrage du relief, de ×0,25 (relief à peine esquissé) à ×4 (montagnes très marquées). ×1 : le réglage de base, déjà plus accentué sur le globe que sur les cartes plates. Sans effet si l'ombrage du relief est décoché. Agit tout de suite.</span>
+        </label>
+        <label>
+          <div class="row"><span>Relief en vue au sol<button type="button" class="infoBtn" data-target="subGroundExag" aria-label="Informations">i</button></span><span class="value" id="groundExagVal">×50</span></div>
+          <input type="range" id="groundExagSlider" min="0" max="100" value="74" step="1">
+          <span class="sub" id="subGroundExag">Exagération verticale du relief dans la vue au sol, de ×1 (relief réel) à ×200. La planète a la taille de la Terre, et une case de la grille y couvre des dizaines de kilomètres (39 km en résolution 1024) : entre deux cases voisines, le terrain ne monte que de quelques dizaines de mètres, une pente d'environ 0,1 %. Sans exagération, le paysage paraît donc plat, comme le serait la Terre vue à cette échelle, hors des grandes chaînes de montagnes. Vers ×50, les reliefs deviennent lisibles. Agit tout de suite.</span>
+        </label>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="capsCheckbox" checked>
+            <span>Calottes polaires</span>
+            <button type="button" class="infoBtn" data-target="subCaps" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subCaps">Glace sur les terres et banquise sur la mer près des pôles. Plus on monte, plus la glace descend vers l'équateur : seuls les plus hauts sommets restent enneigés aux latitudes moyennes.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="faultCheckbox" checked>
+            <span>Dernière faille</span>
+            <button type="button" class="infoBtn" data-target="subFault" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subFault">Trace sur la carte la dernière faille appliquée, pendant la formation. Sur la sphère, c'est un grand cercle (comme l'équateur, mais incliné au hasard) : déformé par la projection, il apparaît comme une vague qui fait le tour de la carte.</span>
+        </div>
+        <div>
+          <label class="row" style="cursor:pointer;">
+            <input type="checkbox" id="extremesCheckbox" checked>
+            <span>Point culminant et fosse</span>
+            <button type="button" class="infoBtn" data-target="subExtremes" aria-label="Informations">i</button>
+          </label>
+          <span class="sub" id="subExtremes">Marque sur la carte le point culminant (▲ orange) et la fosse la plus profonde (▼ cyan), dont les altitudes sont données dans le cartouche Planète. Au fil des failles, ils peuvent sauter d'un bout à l'autre de la planète. En cas d'égalité, c'est le premier trouvé (le plus au nord) qui est marqué.</span>
+        </div>
+      </div>
+
+      <div class="controls" id="panelPlanet">
+        <div class="cartoucheTitle">📋 Planète<button type="button" class="infoBtn" data-target="subPlanet" aria-label="Informations">i</button></div>
+        <span class="sub" id="subPlanet">Chaque faille est un plan qui passe par le centre de la planète, d'orientation tirée au hasard. Il coupe la surface en deux hémisphères : tous les points d'un côté montent d'un cran, ceux de l'autre côté descendent d'un cran. L'altitude d'un point est donc le nombre de fois où il s'est trouvé du côté qui monte, moins le nombre de fois où il était du côté qui descend. Comme le calcul se fait sur la sphère, la planète est continue partout : pas de raccord au bord de la carte ni aux pôles. Chaque faille fait monter ou descendre le terrain d'un cran, soit un mètre. L'altitude est comptée depuis le niveau de la mer, placé à mi-chemin entre la plus haute mer et la plus basse terre : le point culminant est le point le plus haut au-dessus de la mer, la fosse la plus profonde le point le plus bas en dessous. Le dénivelé total, du fond de la fosse au sommet, ne dépend pas du niveau de la mer ; il est comparé à celui de la Terre : 19 784 m, de Challenger Deep (−10 935 m, fosse des Mariannes) à l'Everest (8 849 m). Les failles se compensant en partie, il ne grandit pas comme leur nombre, mais à peu près comme sa racine carrée : 4 fois plus de failles, un relief 2 fois plus haut.</span>
+        <div class="stats">
+          <div class="row"><span>État</span><span class="value" id="stateVal">En formation</span></div>
+          <div class="row"><span>Failles</span><span class="value" id="appliedVal">0</span></div>
+          <div class="row"><span>Terres émergées</span><span class="value" id="landVal">—</span></div>
+          <div class="row"><span>Point culminant</span><span class="value" id="highestVal">—</span></div>
+          <div class="row"><span>Fosse la plus profonde</span><span class="value" id="deepestVal">—</span></div>
+          <div class="row"><span>Dénivelé total</span><span class="value" id="rangeVal">—</span></div>
+          <div class="row"><span>Carte</span><span class="value" id="gridVal">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
+// et dans le commentaire d'en-tête du fichier (à garder synchronisés).
+const APP_VERSION = "0.11.6";
+const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
+const APP_DATE = "2026-10-23";
+const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
+
+const infoDialog = document.getElementById("infoDialog");
+document.getElementById("infoVersion").textContent = APP_VERSION;
+document.getElementById("infoAuthor").textContent = APP_AUTHOR;
+document.getElementById("infoDate").textContent = APP_DATE;
+document.getElementById("infoLicense").textContent = APP_LICENSE;
+document.getElementById("infoLink").addEventListener("click", () => infoDialog.showModal());
+document.getElementById("infoClose").addEventListener("click", () => infoDialog.close());
+
+// Affichage/masquage des cartouches, piloté depuis la fenêtre Informations.
+const PANEL_TOGGLES = [
+  { checkbox: "toggleSettings", panel: "panelSettings" },
+  { checkbox: "toggleView", panel: "panelView" },
+  { checkbox: "togglePlanet", panel: "panelPlanet" },
+];
+for (const { checkbox, panel } of PANEL_TOGGLES) {
+  const cb = document.getElementById(checkbox);
+  const el = document.getElementById(panel);
+  cb.addEventListener("change", () => {
+    el.classList.toggle("cartoucheHidden", !cb.checked);
+  });
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "closeBtn";
+  close.textContent = "×";
+  close.title = "Fermer (réaffichable depuis ℹ️ Informations)";
+  close.setAttribute("aria-label", "Fermer le cartouche");
+  close.addEventListener("click", (e) => {
+    e.preventDefault();
+    cb.checked = false;
+    cb.dispatchEvent(new Event("change"));
+  });
+  el.firstElementChild.appendChild(close);
+}
+
+// Boutons "i" qui révèlent l'explication (.sub) associée, cachée par défaut. Délégué sur tout le
+// document : chaque bouton référence son .sub par id (data-target).
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".infoBtn");
+  if (!btn) return;
+  e.preventDefault(); // au cas où le bouton est dans un <label> : n'active pas son input associé
+  const sub = document.getElementById(btn.dataset.target);
+  if (!sub) return;
+  const show = sub.classList.toggle("show");
+  btn.classList.toggle("active", show);
+});
+
+// ---------- Constantes ----------
+const SPEED_MIN = 0.5, SPEED_MAX = 50000; // failles par seconde aux deux bouts du curseur Vitesse (échelle logarithmique)
+const SPEED_KEY_STEP = 5;           // pas du curseur Vitesse pour les raccourcis + et −
+const FRAME_BUDGET_MS = 12;         // temps de calcul des failles accordé à chaque image (le reste : affichage)
+const MERC_LAT_MAX = 85 * Math.PI / 180;                              // la carte de Mercator s'arrête à ±85°
+const MERC_Y_MAX = Math.log(Math.tan(Math.PI / 4 + MERC_LAT_MAX / 2)); // ordonnée de Mercator correspondante
+const LOW_PERCENTILE = 0.002, HIGH_PERCENTILE = 0.998; // fosses et sommets les plus extrêmes, écartés de l'échelle des couleurs
+// Calottes polaires : au-delà de ICE_LAT_START, la glace gagne les terres par le haut (sommets
+// d'abord), jusqu'à les couvrir entièrement à ICE_LAT_FULL ; banquise sur la mer au-delà de SEA_ICE_LAT.
+const ICE_LAT_START = 60 * Math.PI / 180, ICE_LAT_FULL = 85 * Math.PI / 180;
+const SEA_ICE_LAT = 78 * Math.PI / 180;
+const EARTH_RELIEF_M = 8849 + 10935; // dénivelé de la Terre : de Challenger Deep à l'Everest
+// Globe : taille maximale (en points) de l'image du disque, rayon à l'écran (part de la demi-hauteur),
+// vitesse de la rotation automatique (rad/s : un tour par minute), direction du soleil (vue de
+// l'observateur : x à droite, y en haut, z vers l'observateur) et lumière minimale côté nuit.
+const GLOBE_MAX_N = 1024;
+const GLOBE_RADIUS = 0.9;
+const AUTO_ROTATE_SPEED = 2 * Math.PI / 60;
+const SUN = (() => { const x = -0.55, y = 0.45, z = 0.7, l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; })();
+const GLOBE_AMBIENT = 0.3;
+
+// Couleur RGBA empaquetée dans un entier, dans l'ordre des octets d'ImageData (petit-boutiste).
+const rgba = (r, g, b) => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+// Table de 256 couleurs interpolées entre des paliers [position 0..1, "#rrggbb"].
+function buildLUT(stops) {
+  const lut = new Uint32Array(256);
+  const rgb = stops.map(([p, hex]) => [p, parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]);
+  for (let k = 0; k < 256; k++) {
+    const t = k / 255;
+    let j = 0;
+    while (j < rgb.length - 2 && t > rgb[j + 1][0]) j++;
+    const [p0, r0, g0, b0] = rgb[j], [p1, r1, g1, b1] = rgb[j + 1];
+    const f = Math.max(0, Math.min(1, (t - p0) / (p1 - p0)));
+    lut[k] = rgba(Math.round(r0 + (r1 - r0) * f), Math.round(g0 + (g1 - g0) * f), Math.round(b0 + (b1 - b0) * f));
+  }
+  return lut;
+}
+// Palettes. Terres : de la côte (0) au plus haut sommet (1). Mers : de la côte (0) à la fosse la plus
+// profonde (1). Glace des calottes polaires, sur les terres et sur la mer.
+const PALETTES = {
+  terre: {
+    land: [[0, "#cdbd8c"], [0.03, "#5d9142"], [0.25, "#3f7a33"], [0.45, "#8c9450"], [0.62, "#8a6b45"], [0.8, "#7b7169"], [0.92, "#b9b4ae"], [1, "#f6f6f6"]],
+    ocean: [[0, "#5aa6dc"], [0.08, "#3582c4"], [0.4, "#1d559a"], [1, "#0a2050"]],
+    landIce: [236, 242, 246], seaIce: [206, 224, 236],
+  },
+  desert: {
+    land: [[0, "#efe0b0"], [0.15, "#e2c47f"], [0.4, "#d29a55"], [0.65, "#b06d3a"], [0.85, "#8a5634"], [1, "#e8d6b8"]],
+    ocean: [[0, "#7fd8cf"], [0.15, "#3fb3b0"], [0.5, "#1f7f8c"], [1, "#0f4459"]],
+    landIce: [240, 232, 214], seaIce: [214, 230, 226],
+  },
+  glace: {
+    land: [[0, "#9aa6ad"], [0.1, "#b9c7cf"], [0.4, "#d6e2e9"], [0.7, "#e9f1f6"], [1, "#ffffff"]],
+    ocean: [[0, "#3b6f8f"], [0.1, "#24506e"], [0.5, "#142f48"], [1, "#071526"]],
+    landIce: [248, 252, 255], seaIce: [214, 232, 244],
+  },
+  volcan: {
+    land: [[0, "#3a2a24"], [0.1, "#2a2422"], [0.4, "#3b3735"], [0.7, "#55504c"], [0.9, "#7a706a"], [1, "#ff6a1a"]],
+    ocean: [[0, "#ffd24a"], [0.06, "#ff8a1a"], [0.3, "#d8360e"], [0.7, "#7a1206"], [1, "#2e0603"]],
+    landIce: [150, 146, 142], seaIce: [90, 40, 28],
+  },
+  mars: {
+    land: [[0, "#a4532f"], [0.2, "#c06a3c"], [0.45, "#d3884f"], [0.7, "#b8754a"], [0.9, "#e0b48a"], [1, "#f2dcc2"]],
+    ocean: [[0, "#8a4127"], [0.3, "#70321f"], [0.7, "#4f2316"], [1, "#2e140c"]],
+    landIce: [244, 238, 232], seaIce: [228, 216, 206],
+  },
+  alien: {
+    land: [[0, "#e7b7f0"], [0.05, "#a45bc4"], [0.35, "#7a3aa0"], [0.6, "#4e2a7c"], [0.85, "#2f6e8c"], [1, "#9ff6ff"]],
+    ocean: [[0, "#9cf27a"], [0.1, "#4fc95a"], [0.45, "#1f7a4a"], [1, "#07311f"]],
+    landIce: [210, 255, 246], seaIce: [180, 240, 214],
+  },
+};
+let LAND_LUT, OCEAN_LUT, LAND_ICE, SEA_ICE;
+function applyPalette(name) {
+  const p = PALETTES[name] || PALETTES.terre;
+  LAND_LUT = buildLUT(p.land);
+  OCEAN_LUT = buildLUT(p.ocean);
+  LAND_ICE = rgba(...p.landIce);
+  SEA_ICE = rgba(...p.seaIce);
+}
+// Ombrage du relief : exagération des pentes (pente exprimée en "relief des terres entier par largeur
+// de carte"), plus forte sur le globe pour accentuer le relief vu de loin ; part de l'ombrage gardée
+// sur les océans ; bornes de l'assombrissement / éclaircissement ; lumière du nord-ouest, assez haute
+// (x vers l'est, y vers le nord, z vers le ciel).
+const HILL_MAP = 0.06, HILL_GLOBE = 0.16;
+const HILL_EXAGGERATION_RANGE = 4; // le curseur Accentuation va de ×1/4 à ×4 (échelle logarithmique, ×1 au milieu)
+const HILL_OCEAN = 0.1;
+const HILL_MIN = 0.35, HILL_MAX = 1.45;
+const HILL_LIGHT = (() => { const x = -1, y = 1, z = 1.4, l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; })();
+
+// ---------- État ----------
+const params = {
+  speedSlider: 15, faultsSlider: 100, ocean: 70, projection: "mercator", res: 1024, caps: true, showFault: true, showExtremes: true, autoRotate: false, hillshade: true, exaggeration: 50, palette: "terre",
+  biomes: false, rivers: false, erosion: 0, groundExag: 74,
+};
+applyPalette(params.palette);
+let running = true;
+let maxFaults = faultsFromSlider(params.faultsSlider);
+
+// Failles : normale (unitaire) du plan de coupe, tirée au hasard sur la sphère. Le côté qui monte est
+// celui vers lequel pointe la normale. Elles ne sont pas gardées : seule la dernière l'est, pour la
+// tracer sur la carte.
+let applied = 0;     // failles appliquées
+const lastNormal = new Float64Array(3);
+
+// Grille de la planète : W colonnes régulières en longitude, H = W / 2 lignes régulières en latitude
+// (grille équirectangulaire : elle couvre toute la sphère, pôles compris). Les autres vues (Mercator,
+// globe) en sont tirées à l'affichage. Une faille ne s'applique pas point par point : sur une ligne de latitude donnée, les
+// points du côté qui monte forment un seul intervalle de longitudes (centré sur la longitude de la
+// normale). On n'inscrit que ses deux bornes dans `diff` (un +1 au début, un −1 à la fin), et la somme
+// cumulée le long de la ligne redonne, en chaque point, le nombre de failles qui l'ont fait monter.
+// Coût d'une faille : une opération par ligne au lieu d'une par point.
+let W = 0, H = 0, dlon = 0;
+let rowSin, rowCos, rowWeight, rowIceThr, rowSeaIce;
+let diff, heights;
+// Érosion : correction (en montées, fractionnaire) ajoutée au relief des failles. L'altitude d'un
+// point est sa somme cumulée de `diff` plus cette correction, arrondie.
+let erosionArr, sedArr;
+let hist = new Float64Array(1024); // surface par nombre de montées (agrandi au besoin)
+let offCanvas, offCtx, imageData, pix;
+// Carte de Mercator, tirée de la grille ligne par ligne : chaque ligne de la carte reprend la ligne de
+// la grille de même latitude (mercRowSrc).
+let mercCanvas, mercCtx, mercImage, mercPix, mercRowSrc, HM = 0;
+// Altitudes extrêmes (crans, depuis le niveau de la mer ; null si pas de terre / pas de mer) et
+// position sur la grille (indice du point) du point culminant et de la fosse la plus profonde.
+// `range` : dénivelé total (crans) du point le plus bas au plus haut.
+let stats = { land: 0, highest: null, deepest: null, range: 0, highIdx: -1, lowIdx: -1 };
+
+function exaggerationFromSlider(v) {
+  return Math.pow(HILL_EXAGGERATION_RANGE, (v - 50) / 50);
+}
+function fmtExaggeration(m) {
+  return "×" + (Math.round(m * 100) / 100).toLocaleString("fr-FR");
+}
+
+function speedFromSlider(v) {
+  return SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, v / 100);
+}
+function fmtSpeed(rate) {
+  const v = rate < 10 ? Math.round(rate * 10) / 10 : rate < 1000 ? Math.round(rate) : Math.round(rate / 100) * 100;
+  return v.toLocaleString("fr-FR") + (v < 2 ? " faille/s" : " failles/s");
+}
+
+function faultsFromSlider(v) {
+  // Tout à droite : illimité. Sinon échelle logarithmique de 100 à 93 000, arrondie à deux chiffres
+  // significatifs.
+  if (v >= 100) return Infinity;
+  const raw = 100 * Math.pow(1000, v / 100);
+  const p = Math.pow(10, Math.floor(Math.log10(raw)) - 1);
+  return Math.round(raw / p) * p;
+}
+
+function rowLatitude(y) {
+  return Math.PI / 2 - (y + 0.5) / H * Math.PI;
+}
+
+// Montées de chaque point (somme cumulée de `diff` le long de chaque ligne).
+function prefixHeights(d, w, h, out) {
+  for (let y = 0, i = 0; y < h; y++) {
+    const b = y * (w + 1);
+    let acc = 0;
+    for (let c = 0; c < w; c++, i++) { acc += d[b + c]; out[i] = acc; }
+  }
+  return out;
+}
+
+// (Re)crée la grille à la résolution choisie. La planète en cours est gardée : ses altitudes sont
+// rééchantillonnées (interpolées) sur la nouvelle grille. Passer à une résolution plus fine ne crée
+// pas de détail ; les failles suivantes en ajouteront.
+function rebuildGrid() {
+  const oldW = W, oldH = H, oldHeights = diff ? prefixHeights(diff, W, H, new Int32Array(W * H)) : null;
+  if (oldHeights) for (let i = 0; i < oldHeights.length; i++) oldHeights[i] += Math.round(erosionArr[i]); // érosion incorporée
+  W = params.res;
+  H = W / 2;
+  dlon = 2 * Math.PI / W;
+  rowSin = new Float64Array(H); rowCos = new Float64Array(H); rowWeight = new Float64Array(H);
+  rowIceThr = new Float64Array(H); rowSeaIce = new Uint8Array(H);
+  rowTemp = new Float64Array(H); rowHumidity = new Float64Array(H);
+  for (let y = 0; y < H; y++) {
+    const lat = rowLatitude(y), c = Math.cos(lat), a = Math.abs(lat);
+    rowSin[y] = Math.sin(lat); rowCos[y] = c;
+    const deg = a * 180 / Math.PI;
+    rowTemp[y] = 30 - 55 * Math.pow(deg / 90, 1.5);
+    rowHumidity[y] = humidityAt(deg);
+    // Surface réelle d'un point de la grille : ∝ cos(lat).
+    rowWeight[y] = c;
+    // Seuil d'altitude relative (0 côte, 1 sommet) au-dessus duquel les terres sont englacées.
+    const q = (a - ICE_LAT_START) / (ICE_LAT_FULL - ICE_LAT_START);
+    rowIceThr[y] = q <= 0 ? Infinity : 1 - q;
+    rowSeaIce[y] = a > SEA_ICE_LAT ? 1 : 0;
+  }
+  diff = new Int32Array(H * (W + 1));
+  heights = new Int32Array(W * H);
+  erosionArr = new Float32Array(W * H); sedArr = new Float32Array(W * H);
+  offCanvas = document.createElement("canvas");
+  offCanvas.width = W; offCanvas.height = H;
+  offCtx = offCanvas.getContext("2d");
+  imageData = offCtx.createImageData(W, H);
+  pix = new Uint32Array(imageData.data.buffer);
+  // Carte de Mercator : HM lignes, de +85° à −85°, chacune reprenant la ligne de grille de sa latitude.
+  HM = Math.round(W * MERC_Y_MAX / Math.PI);
+  mercCanvas = document.createElement("canvas");
+  mercCanvas.width = W; mercCanvas.height = HM;
+  mercCtx = mercCanvas.getContext("2d");
+  mercImage = mercCtx.createImageData(W, HM);
+  mercPix = new Uint32Array(mercImage.data.buffer);
+  mercRowSrc = new Int32Array(HM);
+  for (let y = 0; y < HM; y++) {
+    const lat = Math.atan(Math.sinh(MERC_Y_MAX * (1 - 2 * (y + 0.5) / HM)));
+    mercRowSrc[y] = Math.min(H - 1, Math.max(0, Math.floor((Math.PI / 2 - lat) / Math.PI * H)));
+  }
+  if (oldHeights) resampleInto(oldHeights, oldW, oldH);
+  applyViewClass();
+  globeKey = ""; // tables du globe à refaire (largeur de grille)
+  climateDirty = true; riversReady = false; heightsVersion++;
+  gridVal.textContent = W + " × " + H;
+  needsRender = true;
+}
+
+// Interpolation bilinéaire des montées d'une ancienne grille (src, sw × sh) vers la grille en cours,
+// réinscrites dans `diff` (écart avec le point précédent de la ligne).
+function resampleInto(src, sw, sh) {
+  for (let y = 0; y < H; y++) {
+    const sy = Math.max(0, Math.min(sh - 1, (y + 0.5) * sh / H - 0.5));
+    const y0 = Math.floor(sy), y1 = Math.min(sh - 1, y0 + 1), fy = sy - y0;
+    const b = y * (W + 1);
+    let prev = 0;
+    for (let c = 0; c < W; c++) {
+      let sx = (c + 0.5) * sw / W - 0.5;
+      if (sx < 0) sx += sw;
+      const x0 = Math.floor(sx) % sw, x1 = (x0 + 1) % sw, fx = sx - Math.floor(sx);
+      const top = src[y0 * sw + x0] * (1 - fx) + src[y0 * sw + x1] * fx;
+      const bot = src[y1 * sw + x0] * (1 - fx) + src[y1 * sw + x1] * fx;
+      const v = Math.round(top * (1 - fy) + bot * fy);
+      diff[b + c] = v - prev;
+      prev = v;
+    }
+  }
+}
+
+// Classe et proportions du cadre selon la vue : globe carré, carte équirectangulaire 2:1, Mercator
+// presque carrée (jusqu'à ±85°).
+function applyViewClass() {
+  const globe = params.projection === "globe";
+  mapWrap.classList.toggle("globe", globe);
+  mapWrap.style.setProperty("--aspect", globe ? "1" : params.projection === "mercator" ? String(W / HM) : String(W / H));
+}
+
+// Tire une nouvelle faille et fait monter d'un cran le côté vers lequel pointe sa normale. (L'autre
+// côté descend d'un cran : l'altitude réelle vaut 2 × montées − failles, que l'affichage reconstitue.)
+// Un point (lat, lon) est du côté qui monte si p·n > 0, soit
+//   cos(lat)·r·cos(lon − φ) + sin(lat)·nz > 0,  avec r, φ le module et l'angle de (nx, ny),
+// c'est-à-dire cos(lon − φ) > t = −sin(lat)·nz / (cos(lat)·r) : l'intervalle φ ± acos(t).
+function applyFault() {
+  // Direction uniforme sur la sphère : z uniforme dans [−1, 1], angle uniforme autour de l'axe.
+  const nz = 2 * Math.random() - 1, a = 2 * Math.PI * Math.random(), rz = Math.sqrt(1 - nz * nz);
+  const nx = rz * Math.cos(a), ny = rz * Math.sin(a);
+  lastNormal[0] = nx; lastNormal[1] = ny; lastNormal[2] = nz;
+  applied++;
+  const r = Math.hypot(nx, ny), phi = Math.atan2(ny, nx);
+  const center = (phi + Math.PI) / dlon - 0.5; // colonne (fractionnaire) de la longitude φ
+  const stride = W + 1;
+  for (let y = 0; y < H; y++) {
+    const b = y * stride;
+    const cr = rowCos[y] * r, z = rowSin[y] * nz;
+    if (cr < 1e-12) { if (z > 0) diff[b]++; continue; }
+    const t = -z / cr;
+    if (t >= 1) continue;                 // toute la ligne descend
+    if (t <= -1) { diff[b]++; continue; } // toute la ligne monte
+    const half = Math.acos(t) / dlon;     // demi-largeur de l'intervalle, en colonnes
+    let cs = Math.ceil(center - half);
+    const count = Math.ceil(center + half) - cs;
+    if (count <= 0) continue;
+    if (count >= W) { diff[b]++; continue; }
+    cs %= W; if (cs < 0) cs += W;
+    const end = cs + count;
+    diff[b + cs]++;
+    if (end <= W) diff[b + end]--;        // (diff[b + W] n'est jamais lu)
+    else { diff[b]++; diff[b + end - W]--; } // l'intervalle fait le tour de la carte
+  }
+}
+
+// Somme cumulée de chaque ligne (nombre de montées de chaque point), niveau de la mer et couleurs.
+function render() {
+  let total = 0, i = 0;
+  let highV = -Infinity, highIdx = -1, lowV = Infinity, lowIdx = -1;
+  for (let y = 0; y < H; y++) {
+    const b = y * (W + 1);
+    let acc = 0;
+    for (let c = 0; c < W; c++, i++) {
+      acc += diff[b + c];
+      const h = acc + Math.round(erosionArr[i]);
+      heights[i] = h;
+      if (h > highV) { highV = h; highIdx = i; }
+      if (h < lowV) { lowV = h; lowIdx = i; }
+    }
+    total += rowWeight[y] * W;
+  }
+  stats.highIdx = highIdx; stats.lowIdx = lowIdx;
+  const minH = lowV, maxH = highV;
+  // Surface (réelle, sur la sphère) par nombre de montées, de minH à maxH : les montées tournent
+  // autour de la moitié du nombre de failles, dans une plage bien plus étroite que lui.
+  const span = maxH - minH + 1;
+  if (hist.length < span) hist = new Float64Array(Math.max(span, hist.length * 2));
+  hist.fill(0, 0, span);
+  i = 0;
+  for (let y = 0; y < H; y++) {
+    const w = rowWeight[y];
+    for (let c = 0; c < W; c++, i++) hist[heights[i] - minH] += w;
+  }
+  // Niveau de la mer : la montée qui noie la part de surface demandée. Les extrêmes (LOW/HIGH_PERCENTILE)
+  // sont écartés de l'échelle des couleurs, pour qu'un pic isolé n'écrase pas tout le reste.
+  const tSea = params.ocean / 100 * total, tLo = LOW_PERCENTILE * total, tHi = HIGH_PERCENTILE * total;
+  // (Seuils pas encore trouvés : NONE. Avec l'érosion, les montées peuvent devenir négatives.)
+  const NONE = -Infinity;
+  let cum = 0, lo = NONE, sea = NONE, hi = NONE, seaCum = 0;
+  for (let h = minH; h <= maxH; h++) {
+    const a = hist[h - minH];
+    if (a === 0) continue;
+    cum += a;
+    if (lo === NONE && cum >= tLo) lo = h;
+    if (sea === NONE && cum >= tSea) { sea = h; seaCum = cum; }
+    if (hi === NONE && cum >= tHi) hi = h;
+  }
+  // Seuils non atteints (arrondis de la somme, ou 100 % d'océans) : on prend les extrêmes.
+  if (lo === NONE) lo = minH;
+  if (hi === NONE) hi = maxH;
+  if (sea === NONE) { sea = maxH; seaCum = total; }
+  // Pas d'océan : la mer passe juste sous le point le plus bas (les montées ne partent pas de 0 mais
+  // tournent autour de n / 2 : un niveau à −1 écraserait tout le relief en haut de l'échelle, en neige).
+  if (params.ocean === 0) { sea = minH - 1; seaCum = 0; }
+  const landSpan = Math.max(1, hi - sea), oceanSpan = Math.max(1, sea - lo);
+  stats.land = total > 0 ? 1 - seaCum / total : 0;
+  // Altitude d'un point : 2 × montées − failles (une montée de plus = deux crans, +1 au lieu de −1).
+  // Le niveau de la mer est à mi-chemin entre la plus haute mer (sea montées) et la plus basse terre
+  // (sea + 1) : altitude 2 × sea + 1 − n.
+  stats.highest = maxH > sea ? 2 * (maxH - sea) - 1 : null;
+  stats.deepest = sea >= minH ? 2 * (sea - minH) + 1 : null;
+  stats.range = 2 * (maxH - minH);
+  seaLevel = sea; seaMaxH = maxH;
+
+  // Climat (distance à la mer, rivières) : coûteux, recalculé au plus une fois par CLIMATE_EVERY_MS
+  // pendant la formation ; entre deux calculs, le précédent sert (le relief change lentement).
+  const climate = (params.biomes || params.rivers) && applied > 0;
+  if (climate) {
+    const now = performance.now();
+    if (climateDirty || (climateVersion !== heightsVersion && now - climateTime >= CLIMATE_EVERY_MS)) {
+      computeClimate(sea, maxH);
+      climateTime = now; climateVersion = heightsVersion; climateDirty = false;
+    }
+  }
+  const biomes = params.biomes && applied > 0, rivers = params.rivers && applied > 0 && riversReady;
+  const riverSmall = OCEAN_LUT[12], riverBig = OCEAN_LUT[70];
+
+  // Ombrage : pente (différences entre voisins est-ouest, la carte faisant le tour, et nord-sud),
+  // normale de la surface n = (−k·gx, −k·gy, 1), éclairement n·L rapporté à celui d'un terrain plat.
+  const hill = params.hillshade && applied > 0;
+  const k = (params.projection === "globe" ? HILL_GLOBE : HILL_MAP) * exaggerationFromSlider(params.exaggeration) * W / (2 * landSpan);
+  const [lx, ly, lz] = HILL_LIGHT;
+  i = 0;
+  for (let y = 0; y < H; y++) {
+    const iceThr = params.caps ? rowIceThr[y] : Infinity, seaIce = params.caps && rowSeaIce[y];
+    const rowN = (y > 0 ? y - 1 : y) * W, rowS = (y < H - 1 ? y + 1 : y) * W, row = y * W;
+    for (let c = 0; c < W; c++, i++) {
+      const h = heights[i];
+      let col, ocean = h <= sea;
+      if (ocean) {
+        if (seaIce) col = SEA_ICE;
+        else {
+          const q = ((sea - h) / oceanSpan * 255) | 0;
+          col = OCEAN_LUT[q > 255 ? 255 : q];
+        }
+      } else if (biomes) {
+        // Température : celle de la latitude, moins LAPSE_RATE par mètre d'altitude (1 cran = 1 m).
+        const t = rowTemp[y] - LAPSE_RATE * (2 * (h - sea) - 1);
+        if (params.caps && t < ICE_TEMP) col = LAND_ICE;
+        else col = biomeColor(t, humArr[i]);
+      } else {
+        const u = (h - sea) / landSpan;
+        if (u > iceThr) col = LAND_ICE;
+        else {
+          const q = (u * 255) | 0;
+          col = LAND_LUT[q > 255 ? 255 : q];
+        }
+      }
+      // Rivières : couleur des eaux côtières de la palette, plus foncée pour les grands fleuves.
+      if (rivers && !ocean && riverArr[i]) col = riverArr[i] > 128 ? riverBig : riverSmall;
+      if (hill) {
+        const gx = heights[row + (c < W - 1 ? c + 1 : 0)] - heights[row + (c > 0 ? c - 1 : W - 1)];
+        const gy = heights[rowN + c] - heights[rowS + c];
+        const nx = -k * gx, ny = -k * gy;
+        let f = (nx * lx + ny * ly + lz) / (Math.sqrt(nx * nx + ny * ny + 1) * lz);
+        if (ocean && !seaIce) f = 1 + HILL_OCEAN * (f - 1);
+        f = f < HILL_MIN ? HILL_MIN : f > HILL_MAX ? HILL_MAX : f;
+        let r = (col & 255) * f, g = ((col >> 8) & 255) * f, b = ((col >> 16) & 255) * f;
+        r = r > 255 ? 255 : r; g = g > 255 ? 255 : g; b = b > 255 ? 255 : b;
+        col = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+      }
+      pix[i] = col;
+    }
+  }
+  offCtx.putImageData(imageData, 0, 0);
+  if (params.projection === "mercator") {
+    for (let y = 0; y < HM; y++) {
+      const s = mercRowSrc[y] * W;
+      mercPix.set(pix.subarray(s, s + W), y * W);
+    }
+    mercCtx.putImageData(mercImage, 0, 0);
+  }
+}
+
+// ---------- Climat : biomes et rivières ----------
+// Température de la latitude (°C, à 0 m) : 30 °C à l'équateur, environ 10 °C à 45°, 0 °C à 60°,
+// −25 °C aux pôles ; elle baisse de LAPSE_RATE par mètre d'altitude (6,5 °C par km, comme sur Terre).
+// Humidité de la latitude (0 à 1), selon les grandes ceintures de la circulation de l'air : pluies de
+// l'équateur, déserts vers 25-30°, pluies des latitudes moyennes (50-60°), froid sec des pôles.
+// Plus on s'éloigne de la mer, plus l'air s'assèche (continentalité, sur environ CONTINENTAL_RAD).
+let rowTemp, rowHumidity;
+const LAPSE_RATE = 0.0065;
+const ICE_TEMP = -12;              // en dessous (°C), les terres sont couvertes de glace (si Calottes polaires)
+const HUMIDITY_BANDS = [[0, 1], [12, 0.85], [22, 0.3], [28, 0.12], [38, 0.45], [52, 0.75], [62, 0.65], [75, 0.35], [90, 0.2]];
+const CONTINENTAL_RAD = 0.25;      // distance à la mer (radians, ≈ 1 600 km sur une planète comme la Terre) où l'assèchement atteint 63 %
+const CONTINENTAL_DRYING = 0.7;    // part de l'humidité perdue au cœur des continents
+const CLIMATE_EVERY_MS = 1000;
+const RIVER_SHARE = 0.025;         // part des terres où coulent des rivières (les cellules qui drainent le plus)
+const RIVER_BIG_SHARE = 0.15;      // parmi elles, part des grands fleuves (couleur plus foncée)
+function humidityAt(latDeg) {
+  const b = HUMIDITY_BANDS;
+  let j = 0;
+  while (j < b.length - 2 && latDeg > b[j + 1][0]) j++;
+  const f = (latDeg - b[j][0]) / (b[j + 1][0] - b[j][0]);
+  return b[j][1] + (b[j + 1][1] - b[j][1]) * Math.max(0, Math.min(1, f));
+}
+// Biomes (d'après le diagramme de Whittaker : température et humidité).
+const BIOME = {
+  tundra: rgba(150, 156, 128), tundraDry: rgba(168, 166, 140),
+  taiga: rgba(58, 92, 62), coldSteppe: rgba(160, 158, 116),
+  temperateForest: rgba(74, 132, 58), grassland: rgba(140, 170, 86), coldDesert: rgba(198, 184, 136),
+  rainforest: rgba(36, 104, 40), savanna: rgba(180, 172, 88), desert: rgba(226, 202, 142),
+};
+function biomeColor(t, hum) {
+  if (t < -3) return hum > 0.3 ? BIOME.tundra : BIOME.tundraDry;
+  if (t < 5) return hum > 0.35 ? BIOME.taiga : BIOME.coldSteppe;
+  if (t < 18) return hum > 0.55 ? BIOME.temperateForest : hum > 0.3 ? BIOME.grassland : BIOME.coldDesert;
+  return hum > 0.65 ? BIOME.rainforest : hum > 0.35 ? BIOME.savanna : BIOME.desert;
+}
+
+// Tableaux du climat, créés à la première utilisation (une trentaine d'octets par point de la carte).
+let distArr = null, humArr, riverArr, climQueue, climParent, climNext, climOrder, climAcc, climHead = new Int32Array(1024);
+let climateDirty = true, climateTime = -Infinity, climateVersion = -1, heightsVersion = 0;
+let riversReady = false;
+// Écoulement (arbre des cases aval, débits) prêt pour l'érosion : nombre de cases de terre rangées
+// dans climOrder, pluie moyenne d'une case (référence des débits).
+let flowReady = false, flowCount = 0, rainMean = 1;
+// Dernier niveau de la mer et plus haute montée calculés par le rendu (repris par l'érosion).
+let seaLevel = 0, seaMaxH = 0;
+function ensureClimateBuffers() {
+  const N = W * H;
+  if (distArr && distArr.length === N) return;
+  distArr = new Int32Array(N); humArr = new Float32Array(N); riverArr = new Uint8Array(N);
+  climQueue = new Int32Array(N); climParent = new Int32Array(N); climNext = new Int32Array(N);
+  climOrder = new Int32Array(N); climAcc = new Float32Array(N);
+}
+
+function computeClimate(sea, maxH) {
+  ensureClimateBuffers();
+  const N = W * H;
+  // Distance à la mer (en points de grille), en largeur d'abord depuis toutes les cases de mer.
+  let qh = 0, qt = 0;
+  for (let i = 0; i < N; i++) {
+    if (heights[i] <= sea) { distArr[i] = 0; climQueue[qt++] = i; }
+    else distArr[i] = -1;
+  }
+  if (qt === 0) distArr.fill(1 << 20); // pas de mer : partout « très loin »
+  while (qh < qt) {
+    const i = climQueue[qh++], c = i % W, d = distArr[i] + 1;
+    const nbW = i - c + (c > 0 ? c - 1 : W - 1), nbE = i - c + (c < W - 1 ? c + 1 : 0);
+    if (distArr[nbW] < 0) { distArr[nbW] = d; climQueue[qt++] = nbW; }
+    if (distArr[nbE] < 0) { distArr[nbE] = d; climQueue[qt++] = nbE; }
+    if (i >= W && distArr[i - W] < 0) { distArr[i - W] = d; climQueue[qt++] = i - W; }
+    if (i < N - W && distArr[i + W] < 0) { distArr[i + W] = d; climQueue[qt++] = i + W; }
+  }
+  // Humidité : celle de la bande de latitude, réduite loin de la mer (continentalité).
+  for (let y = 0, i = 0; y < H; y++) {
+    const base = rowHumidity[y];
+    for (let c = 0; c < W; c++, i++) {
+      humArr[i] = base * (1 - CONTINENTAL_DRYING * (1 - Math.exp(-distArr[i] * dlon / CONTINENTAL_RAD)));
+    }
+  }
+  riversReady = params.rivers && maxH > sea;
+  flowReady = maxH > sea && (params.rivers || params.erosion > 0);
+  if (flowReady) computeRivers(sea, maxH);
+}
+
+// Rivières. Remplissage depuis la mer par niveaux croissants (« priority-flood ») : on part de toutes
+// les cases de mer et on gagne les terres en passant toujours par le col le plus bas. Chaque case de
+// terre s'écoule vers la case qui l'a atteinte : l'eau rejoint ainsi toujours la mer, même depuis une
+// cuvette (elle la remplit en lac et déborde par le col le plus bas). Les altitudes étant des nombres
+// entiers, la file de priorité est une simple liste par niveau. Puis chaque case reçoit la pluie
+// (humidité × surface réelle) et la transmet, avec celle de l'amont, à sa case aval : les cases qui
+// drainent le plus d'eau sont les rivières.
+function computeRivers(sea, maxH) {
+  const N = W * H, levels = maxH - sea + 1;
+  if (climHead.length < levels) climHead = new Int32Array(Math.max(levels, climHead.length * 2));
+  climHead.fill(-1, 0, levels);
+  const push = (i, l) => { climNext[i] = climHead[l]; climHead[l] = i; };
+  for (let i = 0; i < N; i++) {
+    if (heights[i] <= sea) { climParent[i] = -2; push(i, 0); }
+    else climParent[i] = -1;
+  }
+  let nOrder = 0;
+  for (let l = 0; l < levels; l++) {
+    while (climHead[l] >= 0) {
+      const i = climHead[l];
+      climHead[l] = climNext[i];
+      if (heights[i] > sea) climOrder[nOrder++] = i;
+      const c = i % W, row = i - c;
+      const cW = c > 0 ? c - 1 : W - 1, cE = c < W - 1 ? c + 1 : 0;
+      // Les 8 voisines (la carte fait le tour en longitude, pas en latitude).
+      for (let dy = -1; dy <= 1; dy++) {
+        const r = row + dy * W;
+        if (r < 0 || r >= N) continue;
+        for (let k = 0; k < 3; k++) {
+          const nb = r + (k === 0 ? cW : k === 1 ? c : cE);
+          if (climParent[nb] !== -1) continue;
+          climParent[nb] = i;
+          const lv = heights[nb] - sea;
+          push(nb, lv > l ? lv : l);
+        }
+      }
+    }
+  }
+  // Pluie reçue par chaque case de terre, puis transmise de l'amont vers l'aval (ordre inverse du
+  // remplissage : une case est toujours atteinte après sa case aval).
+  let maxAcc = 0, rain = 0;
+  for (let j = 0; j < nOrder; j++) {
+    const i = climOrder[j];
+    climAcc[i] = rowWeight[(i / W) | 0] * humArr[i];
+    rain += climAcc[i];
+  }
+  flowCount = nOrder;
+  rainMean = nOrder > 0 ? rain / nOrder : 1;
+  for (let j = nOrder - 1; j >= 0; j--) {
+    const i = climOrder[j], p = climParent[i];
+    if (climAcc[i] > maxAcc) maxAcc = climAcc[i];
+    if (p >= 0 && heights[p] > sea) climAcc[p] += climAcc[i];
+  }
+  // Seuils : les RIVER_SHARE des terres qui drainent le plus (histogramme du logarithme du débit).
+  riverArr.fill(0);
+  if (nOrder === 0 || maxAcc <= 0) return;
+  const BINS = 512, logMax = Math.log(maxAcc), logMin = logMax - 25;
+  const bins = new Int32Array(BINS);
+  const bin = (a) => { const b = ((Math.log(a) - logMin) / (logMax - logMin) * (BINS - 1)) | 0; return b < 0 ? 0 : b; };
+  for (let j = 0; j < nOrder; j++) { const a = climAcc[climOrder[j]]; if (a > 0) bins[bin(a)]++; }
+  const want = Math.max(1, Math.round(nOrder * RIVER_SHARE)), wantBig = Math.max(1, Math.round(want * RIVER_BIG_SHARE));
+  let cum = 0, tRiver = BINS, tBig = BINS;
+  for (let b = BINS - 1; b >= 0; b--) {
+    cum += bins[b];
+    if (tBig === BINS && cum >= wantBig) tBig = b;
+    if (cum >= want) { tRiver = b; break; }
+  }
+  for (let j = 0; j < nOrder; j++) {
+    const i = climOrder[j], a = climAcc[i];
+    if (a <= 0) continue;
+    const b = bin(a);
+    if (b >= tRiver) riverArr[i] = b >= tBig ? 255 : 1;
+  }
+}
+
+// ---------- Érosion ----------
+// Deux processus, à l'œuvre au rythme des failles (le temps géologique : en pause, rien ne s'use) :
+// - incision par les rivières (loi « stream power ») : chaque case de terre s'abaisse, vers sa case
+//   aval, de EROSION_STREAM × √(débit / pluie d'une case) × dénivelé, par faille ; les débris sont
+//   emportés vers l'aval et déposés à l'embouchure, dans la mer, jusqu'au niveau de la mer (deltas) ;
+//   le reste se perd au large ;
+// - adoucissement des pentes (diffusion) : chaque case tend vers la moyenne de ses voisines, de
+//   EROSION_DIFFUSION par faille, EROSION_UNDERWATER fois moins vite sous la mer.
+// Les deux sont multipliés par le carré du curseur Érosion. Calculée une fois par CLIMATE_EVERY_MS pour
+// toutes les failles écoulées depuis ; une passe ne creuse pas plus de EROSION_MAX_CUT du dénivelé
+// vers l'aval, ni ne diffuse plus de DIFFUSION_MAX (stabilité aux vitesses de formation élevées).
+const EROSION_STREAM = 0.002, EROSION_DIFFUSION = 2e-5, EROSION_UNDERWATER = 0.3;
+const EROSION_MAX_CUT = 0.5, DIFFUSION_MAX = 0.2;
+let erosionFaults = 0;     // failles appliquées lors de la dernière passe d'érosion
+let erosionTime = -Infinity;
+
+// Montées de chaque point à jour (failles + érosion), dans `heights` ; renvoie la plus haute.
+function refreshHeights() {
+  let maxH = -Infinity;
+  for (let y = 0, i = 0; y < H; y++) {
+    const b = y * (W + 1);
+    let acc = 0;
+    for (let c = 0; c < W; c++, i++) {
+      acc += diff[b + c];
+      const h = acc + Math.round(erosionArr[i]);
+      heights[i] = h;
+      if (h > maxH) maxH = h;
+    }
+  }
+  return maxH;
+}
+
+function erosionPass() {
+  const dn = applied - erosionFaults;
+  erosionFaults = applied;
+  if (dn <= 0 || params.erosion === 0) return;
+  const s = (params.erosion / 100) ** 2;
+  const sea = seaLevel, maxH = refreshHeights();
+  computeClimate(sea, maxH); // ruissellement : arbre des cases aval et débits
+  if (flowReady) {
+    const K = EROSION_STREAM * s * dn;
+    sedArr.fill(0);
+    for (let j = 0; j < flowCount; j++) {
+      const i = climOrder[j], p = climParent[i];
+      const hp = p >= 0 && heights[p] > sea ? heights[p] : sea;
+      const drop = heights[i] - hp;
+      if (drop <= 0) continue;
+      const e = Math.min(EROSION_MAX_CUT * drop, K * Math.sqrt(climAcc[i] / rainMean) * drop);
+      erosionArr[i] -= e;
+      sedArr[i] += e;
+    }
+    // Débris transmis de l'amont vers l'aval, déposés à l'embouchure.
+    for (let j = flowCount - 1; j >= 0; j--) {
+      const i = climOrder[j], p = climParent[i];
+      if (p < 0 || sedArr[i] === 0) continue;
+      if (heights[p] > sea) sedArr[p] += sedArr[i];
+      else erosionArr[p] += Math.min(sedArr[i], Math.max(0, sea - heights[p]));
+    }
+  }
+  // Adoucissement : laplacien (4 voisines, la carte fait le tour en longitude).
+  const D = Math.min(DIFFUSION_MAX, EROSION_DIFFUSION * s * dn);
+  for (let y = 0, i = 0; y < H; y++) {
+    const rowN = (y > 0 ? y - 1 : y) * W, rowS = (y < H - 1 ? y + 1 : y) * W, row = y * W;
+    for (let c = 0; c < W; c++, i++) {
+      const h = heights[i];
+      const lap = heights[row + (c > 0 ? c - 1 : W - 1)] + heights[row + (c < W - 1 ? c + 1 : 0)]
+        + heights[rowN + c] + heights[rowS + c] - 4 * h;
+      erosionArr[i] += D * lap * (h <= sea ? EROSION_UNDERWATER : 1);
+    }
+  }
+  // Le climat qui vient d'être calculé sert au rendu (biomes, rivières) : pas de second calcul.
+  heightsVersion++;
+  climateVersion = heightsVersion; climateTime = performance.now(); climateDirty = false;
+}
+
+// ---------- Affichage ----------
+const mapWrap = document.getElementById("mapWrap");
+const canvas = document.getElementById("mapCanvas");
+const ctx = canvas.getContext("2d");
+const gridVal = document.getElementById("gridVal");
+let rotation = 0;          // rotation de la planète (radians) : décalage des longitudes à l'affichage
+let needsRender = true, needsDraw = true;
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  needsDraw = true;
+}
+new ResizeObserver(resizeCanvas).observe(canvas);
+
+function lonToX(lon, cw) {
+  let f = (lon + Math.PI + rotation) / (2 * Math.PI);
+  f -= Math.floor(f);
+  return f * cw;
+}
+function latToY(lat, ch) {
+  if (params.projection === "mercator") {
+    const l = Math.max(-1.55, Math.min(1.55, lat));
+    return (0.5 - Math.log(Math.tan(Math.PI / 4 + l / 2)) / (2 * MERC_Y_MAX)) * ch;
+  }
+  return (0.5 - lat / Math.PI) * ch;
+}
+
+// Image de la carte plate affichée : grille équirectangulaire, ou carte de Mercator qui en est tirée.
+const mapImage = () => params.projection === "mercator" ? mercCanvas : offCanvas;
+
+function drawMap() {
+  const cw = canvas.width, ch = canvas.height, img = mapImage();
+  ctx.imageSmoothingEnabled = true;
+  // La carte, décalée horizontalement selon la rotation, en deux morceaux pour faire le tour.
+  let f = rotation / (2 * Math.PI);
+  f -= Math.floor(f);
+  const s = Math.round(f * cw); // au pixel près : pas de liseré à la jonction des deux morceaux
+  ctx.drawImage(img, 0, 0, img.width, img.height, s, 0, cw, ch);
+  ctx.drawImage(img, 0, 0, img.width, img.height, s - cw, 0, cw, ch);
+
+  drawLastFault((lat, lon) => [lonToX(lon, cw), latToY(lat, ch)], cw / 2, cw);
+
+  // Point culminant et fosse, au centre de leur point de grille.
+  drawExtremes((idx) => {
+    const c = idx % W, y = (idx - c) / W, lat = rowLatitude(y);
+    if (params.projection === "mercator" && Math.abs(lat) > MERC_LAT_MAX) return null; // hors de la carte
+    return [lonToX(-Math.PI + (c + 0.5) * dlon, cw), latToY(lat, ch)];
+  }, Math.max(7, cw / 110));
+}
+
+// Point culminant (▲ orange) et fosse la plus profonde (▼ cyan). `place` donne la position à l'écran
+// d'un point de grille, ou null s'il n'est pas visible (face cachée du globe).
+function drawExtremes(place, size) {
+  if (!params.showExtremes || applied === 0) return;
+  const mark = (idx, up, fill) => {
+    const p = place(idx);
+    if (!p) return;
+    const [x, y] = p, d = up ? -1 : 1; // pointe vers le haut (sommet) ou vers le bas (fosse)
+    ctx.beginPath();
+    ctx.moveTo(x, y + d * size);
+    ctx.lineTo(x - size * 0.87, y - d * size * 0.5);
+    ctx.lineTo(x + size * 0.87, y - d * size * 0.5);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.stroke();
+  };
+  ctx.save();
+  ctx.lineWidth = Math.max(1.5, size / 5);
+  ctx.strokeStyle = "rgba(0,0,0,0.75)";
+  ctx.lineJoin = "round";
+  if (stats.highest !== null) mark(stats.highIdx, true, "#ff8a1f");
+  if (stats.deepest !== null) mark(stats.lowIdx, false, "#33e0ff");
+  ctx.restore();
+}
+
+// Dernière faille : son grand cercle p(θ) = u·cos θ + v·sin θ, perpendiculaire à la normale n.
+// `project` donne la position à l'écran d'un point (lat, lon), ou null s'il n'est pas visible ; le
+// tracé est coupé quand le point passe hors de vue ou saute d'un bord à l'autre (plus de `jump`).
+function drawLastFault(project, jump, cw) {
+  if (!params.showFault || applied === 0 || applied >= maxFaults) return;
+  const [nx, ny, nz] = lastNormal;
+  // u : un vecteur perpendiculaire à n ; v = n × u.
+  let ux = -ny, uy = nx, uz = 0;
+  let ul = Math.hypot(ux, uy);
+  if (ul < 1e-6) { ux = 1; uy = 0; uz = 0; ul = 1; }
+  ux /= ul; uy /= ul; uz /= ul;
+  const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.7)";
+  ctx.lineWidth = Math.max(1, cw / 700);
+  ctx.setLineDash([cw / 120, cw / 160]);
+  ctx.beginPath();
+  let prev = null;
+  const STEPS = 360;
+  for (let j = 0; j <= STEPS; j++) {
+    const th = j / STEPS * 2 * Math.PI, co = Math.cos(th), si = Math.sin(th);
+    const px = ux * co + vx * si, py = uy * co + vy * si, pz = uz * co + vz * si;
+    const p = project(Math.asin(Math.max(-1, Math.min(1, pz))), Math.atan2(py, px));
+    if (p && prev && Math.abs(p[0] - prev[0]) <= jump) ctx.lineTo(p[0], p[1]);
+    else if (p) ctx.moveTo(p[0], p[1]);
+    prev = p;
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- Globe ----------
+// Vue orthographique (de loin) de la planète. Pour chaque point du disque à l'écran, on précalcule
+// la latitude (ligne de la grille), la longitude (colonne, avant rotation) et l'éclairage : ils ne
+// dépendent que de l'inclinaison. La rotation autour de l'axe des pôles se réduit alors à décaler
+// les colonnes, ce qui permet de faire tourner le globe à chaque image sans recalculer de trigonométrie.
+// Repère de l'observateur : x à droite, y en haut, z vers l'observateur ; le centre du disque montre
+// la latitude `tilt` et la longitude −rotation.
+const GLOBE_TILT = 0.35;   // inclinaison de départ (≈ 20°) : on voit un peu l'hémisphère nord
+let tilt = GLOBE_TILT;     // inclinaison (radians) : latitude vue au centre du globe
+let globeKey = "";         // taille, inclinaison et grille des tables en cours
+let globeN = 0, globeCanvas, globeCtx, globeImg, globePix;
+let gIdx, gRow, gCol, gShade, gCount = 0;
+
+function buildGlobeTables(N) {
+  if (N !== globeN) {
+    globeN = N;
+    globeCanvas = document.createElement("canvas");
+    globeCanvas.width = N; globeCanvas.height = N;
+    globeCtx = globeCanvas.getContext("2d");
+    globeImg = globeCtx.createImageData(N, N); // transparente hors du disque
+    globePix = new Uint32Array(globeImg.data.buffer);
+    gIdx = new Int32Array(N * N); gRow = new Int32Array(N * N);
+    gCol = new Float32Array(N * N); gShade = new Uint16Array(N * N);
+  }
+  const ct = Math.cos(tilt), st = Math.sin(tilt);
+  gCount = 0;
+  for (let j = 0; j < N; j++) {
+    const sy = 1 - (j + 0.5) / N * 2;
+    for (let i = 0; i < N; i++) {
+      const sx = (i + 0.5) / N * 2 - 1, d2 = sx * sx + sy * sy;
+      if (d2 > 1) continue;
+      const sz = Math.sqrt(1 - d2);
+      // Inclinaison : rotation autour de l'axe x de l'écran.
+      const X = sz * ct - sy * st, Z = sz * st + sy * ct, Y = sx;
+      const lat = Math.asin(Math.max(-1, Math.min(1, Z))), lon = Math.atan2(Y, X);
+      const k = gCount++;
+      gIdx[k] = j * N + i;
+      gRow[k] = Math.min(H - 1, Math.max(0, Math.floor((Math.PI / 2 - lat) / Math.PI * H))) * W;
+      gCol[k] = (lon + Math.PI) / dlon;
+      const light = Math.max(0, sx * SUN[0] + sy * SUN[1] + sz * SUN[2]);
+      gShade[k] = Math.round(256 * (GLOBE_AMBIENT + (1 - GLOBE_AMBIENT) * light));
+    }
+  }
+}
+
+// Position à l'écran d'un point (lat, lon) du globe de centre (cx, cy) et de rayon R, ou null s'il
+// est sur la face cachée.
+function globeProject(lat, lon, cx, cy, R) {
+  const l = lon + rotation, cl = Math.cos(lat);
+  const X = cl * Math.cos(l), Y = cl * Math.sin(l), Z = Math.sin(lat);
+  const ct = Math.cos(tilt), st = Math.sin(tilt);
+  const f = X * ct + Z * st;
+  if (f <= 0) return null;
+  const up = -X * st + Z * ct;
+  return [cx + Y * R, cy - up * R];
+}
+
+function drawGlobe() {
+  const cw = canvas.width, ch = canvas.height;
+  const R = Math.min(cw, ch) / 2 * GLOBE_RADIUS, cx = cw / 2, cy = ch / 2;
+  const N = Math.max(64, Math.min(GLOBE_MAX_N, Math.round(2 * R)));
+  const key = N + "|" + tilt + "|" + W;
+  if (key !== globeKey) { buildGlobeTables(N); globeKey = key; }
+
+  // Couleurs de la carte (grille équirectangulaire), décalées de la rotation, assombries par l'éclairage.
+  const shift = rotation / dlon;
+  for (let k = 0; k < gCount; k++) {
+    let c = gCol[k] - shift;
+    c -= Math.floor(c / W) * W;
+    let ci = c | 0;
+    if (ci >= W) ci = 0;
+    const col = pix[gRow[k] + ci], s = gShade[k];
+    const r = ((col & 255) * s) >> 8, g = (((col >> 8) & 255) * s) >> 8, b = (((col >> 16) & 255) * s) >> 8;
+    globePix[gIdx[k]] = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+  }
+  globeCtx.putImageData(globeImg, 0, 0);
+
+  ctx.clearRect(0, 0, cw, ch);
+  // Halo de l'atmosphère, autour du disque.
+  const halo = ctx.createRadialGradient(cx, cy, R * 0.97, cx, cy, R * 1.08);
+  halo.addColorStop(0, "rgba(120,175,255,0.45)");
+  halo.addColorStop(1, "rgba(120,175,255,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 1.08, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(globeCanvas, cx - R, cy - R, 2 * R, 2 * R);
+
+  const project = (lat, lon) => globeProject(lat, lon, cx, cy, R);
+  drawLastFault(project, R, cw);
+  drawExtremes((idx) => {
+    const c = idx % W, y = (idx - c) / W;
+    return project(rowLatitude(y), -Math.PI + (c + 0.5) * dlon);
+  }, Math.max(7, R / 55));
+}
+
+// ---------- Vue au sol ----------
+// Vue à la première personne, par lancer de rayons sur la carte des altitudes (« voxel space ») : pour
+// chaque colonne de l'image, on avance le long du rayon, du plus près au plus loin, et on dessine le
+// terrain là où il dépasse ce qui est déjà dessiné devant. La planète a la taille de la Terre
+// (GROUND_RADIUS) ; autour de l'observateur, la surface est dépliée en un plan (est, nord), et la
+// courbure abaisse le terrain lointain de d² / 2R. Les couleurs sont celles de la carte (palette,
+// biomes, rivières, ombrage), estompées au loin dans la brume ; le relief est exagéré verticalement
+// (curseur Relief en vue au sol, de ×1 à ×GROUND_EXAG_MAX) : une case de grille fait des dizaines de
+// kilomètres et les pentes réelles n'y dépassent guère 0,1 %.
+const GROUND_RADIUS = 6371000;     // m
+const GROUND_EXAG_MAX = 200;
+const groundExagFromSlider = (v) => Math.pow(GROUND_EXAG_MAX, v / 100);
+const GROUND_FOV = 70 * Math.PI / 180;
+const GROUND_MAX_W = 640;          // largeur maximale de l'image calculée (agrandie ensuite à l'écran)
+const GROUND_NEAR = 30, GROUND_FAR = 900000, GROUND_STEP_GROWTH = 1.015; // m
+const GROUND_FOG = 350000;         // m : distance où la brume masque 63 % du terrain
+const GROUND_SPEED = 3000;         // m/s à 300 m au-dessus du sol (plus vite en altitude), × GROUND_FAST avec Maj
+const GROUND_FAST = 6;
+const GROUND_MIN_H = 2, GROUND_MAX_H = 200000; // hauteur de l'observateur au-dessus du sol (m)
+const SKY_TOP = [70, 120, 200], SKY_HORIZON = [190, 212, 235];
+let groundActive = false, groundPicking = false;
+const ground = { lat: 0, lon: 0, heading: 0, pitch: 0, height: 300 };
+let groundCanvas, groundCtx, groundImg, groundPix, groundW = 0, groundH = 0, groundYbuf;
+const groundKeys = new Set();
+
+// Altitude (m, exagérée, la mer à 0) du terrain au point de grille fractionnaire (gx, gy), interpolée.
+function groundElevation(gx, gy, exag) {
+  gx -= Math.floor(gx / W) * W;
+  gy = Math.max(0, Math.min(H - 1.001, gy));
+  const x0 = gx | 0, y0 = gy | 0, fx = gx - x0, fy = gy - y0;
+  const x1 = x0 + 1 < W ? x0 + 1 : 0, r0 = y0 * W, r1 = r0 + W;
+  const h = (heights[r0 + x0] * (1 - fx) + heights[r0 + x1] * fx) * (1 - fy)
+          + (heights[r1 + x0] * (1 - fx) + heights[r1 + x1] * fx) * fy;
+  const e = 2 * (h - seaLevel) - 1; // 1 cran = 1 m, depuis le niveau de la mer
+  return e > 0 ? e * exag : 0;
+}
+
+function drawGround() {
+  const cw = canvas.width, ch = canvas.height;
+  const w = Math.max(64, Math.min(GROUND_MAX_W, cw)), h = Math.max(36, Math.round(w * ch / cw));
+  if (w !== groundW || h !== groundH) {
+    groundW = w; groundH = h;
+    groundCanvas = document.createElement("canvas");
+    groundCanvas.width = w; groundCanvas.height = h;
+    groundCtx = groundCanvas.getContext("2d");
+    groundImg = groundCtx.createImageData(w, h);
+    groundPix = new Uint32Array(groundImg.data.buffer);
+  }
+  const exag = groundExagFromSlider(params.groundExag);
+  const focal = (w / 2) / Math.tan(GROUND_FOV / 2);
+  const horizon = h * 0.45 + ground.pitch * h;
+  // Ciel : dégradé du zénith à l'horizon.
+  for (let y = 0; y < h; y++) {
+    const t = Math.max(0, Math.min(1, y / Math.max(1, horizon)));
+    const r = SKY_TOP[0] + (SKY_HORIZON[0] - SKY_TOP[0]) * t, g = SKY_TOP[1] + (SKY_HORIZON[1] - SKY_TOP[1]) * t, b = SKY_TOP[2] + (SKY_HORIZON[2] - SKY_TOP[2]) * t;
+    groundPix.fill(rgba(r | 0, g | 0, b | 0), y * w, y * w + w);
+  }
+  // Position de l'observateur sur la grille, et taille d'une case (m) vers l'est et vers le nord.
+  const gx0 = (ground.lon + Math.PI) / dlon - 0.5, gy0 = (Math.PI / 2 - ground.lat) / Math.PI * H - 0.5;
+  const mPerX = dlon * GROUND_RADIUS * Math.max(0.02, Math.cos(ground.lat)), mPerY = Math.PI / H * GROUND_RADIUS;
+  const camAlt = groundElevation(gx0, gy0, exag) + ground.height;
+  const [hr, hg, hb] = SKY_HORIZON;
+  for (let x = 0; x < w; x++) {
+    const a = Math.atan((x + 0.5 - w / 2) / focal), ang = ground.heading + a, cosA = Math.cos(a);
+    const dE = Math.sin(ang) / mPerX, dN = Math.cos(ang) / mPerY;
+    let ybuf = h, z = GROUND_NEAR, dz = GROUND_NEAR * 0.2;
+    while (z < GROUND_FAR) {
+      const gx = gx0 + dE * z, gy = gy0 - dN * z;
+      if (gy < 0 || gy > H - 1) break; // au-delà du pôle
+      const e = groundElevation(gx, gy, exag);
+      const sy = horizon + (camAlt - e + z * z / (2 * GROUND_RADIUS)) / (z * cosA) * focal;
+      if (sy < ybuf) {
+        // Couleur de la carte au point le plus proche, mêlée à la brume selon la distance.
+        let cx = Math.round(gx) % W; if (cx < 0) cx += W;
+        const col = pix[Math.round(gy) * W + cx], f = 1 - Math.exp(-z / GROUND_FOG);
+        const r = (col & 255) * (1 - f) + hr * f, g = ((col >> 8) & 255) * (1 - f) + hg * f, b = ((col >> 16) & 255) * (1 - f) + hb * f;
+        const c = rgba(r | 0, g | 0, b | 0);
+        const top = sy < 0 ? 0 : Math.ceil(sy);
+        for (let yy = top; yy < ybuf; yy++) groundPix[yy * w + x] = c;
+        ybuf = top;
+        if (ybuf <= 0) break;
+      }
+      z += dz;
+      dz *= GROUND_STEP_GROWTH;
+    }
+  }
+  groundCtx.putImageData(groundImg, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(groundCanvas, 0, 0, cw, ch);
+
+  // Repères : position, altitude du sol et de l'observateur, cap.
+  const deg = (r) => r * 180 / Math.PI;
+  const latTxt = Math.abs(deg(ground.lat)).toFixed(1) + "° " + (ground.lat >= 0 ? "N" : "S");
+  let lonD = deg(ground.lon); lonD = ((lonD + 180) % 360 + 360) % 360 - 180;
+  const lonTxt = Math.abs(lonD).toFixed(1) + "° " + (lonD >= 0 ? "E" : "O");
+  const groundM = Math.round(groundElevation(gx0, gy0, 1));
+  const CAPS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+  let hd = deg(ground.heading) % 360; if (hd < 0) hd += 360;
+  const cap = CAPS[Math.round(hd / 45) % 8];
+  const lines = [
+    latTxt + "  " + lonTxt + "   cap " + cap + " (" + Math.round(hd) + "°)",
+    "sol : " + (groundM > 0 ? fmtInt(groundM) + " m" : "mer") + "   ·   vue à " + fmtInt(Math.round(ground.height)) + " m au-dessus   ·   relief ×" + (Math.round(exag * 10) / 10).toLocaleString("fr-FR"),
+  ];
+  const fs = Math.max(11, Math.round(ch / 42));
+  ctx.save();
+  ctx.font = "600 " + fs + "px system-ui, sans-serif";
+  ctx.textBaseline = "top";
+  const pad = fs * 0.6, lh = fs * 1.35;
+  const bw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad * 2;
+  ctx.fillStyle = "rgba(10,14,24,0.55)";
+  ctx.fillRect(pad, pad, bw, lh * lines.length + pad);
+  ctx.fillStyle = "#fff";
+  lines.forEach((l, j) => ctx.fillText(l, pad * 2, pad * 1.5 + j * lh));
+  ctx.restore();
+}
+
+// Point de la planète (lat, lon) sous un point du canvas (en pixels du canvas), ou null hors planète.
+function pickPlanet(px, py) {
+  const cw = canvas.width, ch = canvas.height;
+  if (params.projection === "globe") {
+    const R = Math.min(cw, ch) / 2 * GLOBE_RADIUS;
+    const sx = (px - cw / 2) / R, sy = (ch / 2 - py) / R, d2 = sx * sx + sy * sy;
+    if (d2 > 1) return null;
+    const sz = Math.sqrt(1 - d2), ct = Math.cos(tilt), st = Math.sin(tilt);
+    const X = sz * ct - sy * st, Z = sz * st + sy * ct;
+    return { lat: Math.asin(Math.max(-1, Math.min(1, Z))), lon: Math.atan2(sx, X) - rotation };
+  }
+  const lon = px / cw * 2 * Math.PI - Math.PI - rotation;
+  const lat = params.projection === "mercator"
+    ? Math.atan(Math.sinh((0.5 - py / ch) * 2 * MERC_Y_MAX))
+    : (0.5 - py / ch) * Math.PI;
+  return { lat, lon };
+}
+
+function enterGround(lat, lon) {
+  groundActive = true; groundPicking = false;
+  canvas.classList.remove("picking");
+  ground.lat = Math.max(-1.55, Math.min(1.55, lat)); ground.lon = lon;
+  ground.heading = 0; ground.pitch = 0; ground.height = 300;
+  mapWrap.classList.add("ground");
+  mapWrap.style.setProperty("--aspect", String(16 / 9));
+  groundBtn.textContent = "🗺️ Retour à la carte";
+  needsDraw = true;
+}
+function exitGround() {
+  groundActive = false; groundPicking = false;
+  canvas.classList.remove("picking");
+  mapWrap.classList.remove("ground");
+  applyViewClass();
+  groundBtn.textContent = "🧍 Vue au sol";
+  groundKeys.clear();
+  needsDraw = true;
+}
+
+// Déplacement de l'observateur (touches tenues) : avance selon le cap, plus vite en altitude.
+function moveGround(dt) {
+  let f = 0, s = 0;
+  if (groundKeys.has("arrowup") || groundKeys.has("z") || groundKeys.has("w")) f++;
+  if (groundKeys.has("arrowdown") || groundKeys.has("s")) f--;
+  if (groundKeys.has("q") || groundKeys.has("a")) s--;
+  if (groundKeys.has("d")) s++;
+  let turn = 0;
+  if (groundKeys.has("arrowleft")) turn--;
+  if (groundKeys.has("arrowright")) turn++;
+  if (!f && !s && !turn) return;
+  ground.heading += turn * 1.2 * dt;
+  const v = GROUND_SPEED * Math.sqrt(Math.max(0.05, ground.height / 300)) * (groundKeys.has("shift") ? GROUND_FAST : 1) * dt;
+  const n = (Math.cos(ground.heading) * f - Math.sin(ground.heading) * s) * v;
+  const e = (Math.sin(ground.heading) * f + Math.cos(ground.heading) * s) * v;
+  ground.lat = Math.max(-1.55, Math.min(1.55, ground.lat + n / GROUND_RADIUS));
+  ground.lon += e / (GROUND_RADIUS * Math.max(0.02, Math.cos(ground.lat)));
+  needsDraw = true;
+}
+
+function draw() {
+  if (groundActive) drawGround();
+  else if (params.projection === "globe") drawGlobe();
+  else drawMap();
+}
+
+// Glisser sur la carte : fait tourner la planète autour de son axe ; sur le globe, glisser à la
+// verticale l'incline (pôles visibles). Double-clic : recentre.
+let dragX = null, dragY = null;
+canvas.addEventListener("pointerdown", (e) => {
+  if (groundPicking) {
+    // Choix du point où se poser (vue au sol).
+    const dpr = canvas.width / canvas.clientWidth;
+    const p = pickPlanet(e.offsetX * dpr, e.offsetY * dpr);
+    if (p) enterGround(p.lat, p.lon);
+    return;
+  }
+  dragX = e.clientX; dragY = e.clientY;
+  canvas.setPointerCapture(e.pointerId);
+  canvas.classList.add("dragging");
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (dragX === null) return;
+  const dx = e.clientX - dragX, dy = e.clientY - dragY;
+  if (groundActive) {
+    // Vue au sol : on « tire » le paysage (glisser à droite tourne le regard vers la gauche).
+    ground.heading -= dx / canvas.clientWidth * GROUND_FOV;
+    ground.pitch = Math.max(-0.5, Math.min(0.6, ground.pitch + dy / canvas.clientHeight));
+  } else if (params.projection === "globe") {
+    // Le point sous le doigt suit à peu près le geste : un rayon du globe ≈ un radian.
+    const R = Math.min(canvas.clientWidth, canvas.clientHeight) / 2 * GLOBE_RADIUS;
+    rotation += dx / R;
+    tilt = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, tilt + dy / R));
+  } else {
+    rotation += dx / canvas.clientWidth * 2 * Math.PI;
+  }
+  dragX = e.clientX; dragY = e.clientY;
+  needsDraw = true;
+});
+const endDrag = () => { dragX = null; dragY = null; canvas.classList.remove("dragging"); };
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+canvas.addEventListener("dblclick", () => {
+  if (groundActive) return;
+  rotation = 0; tilt = GLOBE_TILT; needsDraw = true;
+});
+// Vue au sol : la molette fait monter ou descendre l'observateur.
+canvas.addEventListener("wheel", (e) => {
+  if (!groundActive) return;
+  e.preventDefault();
+  ground.height = Math.max(GROUND_MIN_H, Math.min(GROUND_MAX_H, ground.height * Math.exp(e.deltaY * 0.0015)));
+  needsDraw = true;
+}, { passive: false });
+
+// ---------- Boucle ----------
+const pauseBtn = document.getElementById("pauseBtn");
+const perfVal = document.getElementById("perfVal");
+const stateVal = document.getElementById("stateVal");
+const appliedVal = document.getElementById("appliedVal");
+const landVal = document.getElementById("landVal");
+const highestVal = document.getElementById("highestVal");
+const deepestVal = document.getElementById("deepestVal");
+const rangeVal = document.getElementById("rangeVal");
+const fmtInt = (v) => v.toLocaleString("fr-FR");
+let perfFrames = 0, perfFaults = 0, perfStart = performance.now();
+
+function newPlanet() {
+  applied = 0; erosionFaults = 0;
+  diff.fill(0); erosionArr.fill(0);
+  heightsVersion++; climateDirty = true;
+  needsRender = true;
+}
+
+const toastEl = document.getElementById("toast");
+let toastTimer = 0;
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2500);
+}
+
+// ---------- Export ----------
+// Export PNG de l'image affichée, sans la dernière faille ni les repères. Carte : à la résolution de
+// la grille (Mercator : W × HM), décalée selon la rotation ; globe : tel qu'à l'écran, fond transparent.
+function exportPNG() {
+  let out;
+  if (groundActive) {
+    out = canvas; // vue au sol : telle qu'à l'écran, avec ses repères
+  } else if (params.projection === "globe") {
+    const keep = [params.showFault, params.showExtremes];
+    params.showFault = false; params.showExtremes = false;
+    drawGlobe();
+    [params.showFault, params.showExtremes] = keep;
+    out = document.createElement("canvas");
+    out.width = canvas.width; out.height = canvas.height;
+    out.getContext("2d").drawImage(canvas, 0, 0);
+    needsDraw = true;
+  } else {
+    const img = mapImage();
+    out = document.createElement("canvas");
+    out.width = img.width; out.height = img.height;
+    const o = out.getContext("2d");
+    let f = rotation / (2 * Math.PI);
+    f -= Math.floor(f);
+    const s = Math.round(f * img.width);
+    o.drawImage(img, s, 0);
+    o.drawImage(img, s - img.width, 0);
+  }
+  out.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "planetforge-" + applied + "-failles-" + (groundActive ? "sol" : params.projection) + ".png";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast("📷 Image enregistrée");
+  }, "image/png");
+}
+
+let lastTime = null;
+let faultCredit = 0;       // fractions de faille accumulées (vitesses de moins d'une faille par image)
+
+function loop(time) {
+  // Temps écoulé depuis l'image précédente, borné (onglet en arrière-plan : pas de rattrapage brutal).
+  const dt = lastTime === null ? 0 : Math.min(0.1, (time - lastTime) / 1000);
+  lastTime = time;
+  if (groundActive) moveGround(dt);
+  else if (params.autoRotate && dragX === null) { rotation += AUTO_ROTATE_SPEED * dt; needsDraw = true; }
+  // Failles dues pour cette image (vitesse × temps écoulé), dans la limite du temps de calcul : ce qui
+  // ne tient pas dans l'image est abandonné (aux vitesses les plus hautes, c'est la machine qui fixe
+  // le rythme).
+  if (running && applied < maxFaults) {
+    faultCredit += speedFromSlider(params.speedSlider) * dt;
+    const due = Math.min(Math.floor(faultCredit), maxFaults - applied);
+    if (due > 0) {
+      faultCredit -= due;
+      const t0 = performance.now(), start = applied;
+      for (let j = 0; j < due; j++) {
+        applyFault();
+        if ((j & 7) === 7 && performance.now() - t0 > FRAME_BUDGET_MS) { faultCredit = 0; break; }
+      }
+      perfFaults += applied - start;
+      heightsVersion++;
+      needsRender = true;
+    }
+  } else {
+    faultCredit = 0;
+  }
+  // Érosion, au plus une fois par CLIMATE_EVERY_MS, pour les failles écoulées depuis la précédente.
+  if (params.erosion > 0 && applied > erosionFaults && performance.now() - erosionTime >= CLIMATE_EVERY_MS) {
+    erosionPass();
+    erosionTime = performance.now();
+    needsRender = true;
+  }
+  // Climat en retard sur le relief (formation arrêtée juste après un calcul) : nouveau rendu une fois
+  // le délai passé, pour le mettre à jour.
+  if ((params.biomes || params.rivers) && climateVersion !== heightsVersion && performance.now() - climateTime >= CLIMATE_EVERY_MS) {
+    needsRender = true;
+  }
+  if (needsRender) { render(); needsRender = false; needsDraw = true; }
+  if (needsDraw) { draw(); needsDraw = false; }
+
+  perfFrames++;
+  const now = performance.now();
+  if (now - perfStart >= 1000) {
+    const sec = (now - perfStart) / 1000;
+    perfVal.textContent = fmtInt(Math.round(perfFaults / sec)) + " failles/s · " + Math.round(perfFrames / sec) + " fps";
+    perfFrames = 0; perfFaults = 0; perfStart = now;
+  }
+  updateStats();
+  requestAnimationFrame(loop);
+}
+
+function updateStats() {
+  appliedVal.textContent = fmtInt(applied) + (isFinite(maxFaults) ? " / " + fmtInt(maxFaults) : "");
+  stateVal.textContent = applied >= maxFaults ? "Terminée" : running ? "En formation" : "En pause";
+  landVal.textContent = applied > 0 ? Math.round(stats.land * 100) + " %" : "—";
+  // Un cran = un mètre.
+  const m = (crans) => fmtInt(crans) + " m";
+  highestVal.textContent = applied > 0 && stats.highest !== null ? "+" + m(stats.highest) : "—";
+  deepestVal.textContent = applied > 0 && stats.deepest !== null ? "−" + m(stats.deepest) : "—";
+  rangeVal.textContent = applied > 0
+    ? m(stats.range) + " (" + Math.round(stats.range / EARTH_RELIEF_M * 100) + " % de la Terre)"
+    : "—";
+}
+
+// ---------- Contrôles ----------
+function setRunning(on) {
+  running = on;
+  pauseBtn.textContent = running ? "⏸️ Pause" : "▶️ Reprendre";
+}
+pauseBtn.addEventListener("click", () => setRunning(!running));
+document.getElementById("newBtn").addEventListener("click", newPlanet);
+document.getElementById("exportBtn").addEventListener("click", exportPNG);
+// Vue au sol : un premier clic arme le choix du point (clic suivant sur la planète), un second annule ;
+// depuis la vue au sol, retour à la carte.
+const groundBtn = document.getElementById("groundBtn");
+groundBtn.addEventListener("click", () => {
+  if (groundActive) { exitGround(); return; }
+  groundPicking = !groundPicking;
+  canvas.classList.toggle("picking", groundPicking);
+  groundBtn.textContent = groundPicking ? "✖ Annuler" : "🧍 Vue au sol";
+  if (groundPicking) toast("Cliquez sur un point de la planète");
+});
+
+// Contrôle segmenté : active le bouton cliqué et transmet sa valeur.
+function bindSegmented(id, onPick) {
+  const seg = document.getElementById(id);
+  seg.addEventListener("click", (e) => {
+    const btn = e.target.closest(".segBtn");
+    if (!btn) return;
+    for (const b of seg.querySelectorAll(".segBtn")) b.classList.toggle("active", b === btn);
+    onPick(btn.dataset.value);
+  });
+  return seg;
+}
+function speedStep(delta) {
+  const el = document.getElementById("speedSlider");
+  el.value = String(Math.max(0, Math.min(100, Number(el.value) + delta * SPEED_KEY_STEP)));
+  el.dispatchEvent(new Event("input"));
+}
+// Les trois vues sont tirées de la même grille : changer de projection ne change que l'affichage.
+const PROJECTIONS = ["mercator", "equirect", "globe"];
+const projectionSeg = bindSegmented("projectionSeg", (v) => {
+  if (groundActive) exitGround(); // choisir une projection ramène à la carte
+  if (v === params.projection) return;
+  params.projection = v;
+  applyViewClass();
+  needsRender = true; // relief plus accentué sur le globe ; carte de Mercator à tirer de la grille
+});
+const paletteSeg = bindSegmented("paletteSeg", (v) => {
+  if (v === params.palette) return;
+  params.palette = v;
+  applyPalette(v);
+  needsRender = true;
+});
+const resSeg = bindSegmented("resSeg", (v) => {
+  if (Number(v) === params.res) return;
+  params.res = Number(v);
+  rebuildGrid();
+});
+
+// Curseurs : le libellé et le paramètre suivent en direct.
+const SLIDERS = [
+  { id: "speedSlider", label: "speedVal", key: "speedSlider", fmt: (v) => fmtSpeed(speedFromSlider(v)) },
+  { id: "faultsSlider", label: "faultsVal", key: "faultsSlider", fmt: (v) => v >= 100 ? "Illimité" : fmtInt(faultsFromSlider(v)) },
+  { id: "oceanSlider", label: "oceanVal", key: "ocean", fmt: (v) => v + "%" },
+  { id: "erosionSlider", label: "erosionVal", key: "erosion", fmt: (v) => v === 0 ? "Aucune" : v + "%" },
+  { id: "groundExagSlider", label: "groundExagVal", key: "groundExag", fmt: (v) => "×" + fmtInt(Math.round(groundExagFromSlider(v))) },
+  { id: "exaggerationSlider", label: "exaggerationVal", key: "exaggeration", fmt: (v) => fmtExaggeration(exaggerationFromSlider(v)) },
+];
+for (const { id, label, key, fmt } of SLIDERS) {
+  const el = document.getElementById(id), lab = document.getElementById(label);
+  el.addEventListener("input", () => {
+    params[key] = Number(el.value);
+    lab.textContent = fmt(params[key]);
+    if (key === "faultsSlider") setMaxFaults(faultsFromSlider(params.faultsSlider));
+    else if (key === "ocean") { climateDirty = true; needsRender = true; } // le niveau de la mer change côtes et rivières
+    else if (key === "exaggeration") needsRender = true;
+    else if (key === "erosion") erosionFaults = applied; // l'érosion part de maintenant, pas des failles passées
+    else if (key === "groundExag") needsDraw = true;
+  });
+}
+// Un maximum sous le nombre de failles déjà appliquées arrête simplement la formation.
+function setMaxFaults(m) {
+  maxFaults = m;
+  needsDraw = true;
+}
+
+const capsCheckbox = document.getElementById("capsCheckbox");
+capsCheckbox.addEventListener("change", () => { params.caps = capsCheckbox.checked; needsRender = true; });
+const biomesCheckbox = document.getElementById("biomesCheckbox");
+biomesCheckbox.addEventListener("change", () => { params.biomes = biomesCheckbox.checked; climateDirty = true; needsRender = true; });
+const riversCheckbox = document.getElementById("riversCheckbox");
+riversCheckbox.addEventListener("change", () => { params.rivers = riversCheckbox.checked; climateDirty = true; needsRender = true; });
+const hillCheckbox = document.getElementById("hillCheckbox");
+hillCheckbox.addEventListener("change", () => { params.hillshade = hillCheckbox.checked; needsRender = true; });
+const faultCheckbox = document.getElementById("faultCheckbox");
+faultCheckbox.addEventListener("change", () => { params.showFault = faultCheckbox.checked; needsDraw = true; });
+const extremesCheckbox = document.getElementById("extremesCheckbox");
+extremesCheckbox.addEventListener("change", () => { params.showExtremes = extremesCheckbox.checked; needsDraw = true; });
+const autoRotateCheckbox = document.getElementById("autoRotateCheckbox");
+autoRotateCheckbox.addEventListener("change", () => { params.autoRotate = autoRotateCheckbox.checked; });
+
+const stageEl = document.querySelector(".stage");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
+fullscreenBtn.addEventListener("click", () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else stageEl.requestFullscreen().catch(() => {});
+});
+document.addEventListener("fullscreenchange", () => {
+  const on = document.fullscreenElement === stageEl;
+  fullscreenBtn.textContent = on ? "⛶ Quitter le plein écran" : "⛶ Plein écran";
+});
+
+// Raccourcis clavier : déclenchent les boutons correspondants, pour garder une seule logique (et la
+// sauvegarde des réglages, qui écoute les clics). Ignorés pendant la saisie dans un champ, et avec
+// Ctrl/Alt/Cmd (raccourcis du navigateur).
+const SHORTCUTS = { " ": "pauseBtn", n: "newBtn", f: "fullscreenBtn", r: "autoRotateCheckbox", e: "exportBtn", v: "groundBtn" };
+// Vue au sol : touches de déplacement, tenues (ZQSD et WASD, flèches, Maj pour aller plus vite).
+const GROUND_KEYS = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", "z", "q", "s", "d", "w", "a", "shift"]);
+document.addEventListener("keyup", (e) => groundKeys.delete(e.key.toLowerCase()));
+window.addEventListener("blur", () => groundKeys.clear());
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  const el = e.target;
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+  if (infoDialog.open) return;
+  const key = e.key.toLowerCase();
+  if (key === "escape" && (groundActive || groundPicking)) { e.preventDefault(); groundActive ? exitGround() : groundBtn.click(); return; }
+  if (groundActive && GROUND_KEYS.has(key)) { e.preventDefault(); groundKeys.add(key); return; }
+  if (e.repeat) return;
+  if (key === "+" || key === "=") { e.preventDefault(); speedStep(1); return; }
+  if (key === "-" || key === "_") { e.preventDefault(); speedStep(-1); return; }
+  if (key === "p") {
+    e.preventDefault();
+    const next = PROJECTIONS[(PROJECTIONS.indexOf(params.projection) + 1) % PROJECTIONS.length];
+    projectionSeg.querySelector('.segBtn[data-value="' + next + '"]').click();
+    return;
+  }
+  const id = SHORTCUTS[key];
+  if (!id) return;
+  e.preventDefault();
+  // Un bouton qui a le focus serait aussi activé par la barre d'espace : on le libère d'abord.
+  if (document.activeElement && document.activeElement.tagName === "BUTTON") document.activeElement.blur();
+  document.getElementById(id).click();
+});
+
+// ---------- Réglages mémorisés ----------
+// Gardés dans le navigateur (localStorage) et restaurés au chargement : curseurs, vitesse,
+// projection, résolution, cases à cocher, cartouches affichés. Sauvegarde déclenchée par n'importe
+// quelle interaction avec la page, regroupée (SAVE_DELAY_MS). Stockage indisponible (navigation
+// privée…) : ignoré.
+const SETTINGS_KEY = "planetforge.settings.v1";
+const SAVE_DELAY_MS = 300;
+let saveTimer = 0;
+let settingsReset = false; // plus aucune sauvegarde une fois les réglages effacés (rechargement en cours)
+function collectSettings() {
+  const panels = {};
+  for (const { checkbox } of PANEL_TOGGLES) panels[checkbox] = document.getElementById(checkbox).checked;
+  return {
+    speedSlider: params.speedSlider, faultsSlider: params.faultsSlider, ocean: params.ocean, erosion: params.erosion, exaggeration: params.exaggeration, groundExag: params.groundExag,
+    projection: params.projection, palette: params.palette,
+    res: params.res, caps: params.caps, showFault: params.showFault, showExtremes: params.showExtremes,
+    autoRotate: params.autoRotate, hillshade: params.hillshade, biomes: params.biomes, rivers: params.rivers, panels,
+  };
+}
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  if (settingsReset) return;
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(collectSettings())); } catch (e) { /* stockage indisponible */ }
+  }, SAVE_DELAY_MS);
+}
+for (const type of ["input", "change", "click"]) document.addEventListener(type, scheduleSave);
+
+document.getElementById("resetSettingsBtn").addEventListener("click", () => {
+  if (!confirm("Remettre tous les réglages à leurs valeurs par défaut ? La page va être rechargée.")) return;
+  settingsReset = true;
+  clearTimeout(saveTimer);
+  try { localStorage.removeItem(SETTINGS_KEY); } catch (e) { /* stockage indisponible */ }
+  location.reload();
+});
+
+// Restaure les réglages mémorisés, avant la création de la carte. Chaque valeur est vérifiée
+// (type, bornes du curseur, valeur proposée) : un réglage absent ou abîmé garde sa valeur par défaut.
+function loadSettings() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); } catch (e) { s = null; }
+  if (!s || typeof s !== "object") return;
+  const isNum = (v) => typeof v === "number" && isFinite(v);
+  const setCheck = (el, v) => {
+    if (typeof v !== "boolean") return;
+    el.checked = v;
+    el.dispatchEvent(new Event("change"));
+  };
+  const pick = (seg, v) => {
+    const btn = seg.querySelector('.segBtn[data-value="' + v + '"]');
+    if (btn) btn.click();
+  };
+  for (const { id, key } of SLIDERS) {
+    const el = document.getElementById(id), v = s[key];
+    if (!isNum(v) || v < Number(el.min) || v > Number(el.max)) continue;
+    el.value = String(v);
+    el.dispatchEvent(new Event("input"));
+  }
+  if (typeof s.projection === "string") pick(projectionSeg, s.projection);
+  if (isNum(s.res)) pick(resSeg, s.res);
+  if (typeof s.palette === "string") pick(paletteSeg, s.palette);
+  setCheck(capsCheckbox, s.caps);
+  setCheck(faultCheckbox, s.showFault);
+  setCheck(extremesCheckbox, s.showExtremes);
+  setCheck(autoRotateCheckbox, s.autoRotate);
+  setCheck(hillCheckbox, s.hillshade);
+  setCheck(biomesCheckbox, s.biomes);
+  setCheck(riversCheckbox, s.rivers);
+  if (s.panels && typeof s.panels === "object") {
+    for (const { checkbox } of PANEL_TOGGLES) setCheck(document.getElementById(checkbox), s.panels[checkbox]);
+  }
+}
+
+// ---------- Démarrage ----------
+rebuildGrid();
+loadSettings();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
