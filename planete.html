@@ -5,9 +5,9 @@
   elles sont reprises dans les constantes APP_* du script et affichées dans
   la pop-up "Informations" (icône ℹ️ de l'en-tête) — ne pas les dupliquer ailleurs.
 
-  Version : 0.11.6
+  Version : 0.11.7
   Auteur  : Franck Legrand <franck.legrand@gmail.com>
-  Date    : 2026-10-23
+  Date    : 2026-10-25
   Licence : Utilisation libre (usage personnel/éducatif), sans garantie.
   Statut  : Prototype (en cours de développement).
   © 2026 Franck Legrand. Tous droits réservés.
@@ -221,6 +221,11 @@
           <span class="sub" id="subFaults">La formation s'arrête une fois ce nombre de failles atteint (de 100 à 93 000) ; tout à droite, « Illimité » : elle continue sans fin, jusqu'à la pause. Plus il y a de failles, plus les côtes et le relief sont fins, et plus le dénivelé grandit. L'augmenter relance la formation là où elle s'était arrêtée ; le placer sous le nombre de failles déjà appliquées arrête la formation (la planète reste telle quelle).</span>
         </label>
         <label>
+          <div class="row"><span>Amplitude des failles<button type="button" class="infoBtn" data-target="subFaultAmp" aria-label="Informations">i</button></span><span class="value" id="faultAmpVal">1 à 5 crans</span></div>
+          <input type="range" id="faultAmpSlider" min="1" max="75" value="5" step="1">
+          <span class="sub" id="subFaultAmp">Chaque faille fait monter (et descendre de l'autre côté) d'un nombre de crans tiré au hasard entre 1 et cette valeur, plutôt que toujours d'un seul cran. Plus elle est grande, plus le relief devient accidenté, avec des failles isolées qui marquent nettement le paysage. À 1, chaque faille vaut toujours un seul cran, comme avant. Agit sur les failles suivantes, pas sur celles déjà posées.</span>
+        </label>
+        <label>
           <div class="row"><span>Océans<button type="button" class="infoBtn" data-target="subOcean" aria-label="Informations">i</button></span><span class="value" id="oceanVal">70%</span></div>
           <input type="range" id="oceanSlider" min="0" max="100" value="70" step="1">
           <span class="sub" id="subOcean">Part de la surface de la planète sous les eaux (sur Terre : 71 %). Le niveau de la mer est placé à l'altitude qui noie exactement cette part de la surface, mesurée sur la sphère (les régions proches des pôles, agrandies par les cartes plates, comptent moins). Agit tout de suite.</span>
@@ -352,9 +357,9 @@
 <script>
 // Métadonnées de l'application — source unique, reprise dans la pop-up "Informations"
 // et dans le commentaire d'en-tête du fichier (à garder synchronisés).
-const APP_VERSION = "0.11.6";
+const APP_VERSION = "0.11.7";
 const APP_AUTHOR = "Franck Legrand <franck.legrand@gmail.com>";
-const APP_DATE = "2026-10-23";
+const APP_DATE = "2026-10-25";
 const APP_LICENSE = "Utilisation libre (usage personnel/éducatif), sans garantie.";
 
 const infoDialog = document.getElementById("infoDialog");
@@ -495,7 +500,7 @@ const HILL_LIGHT = (() => { const x = -1, y = 1, z = 1.4, l = Math.hypot(x, y, z
 // ---------- État ----------
 const params = {
   speedSlider: 15, faultsSlider: 100, ocean: 70, projection: "mercator", res: 1024, caps: true, showFault: true, showExtremes: true, autoRotate: false, hillshade: true, exaggeration: 50, palette: "terre",
-  biomes: false, rivers: false, erosion: 0, groundExag: 74,
+  biomes: false, rivers: false, erosion: 0, groundExag: 74, faultAmplitude: 5,
 };
 applyPalette(params.palette);
 let running = true;
@@ -511,9 +516,10 @@ const lastNormal = new Float64Array(3);
 // (grille équirectangulaire : elle couvre toute la sphère, pôles compris). Les autres vues (Mercator,
 // globe) en sont tirées à l'affichage. Une faille ne s'applique pas point par point : sur une ligne de latitude donnée, les
 // points du côté qui monte forment un seul intervalle de longitudes (centré sur la longitude de la
-// normale). On n'inscrit que ses deux bornes dans `diff` (un +1 au début, un −1 à la fin), et la somme
-// cumulée le long de la ligne redonne, en chaque point, le nombre de failles qui l'ont fait monter.
-// Coût d'une faille : une opération par ligne au lieu d'une par point.
+// normale). On n'inscrit que ses deux bornes dans `diff` (un +n au début, un −n à la fin, n = crans
+// de cette faille), et la somme cumulée le long de la ligne redonne, en chaque point, la hauteur
+// totale dont les failles l'ont fait monter. Coût d'une faille : une opération par ligne au lieu d'une
+// par point.
 let W = 0, H = 0, dlon = 0;
 let rowSin, rowCos, rowWeight, rowIceThr, rowSeaIce;
 let diff, heights;
@@ -650,9 +656,9 @@ function applyViewClass() {
   mapWrap.style.setProperty("--aspect", globe ? "1" : params.projection === "mercator" ? String(W / HM) : String(W / H));
 }
 
-// Tire une nouvelle faille et fait monter d'un cran le côté vers lequel pointe sa normale. (L'autre
-// côté descend d'un cran : l'altitude réelle vaut 2 × montées − failles, que l'affichage reconstitue.)
-// Un point (lat, lon) est du côté qui monte si p·n > 0, soit
+// Tire une nouvelle faille et fait monter le côté vers lequel pointe sa normale, d'un nombre de crans
+// aléatoire entre 1 et params.faultAmplitude (l'autre côté descend d'autant). Un point (lat, lon) est
+// du côté qui monte si p·n > 0, soit
 //   cos(lat)·r·cos(lon − φ) + sin(lat)·nz > 0,  avec r, φ le module et l'angle de (nx, ny),
 // c'est-à-dire cos(lon − φ) > t = −sin(lat)·nz / (cos(lat)·r) : l'intervalle φ ± acos(t).
 function applyFault() {
@@ -661,26 +667,27 @@ function applyFault() {
   const nx = rz * Math.cos(a), ny = rz * Math.sin(a);
   lastNormal[0] = nx; lastNormal[1] = ny; lastNormal[2] = nz;
   applied++;
+  const amt = 1 + Math.floor(Math.random() * params.faultAmplitude);
   const r = Math.hypot(nx, ny), phi = Math.atan2(ny, nx);
   const center = (phi + Math.PI) / dlon - 0.5; // colonne (fractionnaire) de la longitude φ
   const stride = W + 1;
   for (let y = 0; y < H; y++) {
     const b = y * stride;
     const cr = rowCos[y] * r, z = rowSin[y] * nz;
-    if (cr < 1e-12) { if (z > 0) diff[b]++; continue; }
+    if (cr < 1e-12) { if (z > 0) diff[b] += amt; continue; }
     const t = -z / cr;
     if (t >= 1) continue;                 // toute la ligne descend
-    if (t <= -1) { diff[b]++; continue; } // toute la ligne monte
+    if (t <= -1) { diff[b] += amt; continue; } // toute la ligne monte
     const half = Math.acos(t) / dlon;     // demi-largeur de l'intervalle, en colonnes
     let cs = Math.ceil(center - half);
     const count = Math.ceil(center + half) - cs;
     if (count <= 0) continue;
-    if (count >= W) { diff[b]++; continue; }
+    if (count >= W) { diff[b] += amt; continue; }
     cs %= W; if (cs < 0) cs += W;
     const end = cs + count;
-    diff[b + cs]++;
-    if (end <= W) diff[b + end]--;        // (diff[b + W] n'est jamais lu)
-    else { diff[b]++; diff[b + end - W]--; } // l'intervalle fait le tour de la carte
+    diff[b + cs] += amt;
+    if (end <= W) diff[b + end] -= amt;        // (diff[b + W] n'est jamais lu)
+    else { diff[b] += amt; diff[b + end - W] -= amt; } // l'intervalle fait le tour de la carte
   }
 }
 
@@ -1675,6 +1682,7 @@ const resSeg = bindSegmented("resSeg", (v) => {
 const SLIDERS = [
   { id: "speedSlider", label: "speedVal", key: "speedSlider", fmt: (v) => fmtSpeed(speedFromSlider(v)) },
   { id: "faultsSlider", label: "faultsVal", key: "faultsSlider", fmt: (v) => v >= 100 ? "Illimité" : fmtInt(faultsFromSlider(v)) },
+  { id: "faultAmpSlider", label: "faultAmpVal", key: "faultAmplitude", fmt: (v) => v === 1 ? "1 cran" : "1 à " + v + " crans" },
   { id: "oceanSlider", label: "oceanVal", key: "ocean", fmt: (v) => v + "%" },
   { id: "erosionSlider", label: "erosionVal", key: "erosion", fmt: (v) => v === 0 ? "Aucune" : v + "%" },
   { id: "groundExagSlider", label: "groundExagVal", key: "groundExag", fmt: (v) => "×" + fmtInt(Math.round(groundExagFromSlider(v))) },
@@ -1770,7 +1778,7 @@ function collectSettings() {
   const panels = {};
   for (const { checkbox } of PANEL_TOGGLES) panels[checkbox] = document.getElementById(checkbox).checked;
   return {
-    speedSlider: params.speedSlider, faultsSlider: params.faultsSlider, ocean: params.ocean, erosion: params.erosion, exaggeration: params.exaggeration, groundExag: params.groundExag,
+    speedSlider: params.speedSlider, faultsSlider: params.faultsSlider, faultAmplitude: params.faultAmplitude, ocean: params.ocean, erosion: params.erosion, exaggeration: params.exaggeration, groundExag: params.groundExag,
     projection: params.projection, palette: params.palette,
     res: params.res, caps: params.caps, showFault: params.showFault, showExtremes: params.showExtremes,
     autoRotate: params.autoRotate, hillshade: params.hillshade, biomes: params.biomes, rivers: params.rivers, panels,

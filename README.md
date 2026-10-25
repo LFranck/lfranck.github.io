@@ -95,7 +95,7 @@ Suivre un livre de stratégie d'échecs sans échiquier sous la main : on dicte 
 
 ## [PlanetForge](planete.html)
 
-*Version 0.11.6*
+*Version 0.11.7*
 
 ### But de l'appli
 
@@ -104,6 +104,7 @@ Regarder naître la surface d'une planète : partie d'une sphère parfaitement l
 ### Fonctionnalités
 
 - Formation animée, de 0,5 à 50 000 failles par seconde, limitée à un nombre de failles ou sans fin, avec la dernière faille tracée sur la carte.
+- Amplitude des failles réglable : chaque faille fait monter (et descendre de l'autre côté) d'un nombre de crans tiré au hasard entre 1 et l'amplitude choisie, plutôt que toujours d'un seul cran.
 - Trois vues : carte de Mercator, carte équirectangulaire et globe 3D éclairé, qu'on fait tourner et incliner à la souris ou au doigt.
 - Vue au sol à la première personne, sur n'importe quel point de la planète : on s'y pose d'un clic, puis on se déplace au clavier (flèches, ZQSD / WASD), à l'altitude de son choix, avec la courbure de la planète, la brume au loin et le relief exagéré à volonté.
 - Part d'océans réglable, calottes polaires, ombrage du relief (accentuation réglable).
